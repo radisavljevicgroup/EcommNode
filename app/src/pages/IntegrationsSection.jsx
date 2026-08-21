@@ -1,39 +1,37 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import woocommerceLogo from "../assets/woocommerce.png";
+import shopifyLogo from "../assets/shopify.png";
+import googleAnalyticsLogo from "../assets/google-analytics.png";
+import googleSearchConsoleLogo from "../assets/google-search-console.jpg";
+import metaLogo from "../assets/meta.jpg";
+import WooCommerceIntegration from "../components/WooCommerceIntegration";
+import WooCommerceConnectModal from "../components/WooCommerceConnectModal";
+import Toast from "../components/Toast";
+import { fetchWooStatus } from "../api/woocommerce";
 
 export const INTEGRATION_CATALOG = [
   {
-    key: "woocommerce",
-    name: "WooCommerce",
-    color: "#7f54b3",
-    badge: "W",
-    desc: "Poveži svoju WooCommerce prodavnicu",
-  },
-  {
     key: "shopify",
     name: "Shopify",
-    color: "#95bf47",
-    badge: "S",
+    logo: shopifyLogo,
     desc: "Poveži svoju Shopify prodavnicu",
   },
   {
     key: "ga4",
     name: "Google Analytics 4",
-    color: "#f9ab00",
-    badge: "GA4",
+    logo: googleAnalyticsLogo,
     desc: "Prati saobraćaj i konverzije na sajtu",
   },
   {
     key: "gsc",
     name: "Google Search Console",
-    color: "#4285f4",
-    badge: "GSC",
+    logo: googleSearchConsoleLogo,
     desc: "Prati performanse u Google pretrazi",
   },
   {
     key: "meta",
     name: "Meta",
-    color: "#0866ff",
-    badge: "M",
+    logo: metaLogo,
     desc: "Facebook i Instagram oglašavanje",
   },
   {
@@ -44,23 +42,58 @@ export const INTEGRATION_CATALOG = [
   },
 ];
 
-export const DEMO_DETAILS = {
-  woocommerce: {
-    site: "prodavnica.rs",
-    apiKey: "wc_live_••••••••92ac",
-    connectedAt: "12.03.2026.",
-  },
-};
+function IntegrationBadge({ platform }) {
+  if (platform.custom) return null;
+  return (
+    <span className="integration-badge">
+      <img src={platform.logo} alt={platform.name} />
+    </span>
+  );
+}
 
 export default function IntegrationsSection() {
   const [filter, setFilter] = useState("moje");
-  const [connectedKeys, setConnectedKeys] = useState(["woocommerce"]);
+  const [connectedKeys, setConnectedKeys] = useState([]);
 
-  const connect = (key) =>
+  const [wooConnections, setWooConnections] = useState([]);
+  const [wooChecking, setWooChecking] = useState(true);
+  const [showWooModal, setShowWooModal] = useState(false);
+  const [toast, setToast] = useState(null);
+  const toastTimer = useRef(null);
+
+  const showToast = (type, message) => {
+    setToast({ type, message });
+    window.clearTimeout(toastTimer.current);
+    toastTimer.current = window.setTimeout(() => setToast(null), 3500);
+  };
+
+  useEffect(() => {
+    fetchWooStatus()
+      .then((data) => setWooConnections(data.connections || []))
+      .catch(() => {})
+      .finally(() => setWooChecking(false));
+  }, []);
+
+  const handleWooConnected = (connection) => {
+    setWooConnections((prev) => [...prev, connection]);
+    setShowWooModal(false);
+  };
+
+  const handleWooDisconnected = (id) => {
+    setWooConnections((prev) => prev.filter((c) => c.id !== id));
+  };
+
+  const connect = (key) => {
     setConnectedKeys((prev) => (prev.includes(key) ? prev : [...prev, key]));
+    const platform = INTEGRATION_CATALOG.find((p) => p.key === key);
+    showToast("success", `Uspešno povezano: ${platform?.name || key}`);
+  };
 
-  const disconnect = (key) =>
+  const disconnect = (key) => {
     setConnectedKeys((prev) => prev.filter((k) => k !== key));
+    const platform = INTEGRATION_CATALOG.find((p) => p.key === key);
+    showToast("success", `Integracija uklonjena: ${platform?.name || key}`);
+  };
 
   const myIntegrations = INTEGRATION_CATALOG.filter((p) =>
     connectedKeys.includes(p.key)
@@ -93,32 +126,28 @@ export default function IntegrationsSection() {
       </div>
 
       {filter === "moje" ? (
-        myIntegrations.length === 0 ? (
-          <div className="empty-hint">Još uvek nemaš povezanih integracija.</div>
-        ) : (
-          myIntegrations.map((p) => {
-            const details = DEMO_DETAILS[p.key];
-            return (
+        <>
+          {wooConnections.map((connection) => (
+            <WooCommerceIntegration
+              key={connection.id}
+              connection={connection}
+              onDisconnected={handleWooDisconnected}
+              onResult={showToast}
+            />
+          ))}
+
+          {myIntegrations.length === 0 && wooConnections.length === 0 ? (
+            <div className="empty-hint">Još uvek nemaš povezanih integracija.</div>
+          ) : (
+            myIntegrations.map((p) => (
               <div className="integration-card" key={p.key}>
-                <span className="integration-badge" style={{ background: p.color }}>
-                  {p.badge}
-                </span>
+                <IntegrationBadge platform={p} />
                 <div className="integration-info">
                   <p className="integration-name">
                     {p.name}
                     <span className="status-pill">Povezano</span>
                   </p>
-                  {details ? (
-                    <>
-                      <p className="integration-site">{details.site}</p>
-                      <p className="integration-meta">
-                        API ključ: {details.apiKey} · povezano{" "}
-                        {details.connectedAt}
-                      </p>
-                    </>
-                  ) : (
-                    <p className="integration-site">Povezano preko API-ja</p>
-                  )}
+                  <p className="integration-site">Povezano preko API-ja</p>
                 </div>
                 <button
                   className="integration-remove"
@@ -128,11 +157,34 @@ export default function IntegrationsSection() {
                   Ukloni
                 </button>
               </div>
-            );
-          })
-        )
+            ))
+          )}
+        </>
       ) : (
         <div className="integration-grid">
+          <div className="integration-grid-card">
+            <span className="integration-badge">
+              <img src={woocommerceLogo} alt="WooCommerce" />
+            </span>
+            <p className="integration-grid-name">
+              WooCommerce
+              {wooConnections.length > 0 && (
+                <span className="status-pill">{wooConnections.length}</span>
+              )}
+            </p>
+            <p className="integration-grid-desc">
+              Poveži svoju WooCommerce prodavnicu
+            </p>
+            <button
+              type="button"
+              className="integration-grid-action"
+              disabled={wooChecking}
+              onClick={() => setShowWooModal(true)}
+            >
+              {wooConnections.length > 0 ? "+ Poveži još jednu" : "Poveži"}
+            </button>
+          </div>
+
           {INTEGRATION_CATALOG.map((p) => {
             const isConnected = connectedKeys.includes(p.key);
             return (
@@ -140,14 +192,7 @@ export default function IntegrationsSection() {
                 className={"integration-grid-card" + (p.custom ? " custom" : "")}
                 key={p.key}
               >
-                {!p.custom && (
-                  <span
-                    className="integration-badge"
-                    style={{ background: p.color }}
-                  >
-                    {p.badge}
-                  </span>
-                )}
+                <IntegrationBadge platform={p} />
                 <p className="integration-grid-name">{p.name}</p>
                 <p className="integration-grid-desc">{p.desc}</p>
                 <button
@@ -165,6 +210,16 @@ export default function IntegrationsSection() {
           })}
         </div>
       )}
+
+      {showWooModal && (
+        <WooCommerceConnectModal
+          onClose={() => setShowWooModal(false)}
+          onConnected={handleWooConnected}
+          onResult={showToast}
+        />
+      )}
+
+      <Toast type={toast?.type} message={toast?.message} />
     </>
   );
 }

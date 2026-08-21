@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import Header, { NAV_ITEMS } from "./components/Header";
 import Dashboard from "./pages/Dashboard";
+import Orders from "./pages/Orders";
 import Settings from "./pages/Settings";
 
 const ROUTES = new Set(NAV_ITEMS.map((i) => i.route));
@@ -27,7 +28,13 @@ export default function App() {
   return (
     <>
       <Header route={route} onNavigate={navigate} />
-      {route === "podesavanja" ? <Settings /> : <Dashboard />}
+      {route === "podesavanja" ? (
+        <Settings />
+      ) : route === "porudzbine" ? (
+        <Orders />
+      ) : (
+        <Dashboard />
+      )}
     </>
   );
 }

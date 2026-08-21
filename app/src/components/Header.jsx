@@ -1,8 +1,9 @@
 import Logo from "./Logo";
-import { HomeIcon, ToolsIcon, GearIcon } from "../icons";
+import { HomeIcon, ToolsIcon, GearIcon, OrdersIcon } from "../icons";
 
 export const NAV_ITEMS = [
   { route: "home", label: "Početna", icon: HomeIcon },
+  { route: "porudzbine", label: "Porudžbine", icon: OrdersIcon },
   { route: "alati", label: "Alati", icon: ToolsIcon },
   { route: "podesavanja", label: "Podešavanja", icon: GearIcon },
 ];

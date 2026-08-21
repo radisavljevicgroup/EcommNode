@@ -87,8 +87,40 @@ export const LogOutIcon = () => (
   </svg>
 );
 
+export const OrdersIcon = () => (
+  <svg {...iconProps}>
+    <path d="M9 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2h-2" />
+    <rect x="9" y="1" width="6" height="4" rx="1" />
+    <path d="M9 12h6" />
+    <path d="M9 16h6" />
+  </svg>
+);
+
 export const ChevronDownIcon = () => (
   <svg {...iconProps}>
     <path d="m6 9 6 6 6-6" />
+  </svg>
+);
+
+export const CloseIcon = () => (
+  <svg {...iconProps}>
+    <path d="M18 6 6 18" />
+    <path d="m6 6 12 12" />
+  </svg>
+);
+
+export const EyeIcon = () => (
+  <svg {...iconProps}>
+    <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
+    <circle cx="12" cy="12" r="3" />
+  </svg>
+);
+
+export const EyeOffIcon = () => (
+  <svg {...iconProps}>
+    <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c6.5 0 10 8 10 8a17 17 0 0 1-2.24 3.36" />
+    <path d="M6.53 6.53A17.4 17.4 0 0 0 2 12s3.5 8 10 8a9.17 9.17 0 0 0 5-1.47" />
+    <path d="M2 2l20 20" />
+    <path d="M9.88 9.88a3 3 0 0 0 4.24 4.24" />
   </svg>
 );
