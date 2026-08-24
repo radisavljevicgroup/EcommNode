@@ -1,7 +1,12 @@
 import { useEffect, useState } from "react";
-import { fetchWooOrders, fetchWooStatus } from "../api/woocommerce";
+import { fetchWooOrders, fetchWooStatus, fetchStaleOrderCount } from "../api/woocommerce";
 import { EyeIcon } from "../icons";
 import { siteLabel } from "../utils/site";
+import Pagination from "../components/Pagination";
+import MultiSelect from "../components/MultiSelect";
+import { ORDER_STATUS_OPTIONS } from "../constants/orderStatuses";
+
+const PER_PAGE_OPTIONS = [10, 20, 30, 50];
 
 const STATUS_META = {
   pending: { label: "Na čekanju", className: "pending" },
@@ -18,6 +23,16 @@ function StatusBadge({ status }) {
   return (
     <span className={"order-status-badge order-status-" + meta.className}>
       {meta.label}
+    </span>
+  );
+}
+
+function FiscalBadge({ fiscalized }) {
+  return (
+    <span
+      className={"order-status-badge " + (fiscalized ? "order-fiscal-yes" : "order-fiscal-no")}
+    >
+      {fiscalized ? "Fiskalizovano" : "Nefiskalizovano"}
     </span>
   );
 }
@@ -76,6 +91,7 @@ function OrderCard({ order, expanded, onToggle }) {
         </div>
         <div className="order-card-meta">
           <StatusBadge status={order.status} />
+          <FiscalBadge fiscalized={order.fiscalized} />
           <div className="order-card-total">
             <strong>
               {order.total} {order.currency}
@@ -187,10 +203,22 @@ export default function Orders() {
   const [connections, setConnections] = useState([]);
   const [selectedId, setSelectedId] = useState("all");
   const [orders, setOrders] = useState([]);
+  const [pagination, setPagination] = useState({ page: 1, perPage: 10, total: 0, totalPages: 1 });
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(10);
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
+  const [selectedStatuses, setSelectedStatuses] = useState(
+    ORDER_STATUS_OPTIONS.map((s) => s.id)
+  );
+  const [fiscalFilter, setFiscalFilter] = useState("all");
+  // Never activated automatically — only the explicit button click below
+  // (or the "Ukloni filter" button to undo it) changes this.
+  const [staleOnly, setStaleOnly] = useState(false);
+  const [staleCount, setStaleCount] = useState(0);
   const [loadingStatus, setLoadingStatus] = useState(true);
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [error, setError] = useState("");
-  const [search, setSearch] = useState("");
   const [expandedId, setExpandedId] = useState(null);
 
   useEffect(() => {
@@ -201,32 +229,34 @@ export default function Orders() {
   }, []);
 
   useEffect(() => {
+    fetchStaleOrderCount()
+      .then((data) => setStaleCount(data.count || 0))
+      .catch(() => {});
+  }, [staleOnly]);
+
+  const statusesKey = selectedStatuses.join(",");
+
+  useEffect(() => {
     if (connections.length === 0) return;
     let cancelled = false;
     setLoadingOrders(true);
     setError("");
 
-    const targets =
-      selectedId === "all"
-        ? connections
-        : connections.filter((c) => c.id === selectedId);
-
-    Promise.all(
-      targets.map((c) =>
-        fetchWooOrders(c.id).then((data) =>
-          data.orders.map((o) => ({
-            ...o,
-            sourceSiteUrl: connections.length > 1 ? c.siteUrl : null,
-          }))
-        )
-      )
-    )
-      .then((lists) => {
+    fetchWooOrders(selectedId === "all" ? undefined : selectedId, {
+      page,
+      perPage,
+      search,
+      stale: staleOnly,
+      // The stale view has its own fixed status semantics (pending/processing
+      // only) — don't cross it with this filter.
+      status: staleOnly || selectedStatuses.length === ORDER_STATUS_OPTIONS.length
+        ? undefined
+        : selectedStatuses,
+    })
+      .then((data) => {
         if (cancelled) return;
-        const merged = lists
-          .flat()
-          .sort((a, b) => new Date(b.dateCreated) - new Date(a.dateCreated));
-        setOrders(merged);
+        setOrders(data.orders);
+        setPagination(data.pagination);
       })
       .catch((err) => {
         if (!cancelled) setError(err.message);
@@ -238,20 +268,50 @@ export default function Orders() {
     return () => {
       cancelled = true;
     };
-  }, [selectedId, connections]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connections, selectedId, page, perPage, search, staleOnly, statusesKey]);
 
-  const filtered = orders.filter((o) => {
-    if (!search.trim()) return true;
-    const q = search.trim().toLowerCase();
-    const partner = `${o.billing.firstName} ${o.billing.lastName}`.toLowerCase();
-    return (
-      String(o.id).includes(q) ||
-      String(o.number || "").includes(q) ||
-      partner.includes(q)
-    );
-  });
+  const handleSearchSubmit = (e) => {
+    e.preventDefault();
+    setPage(1);
+    setSearch(searchInput.trim());
+  };
+
+  const handlePerPageChange = (e) => {
+    setPerPage(Number(e.target.value));
+    setPage(1);
+  };
+
+  const handleStoreChange = (id) => {
+    setSelectedId(id);
+    setPage(1);
+  };
+
+  const handleStatusChange = (ids) => {
+    setSelectedStatuses(ids);
+    setPage(1);
+  };
+
+  const showStaleOrders = () => {
+    setStaleOnly(true);
+    setPage(1);
+  };
+
+  const clearStaleFilter = () => {
+    setStaleOnly(false);
+    setPage(1);
+  };
 
   const loading = loadingStatus || loadingOrders;
+
+  // Fiscalization isn't a WooCommerce-native filter, so this only narrows
+  // down the orders already loaded on the current page (not a server-wide
+  // filter across all pages).
+  const visibleOrders = orders.filter((o) => {
+    if (fiscalFilter === "yes") return o.fiscalized;
+    if (fiscalFilter === "no") return !o.fiscalized;
+    return true;
+  });
 
   return (
     <div className="page-body orders-page">
@@ -260,40 +320,93 @@ export default function Orders() {
           <h1 className="settings-title">Porudžbine</h1>
           <p className="orders-breadcrumb">Nadzorna tabla / Porudžbine</p>
         </div>
-        <div className="orders-search">
+        <form className="orders-search" onSubmit={handleSearchSubmit}>
           <input
             type="text"
             placeholder="Pretraži po partneru, broju..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
           />
-          <button type="button" className="orders-search-btn">
+          <button type="submit" className="orders-search-btn">
             Pretraži
           </button>
-        </div>
+        </form>
       </div>
 
-      {connections.length > 1 && (
-        <div className="filter-tabs">
-          <button
-            type="button"
-            className={"filter-tab" + (selectedId === "all" ? " active" : "")}
-            onClick={() => setSelectedId("all")}
-          >
-            Sve integracije
+      {staleOnly ? (
+        <div className="stale-filter-banner">
+          <span>
+            Prikazane su samo zastarele porudžbine (Na čekanju / U obradi, starije od
+            praga iz podešavanja).
+          </span>
+          <button type="button" onClick={clearStaleFilter}>
+            Ukloni filter
           </button>
-          {connections.map((c) => (
-            <button
-              key={c.id}
-              type="button"
-              className={"filter-tab" + (selectedId === c.id ? " active" : "")}
-              onClick={() => setSelectedId(c.id)}
-            >
-              {siteLabel(c.siteUrl)}
-            </button>
-          ))}
         </div>
+      ) : (
+        staleCount > 0 && (
+          <div className="stale-filter-banner stale-filter-prompt">
+            <span>Imaš {staleCount} zastarelih porudžbina koje čekaju obradu.</span>
+            <button type="button" onClick={showStaleOrders}>
+              Vidi zastarele porudžbine
+            </button>
+          </div>
+        )
       )}
+
+      <div className="orders-toolbar">
+        {connections.length > 1 && (
+          <div className="filter-tabs">
+            <button
+              type="button"
+              className={"filter-tab" + (selectedId === "all" ? " active" : "")}
+              onClick={() => handleStoreChange("all")}
+            >
+              Sve integracije
+            </button>
+            {connections.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                className={"filter-tab" + (selectedId === c.id ? " active" : "")}
+                onClick={() => handleStoreChange(c.id)}
+              >
+                {siteLabel(c.siteUrl)}
+              </button>
+            ))}
+          </div>
+        )}
+
+        <MultiSelect
+          options={ORDER_STATUS_OPTIONS}
+          selected={selectedStatuses}
+          onChange={handleStatusChange}
+          placeholder="Izaberi status"
+          allLabel="Svi statusi"
+          countLabel={(n) => `${n} status${n === 1 ? "" : "a"} izabrano`}
+          emptyLabel="Nijedan status izabran"
+        />
+
+        <label className="per-page-select">
+          Fiskalizacija:
+          <select value={fiscalFilter} onChange={(e) => setFiscalFilter(e.target.value)}>
+            <option value="all">Sve</option>
+            <option value="yes">Fiskalizovano</option>
+            <option value="no">Nefiskalizovano</option>
+          </select>
+        </label>
+
+        <label className="per-page-select">
+          Po stranici:
+          <select value={perPage} onChange={handlePerPageChange}>
+            {PER_PAGE_OPTIONS.map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
 
       {loadingStatus ? (
         <OrdersSkeleton />
@@ -305,21 +418,32 @@ export default function Orders() {
         <OrdersSkeleton />
       ) : error ? (
         <div className="woo-error">{error}</div>
-      ) : filtered.length === 0 ? (
+      ) : orders.length === 0 ? (
         <div className="empty-hint">Nema porudžbina za prikaz.</div>
-      ) : (
-        <div className="orders-list">
-          {filtered.map((order) => (
-            <OrderCard
-              key={order.id}
-              order={order}
-              expanded={expandedId === order.id}
-              onToggle={() =>
-                setExpandedId((cur) => (cur === order.id ? null : order.id))
-              }
-            />
-          ))}
+      ) : visibleOrders.length === 0 ? (
+        <div className="empty-hint">
+          Nema porudžbina koje odgovaraju filteru fiskalizacije na ovoj stranici.
         </div>
+      ) : (
+        <>
+          <div className="orders-list">
+            {visibleOrders.map((order) => (
+              <OrderCard
+                key={order.id}
+                order={order}
+                expanded={expandedId === order.id}
+                onToggle={() =>
+                  setExpandedId((cur) => (cur === order.id ? null : order.id))
+                }
+              />
+            ))}
+          </div>
+          <Pagination
+            page={pagination.page}
+            totalPages={pagination.totalPages}
+            onChange={setPage}
+          />
+        </>
       )}
     </div>
   );

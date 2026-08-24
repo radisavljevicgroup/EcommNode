@@ -1,13 +1,34 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import IconRail from "../components/IconRail";
 import { AccordionRow, InputRow, ToggleRow } from "../components/FormRows";
 import { PersonIcon, BellIcon, CreditCardIcon, LogOutIcon } from "../icons";
 import IntegrationsSection from "./IntegrationsSection";
+import { fetchSettings, updateSettings } from "../api/settings";
 
 export default function Settings() {
   const [name, setName] = useState("");
   const [open, setOpen] = useState("nalog");
   const [section, setSection] = useState("meni");
+
+  const [staleThreshold, setStaleThreshold] = useState("");
+  const [staleSaved, setStaleSaved] = useState(false);
+
+  useEffect(() => {
+    fetchSettings()
+      .then((data) => setStaleThreshold(String(data.staleOrderThresholdDays ?? 30)))
+      .catch(() => {});
+  }, []);
+
+  const saveStaleThreshold = () => {
+    const n = Number(staleThreshold);
+    if (!Number.isFinite(n) || n <= 0) return;
+    updateSettings({ staleOrderThresholdDays: n })
+      .then(() => {
+        setStaleSaved(true);
+        setTimeout(() => setStaleSaved(false), 2000);
+      })
+      .catch(() => {});
+  };
 
   const toggle = (id) => setOpen((cur) => (cur === id ? null : id));
 
@@ -86,6 +107,28 @@ export default function Settings() {
                     desc="Sumarni pregled poslatih i obrisanih pošiljki"
                     defaultChecked
                   />
+                  <div className="settings-row">
+                    <div>
+                      <p className="settings-row-label">
+                        Prag za zastarele porudžbine (dana)
+                      </p>
+                      <p className="settings-row-desc">
+                        Nezavršena porudžbina starija od ovog broja dana prijavljuje se
+                        kao zastarela
+                      </p>
+                    </div>
+                    <div className="stale-threshold-field">
+                      <input
+                        className="settings-input"
+                        type="number"
+                        min="1"
+                        value={staleThreshold}
+                        onChange={(e) => setStaleThreshold(e.target.value)}
+                        onBlur={saveStaleThreshold}
+                      />
+                      {staleSaved && <span className="stale-saved-hint">Sačuvano</span>}
+                    </div>
+                  </div>
                 </AccordionRow>
 
                 <AccordionRow

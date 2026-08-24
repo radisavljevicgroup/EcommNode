@@ -30,7 +30,22 @@ export function disconnectWoo(id) {
   });
 }
 
-export function fetchWooOrders(connectionId) {
-  const query = connectionId ? `?connectionId=${encodeURIComponent(connectionId)}` : "";
-  return request(`/orders${query}`);
+export function fetchWooOrders(
+  connectionId,
+  { page = 1, perPage = 10, search = "", stale = false, status } = {}
+) {
+  const params = new URLSearchParams();
+  if (connectionId) params.set("connectionId", connectionId);
+  params.set("page", page);
+  params.set("perPage", perPage);
+  if (search) params.set("search", search);
+  if (stale) params.set("stale", "true");
+  // Sent even when empty — an empty (but present) list means "every status
+  // deselected", which must match nothing rather than falling back to "all".
+  if (status !== undefined) params.set("status", status.join(","));
+  return request(`/orders?${params.toString()}`);
+}
+
+export function fetchStaleOrderCount() {
+  return request("/orders/stale-count");
 }

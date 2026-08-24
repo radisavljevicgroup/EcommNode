@@ -4,6 +4,8 @@ const dotenv = require("dotenv");
 
 const connectRouter = require("./routes/connect");
 const ordersRouter = require("./routes/orders");
+const analyticsRouter = require("./routes/analytics");
+const settingsRouter = require("./routes/settings");
 
 dotenv.config();
 
@@ -21,6 +23,8 @@ app.use(express.json());
 
 app.use("/api", connectRouter);
 app.use("/api", ordersRouter);
+app.use("/api", analyticsRouter);
+app.use("/api", settingsRouter);
 
 app.use((req, res) => {
   res.status(404).json({ error: "Ruta nije pronađena." });

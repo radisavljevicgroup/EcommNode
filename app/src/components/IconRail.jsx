@@ -6,10 +6,10 @@ export const RAIL_ITEMS = [
   { key: "apps", icon: GridIcon, label: "Svi alati" },
 ];
 
-export default function IconRail({ active, onSelect }) {
+export default function IconRail({ items = RAIL_ITEMS, active, onSelect }) {
   return (
     <nav className="icon-rail">
-      {RAIL_ITEMS.map(({ key, icon: Icon, label }) => (
+      {items.map(({ key, icon: Icon, label }) => (
         <div
           className={"icon-rail-item" + (active === key ? " active" : "")}
           key={key}
