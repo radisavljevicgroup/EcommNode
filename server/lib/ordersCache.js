@@ -86,6 +86,18 @@ function getOrdersForConnections(connections) {
   );
 }
 
+// Same as getOrdersForConnections, but always tags the real source site
+// regardless of how many connections were queried. Orders.jsx only wants
+// the tag when multiple stores are shown at once (getOrdersForConnections
+// above), but per-store breakdowns (e.g. top categories by store) need the
+// real site even when just one connection was queried.
+function getOrdersForConnectionsTagged(connections) {
+  const entries = connections.map((c) => readCache(c));
+  return entries.flatMap((entry, i) =>
+    entry.orders.map((o) => ({ ...o, sourceSiteUrl: connections[i].siteUrl }))
+  );
+}
+
 // Only these two statuses count as "stuck" — cancelled/refunded/failed orders
 // are already resolved (just not successfully), and completed ones are done.
 const STALE_STATUSES = ["pending", "processing"];
@@ -194,6 +206,7 @@ function getSyncStatus(connections) {
 module.exports = {
   syncConnection,
   getOrdersForConnections,
+  getOrdersForConnectionsTagged,
   getOrdersPage,
   getStaleOrders,
   getUnfiscalizedOrders,

@@ -16,9 +16,15 @@ function mapAddress(address) {
 // Set by Serbian fiscal cash-register plugins (e.g. Fiscomm/VPFR) once a
 // receipt is actually issued — not every store has such a plugin installed,
 // in which case orders simply never carry this meta and count as unfiscalized.
+// _referent_document_number (the actual PFR receipt number) is the reliable
+// signal: checked against real order data across 4 stores, it was present on
+// every single fiscalized order, while _fiscalized_amount was missing on a
+// meaningful chunk of them (e.g. 16/30 on one store) despite the order
+// genuinely having a receipt — so that field alone under-reports.
 function isFiscalized(order) {
-  const meta = (order.meta_data || []).find((m) => m.key === "_fiscalized_amount");
-  return Boolean(meta?.value) && parseFloat(meta.value) > 0;
+  const meta = order.meta_data || [];
+  const refNumber = meta.find((m) => m.key === "_referent_document_number")?.value;
+  return Boolean(refNumber && String(refNumber).trim());
 }
 
 function mapOrder(order, sourceSiteUrl) {

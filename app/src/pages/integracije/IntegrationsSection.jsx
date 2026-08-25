@@ -100,7 +100,8 @@ export default function IntegrationsSection() {
             />
           ))}
 
-          {myIntegrations.length === 0 && wooConnections.length === 0 ? (
+          {myIntegrations.length === 0 &&
+          wooConnections.length === 0 ? (
             <div className="empty-hint">Još uvek nemaš povezanih integracija.</div>
           ) : (
             myIntegrations.map((p) => (

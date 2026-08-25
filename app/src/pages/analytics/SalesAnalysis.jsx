@@ -193,6 +193,7 @@ export default function SalesAnalysis() {
               bestsellers={topProducts.bestsellers}
               categories={topProducts.categories}
               currency={summary?.currency || "RSD"}
+              showSiteTag={selectedIds.length > 1}
             />
           )}
           {geo && <GeoDistributionChart data={geo} currency={summary?.currency || "RSD"} />}

@@ -248,9 +248,19 @@ function computeTrends(allOrders, { from, to }) {
   return { series, yoyPercent, currentTotal, previousTotal };
 }
 
-function computeTopProducts(allOrders, { from, to }, productCategoryMap, limit = 10) {
+function computeTopProducts(
+  allOrders,
+  { from, to },
+  productCategoryMap,
+  categoryImageMap,
+  limit = 10
+) {
   const periodOrders = realized(filterByRange(allOrders, from, to));
   const productMap = new Map();
+  // Keyed by site+name, never merged across stores — the same category
+  // name in two different stores is two different categories with two
+  // different product sets, and ranking them together would misattribute
+  // revenue to a single "site" that isn't real.
   const categoryMap = new Map();
 
   periodOrders.forEach((o) => {
@@ -258,34 +268,43 @@ function computeTopProducts(allOrders, { from, to }, productCategoryMap, limit =
       const key = item.productId || item.name;
       const revenue = toNumber(item.total);
       if (!productMap.has(key)) {
-        productMap.set(key, { id: item.productId, name: item.name, revenue: 0, units: 0 });
+        productMap.set(key, {
+          id: item.productId,
+          name: item.name,
+          sku: item.sku || "",
+          image: item.image || null,
+          revenue: 0,
+          units: 0,
+        });
       }
       const p = productMap.get(key);
       p.revenue += revenue;
       p.units += item.quantity || 0;
+      if (!p.image && item.image) p.image = item.image;
+      if (!p.sku && item.sku) p.sku = item.sku;
 
       const categories = productCategoryMap?.get(item.productId) || ["Nekategorisano"];
+      const site = o.sourceSiteUrl || null;
       categories.forEach((cat) => {
-        categoryMap.set(cat, (categoryMap.get(cat) || 0) + revenue);
+        const catKey = `${site || ""}::${cat}`;
+        if (!categoryMap.has(catKey)) {
+          categoryMap.set(catKey, { name: cat, site, revenue: 0 });
+        }
+        categoryMap.get(catKey).revenue += revenue;
       });
     });
   });
 
   const products = [...productMap.values()].sort((a, b) => b.revenue - a.revenue);
-  const sortedCategories = [...categoryMap.entries()]
-    .map(([name, revenue]) => ({ name, revenue }))
-    .sort((a, b) => b.revenue - a.revenue);
-
-  // A donut chart with 50+ slices (common once several stores with
-  // different catalogs are combined) is unreadable — keep the top N and
-  // roll the rest into "Ostalo".
-  const CATEGORY_LIMIT = 8;
-  const topCategories = sortedCategories.slice(0, CATEGORY_LIMIT);
-  const restRevenue = sortedCategories
-    .slice(CATEGORY_LIMIT)
-    .reduce((sum, c) => sum + c.revenue, 0);
-  const categories =
-    restRevenue > 0 ? [...topCategories, { name: "Ostalo", revenue: restRevenue }] : topCategories;
+  const categories = [...categoryMap.values()]
+    .map((c) => ({
+      name: c.name,
+      site: c.site,
+      revenue: c.revenue,
+      image: c.site ? categoryImageMap?.get(`${c.site}::${c.name}`) || null : null,
+    }))
+    .sort((a, b) => b.revenue - a.revenue)
+    .slice(0, limit);
 
   return {
     bestsellers: products.slice(0, limit),

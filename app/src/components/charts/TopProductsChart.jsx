@@ -1,68 +1,63 @@
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  Legend,
-} from "recharts";
+import { siteLabel } from "../../utils/site";
 
-const COLORS = ["#480ca8", "#7209b7", "#9d4edd", "#c77dff", "#e0aaff", "#3c096c", "#5a189a", "#240046"];
-
-function truncate(name, max = 22) {
-  return name.length > max ? `${name.slice(0, max - 1)}…` : name;
+function formatMoney(value, currency) {
+  return `${Math.round(value).toLocaleString("sr-RS")} ${currency}`;
 }
 
-export default function TopProductsChart({ bestsellers, categories, currency }) {
-  const bars = bestsellers.map((p) => ({ ...p, shortName: truncate(p.name) }));
-
+export default function TopProductsChart({ bestsellers, categories, currency, showSiteTag }) {
   return (
-    <div className="chart-card">
-      <h3>Top proizvodi i kategorije</h3>
-      <div className="chart-split">
-        <div>
-          <p className="chart-subtitle">Bestseller proizvodi</p>
-          {bars.length === 0 ? (
-            <div className="empty-hint">Nema podataka.</div>
-          ) : (
-            <ResponsiveContainer width="100%" height={320}>
-              <BarChart data={bars} layout="vertical" margin={{ left: 10 }}>
-                <XAxis type="number" tick={{ fontSize: 11 }} />
-                <YAxis type="category" dataKey="shortName" tick={{ fontSize: 10.5 }} width={150} />
-                <Tooltip
-                  formatter={(v) => `${Math.round(v).toLocaleString("sr-RS")} ${currency}`}
-                  labelFormatter={(label, payload) => payload?.[0]?.payload?.name || label}
-                />
-                <Bar dataKey="revenue" fill="#480ca8" radius={[0, 6, 6, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-        <div>
-          <p className="chart-subtitle">Udeo kategorija u prihodu</p>
-          {categories.length === 0 ? (
-            <div className="empty-hint">Nema podataka.</div>
-          ) : (
-            <ResponsiveContainer width="100%" height={260}>
-              <PieChart>
-                <Pie data={categories} dataKey="revenue" nameKey="name" innerRadius={50} outerRadius={90}>
-                  {categories.map((entry, i) => (
-                    <Cell key={entry.name} fill={COLORS[i % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip
-                  formatter={(v) => `${Math.round(v).toLocaleString("sr-RS")} ${currency}`}
-                />
-                <Legend wrapperStyle={{ fontSize: 11 }} />
-              </PieChart>
-            </ResponsiveContainer>
-          )}
-        </div>
+    <>
+      <div className="chart-card">
+        <h3>Top proizvodi</h3>
+        <p className="chart-subtitle">Deset najprodavanijih proizvoda u izabranom periodu</p>
+
+        {bestsellers.length === 0 ? (
+          <div className="empty-hint">Nema podataka.</div>
+        ) : (
+          <div className="top-products-grid">
+            {bestsellers.map((p, i) => (
+              <div className="top-product-card" key={p.id || p.name}>
+                <span className="top-product-rank">#{i + 1}</span>
+                {p.image ? (
+                  <img className="top-product-img" src={p.image} alt={p.name} />
+                ) : (
+                  <div className="top-product-img placeholder" />
+                )}
+                <p className="top-product-name">{p.name}</p>
+                {p.sku && <p className="top-product-sku">Šifra: {p.sku}</p>}
+                <p className="top-product-revenue">{formatMoney(p.revenue, currency)}</p>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
-    </div>
+
+      <div className="chart-card">
+        <h3>Top kategorije</h3>
+        <p className="chart-subtitle">Deset kategorija sa najvećim prihodom</p>
+
+        {categories.length === 0 ? (
+          <div className="empty-hint">Nema podataka.</div>
+        ) : (
+          <div className="top-categories-grid">
+            {categories.map((c) => (
+              <div className="top-category-card" key={`${c.site || ""}::${c.name}`}>
+                {c.image ? (
+                  <img className="top-category-img" src={c.image} alt={c.name} />
+                ) : (
+                  <div className="top-category-img placeholder">{c.name[0]}</div>
+                )}
+                <p className="top-category-name">{c.name}</p>
+                {showSiteTag && c.site && (
+                  <span className="order-source-tag top-category-site">
+                    {siteLabel(c.site)}
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </>
   );
 }

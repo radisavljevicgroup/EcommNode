@@ -142,6 +142,14 @@ export const EyeIcon = () => (
   </svg>
 );
 
+export const ServerIcon = () => (
+  <svg {...iconProps}>
+    <rect x="2" y="3" width="20" height="7" rx="2" />
+    <rect x="2" y="14" width="20" height="7" rx="2" />
+    <path d="M6 7h.01M6 18h.01" />
+  </svg>
+);
+
 export const ClockIcon = () => (
   <svg {...iconProps}>
     <circle cx="12" cy="12" r="9" />

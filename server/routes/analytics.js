@@ -1,7 +1,12 @@
 const { Router } = require("express");
 const { getConnections } = require("../lib/store");
-const { getOrdersForConnections, getSyncStatus, syncConnection } = require("../lib/ordersCache");
-const { getProductCategoryMap } = require("../lib/productsCache");
+const {
+  getOrdersForConnections,
+  getOrdersForConnectionsTagged,
+  getSyncStatus,
+  syncConnection,
+} = require("../lib/ordersCache");
+const { getProductCategoryMap, getCategoryImageMap } = require("../lib/productsCache");
 const analytics = require("../lib/analytics");
 
 const router = Router();
@@ -60,12 +65,13 @@ router.get("/analytics/top-products", async (req, res) => {
     return res.json({ bestsellers: [], slowMovers: [], categories: [] });
   }
   try {
-    const [orders, categoryMap] = await Promise.all([
-      getOrdersForConnections(connections),
-      getProductCategoryMap(connections),
-    ]);
+    const orders = getOrdersForConnectionsTagged(connections);
+    const categoryMap = getProductCategoryMap(connections);
+    const categoryImageMap = getCategoryImageMap(connections);
     const { from, to } = req.query;
-    res.json(analytics.computeTopProducts(orders, { from, to }, categoryMap));
+    res.json(
+      analytics.computeTopProducts(orders, { from, to }, categoryMap, categoryImageMap)
+    );
   } catch {
     res.status(400).json({ error: "Ne mogu da učitam top proizvode." });
   }
