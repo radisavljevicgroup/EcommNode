@@ -8,15 +8,25 @@ router.get("/settings", (req, res) => {
 });
 
 router.put("/settings", (req, res) => {
-  const { staleOrderThresholdDays } = req.body || {};
-  if (staleOrderThresholdDays === undefined) {
-    return res.json(getSettings());
+  const { staleOrderThresholdDays, staleTrackingEnabled, unfiscalizedTrackingEnabled } =
+    req.body || {};
+  const patch = {};
+
+  if (staleOrderThresholdDays !== undefined) {
+    const n = Number(staleOrderThresholdDays);
+    if (!Number.isFinite(n) || n <= 0) {
+      return res.status(400).json({ error: "Broj dana mora biti pozitivan broj." });
+    }
+    patch.staleOrderThresholdDays = n;
   }
-  const n = Number(staleOrderThresholdDays);
-  if (!Number.isFinite(n) || n <= 0) {
-    return res.status(400).json({ error: "Broj dana mora biti pozitivan broj." });
+  if (staleTrackingEnabled !== undefined) {
+    patch.staleTrackingEnabled = Boolean(staleTrackingEnabled);
   }
-  res.json(updateSettings({ staleOrderThresholdDays: n }));
+  if (unfiscalizedTrackingEnabled !== undefined) {
+    patch.unfiscalizedTrackingEnabled = Boolean(unfiscalizedTrackingEnabled);
+  }
+
+  res.json(updateSettings(patch));
 });
 
 module.exports = router;

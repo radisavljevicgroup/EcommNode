@@ -1,9 +1,9 @@
-import { HomeIcon, CpuIcon, GridIcon } from "../icons";
+import { HomeIcon, CpuIcon, ToolsIcon } from "../icons";
 
 export const RAIL_ITEMS = [
   { key: "meni", icon: HomeIcon, label: "Glavni meni" },
   { key: "integracije", icon: CpuIcon, label: "Integracija" },
-  { key: "apps", icon: GridIcon, label: "Svi alati" },
+  { key: "apps", icon: ToolsIcon, label: "Svi alati" },
 ];
 
 export default function IconRail({ items = RAIL_ITEMS, active, onSelect }) {

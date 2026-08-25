@@ -112,6 +112,74 @@ function getStaleOrders(connections, { page, perPage }) {
   };
 }
 
+// Orders that are done (status "completed") but never got a fiscal receipt
+// issued — worth flagging since a completed sale should normally be
+// fiscalized. Orders still in progress aren't included: they may simply not
+// be fiscalized yet.
+function getUnfiscalizedOrders(connections, { page, perPage }) {
+  const all = getOrdersForConnections(connections);
+  const unfiscalized = all
+    .filter((o) => o.status === "completed" && !o.fiscalized)
+    .sort((a, b) => new Date(a.dateCreated) - new Date(b.dateCreated));
+
+  const start = (page - 1) * perPage;
+  return {
+    orders: unfiscalized.slice(start, start + perPage),
+    pagination: {
+      page,
+      perPage,
+      total: unfiscalized.length,
+      totalPages: Math.max(1, Math.ceil(unfiscalized.length / perPage)),
+    },
+  };
+}
+
+function matchesSearch(order, needle) {
+  const haystack = [
+    order.number,
+    order.id,
+    order.billing?.firstName,
+    order.billing?.lastName,
+    order.billing?.email,
+    order.billing?.phone,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  return haystack.includes(needle);
+}
+
+// Backs the main Porudžbine list. Paginating a live WooCommerce API call on
+// every page click is slow (each request round-trips to the real store, and
+// the "all integrations" view has to do that for every connected store at
+// once) — this instead pages over the same local cache the stale/
+// unfiscalized/analytics views already use, so navigating pages is instant
+// and only touches the network in the background sync.
+function getOrdersPage(connections, { page, perPage, search, status }) {
+  let orders = getOrdersForConnections(connections).sort(
+    (a, b) => new Date(b.dateCreated) - new Date(a.dateCreated)
+  );
+
+  if (status) {
+    orders = orders.filter((o) => status.includes(o.status));
+  }
+  if (search) {
+    const needle = search.trim().toLowerCase();
+    if (needle) orders = orders.filter((o) => matchesSearch(o, needle));
+  }
+
+  const start = (page - 1) * perPage;
+  return {
+    orders: orders.slice(start, start + perPage),
+    pagination: {
+      page,
+      perPage,
+      total: orders.length,
+      totalPages: Math.max(1, Math.ceil(orders.length / perPage)),
+    },
+  };
+}
+
 function getSyncStatus(connections) {
   return connections.map((c) => ({
     connectionId: c.id,
@@ -126,6 +194,8 @@ function getSyncStatus(connections) {
 module.exports = {
   syncConnection,
   getOrdersForConnections,
+  getOrdersPage,
   getStaleOrders,
+  getUnfiscalizedOrders,
   getSyncStatus,
 };

@@ -625,6 +625,71 @@ body {
   gap: 10px;
 }
 
+.tool-grid {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+@media (max-width: 640px) {
+  .tool-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.tool-card-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.tool-card-head .integration-grid-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 15px;
+}
+
+.tool-badge {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: var(--purple-light);
+  color: var(--purple);
+}
+
+.tool-badge svg {
+  width: 20px;
+  height: 20px;
+  stroke: currentColor;
+}
+
+.tool-card-footer {
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tool-card-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.tool-status {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.tool-status.on {
+  color: #1e7e34;
+}
+
 .integration-grid-name {
   font-size: 14px;
   font-weight: 700;
@@ -877,18 +942,6 @@ body {
   border-color: var(--purple);
 }
 
-.orders-search-btn {
-  background: var(--text-dark);
-  color: #ffffff;
-  border: none;
-  border-radius: 8px;
-  padding: 9px 18px;
-  font-size: 13.5px;
-  font-weight: 600;
-  cursor: pointer;
-  font-family: inherit;
-  white-space: nowrap;
-}
 
 .orders-list {
   display: flex;
@@ -1196,6 +1249,12 @@ body {
   flex-wrap: wrap;
 }
 
+/* Status filter + per-page live on their own row, below the store tabs —
+   grouped together on the right instead of stretched to the row's edges. */
+.orders-toolbar-secondary {
+  justify-content: flex-end;
+}
+
 .per-page-select {
   display: flex;
   align-items: center;
@@ -1203,6 +1262,10 @@ body {
   font-size: 13px;
   color: var(--text-muted);
   margin-left: auto;
+}
+
+.orders-toolbar-secondary .per-page-select {
+  margin-left: 0;
 }
 
 .per-page-select select {
@@ -1633,6 +1696,65 @@ body {
   border-radius: 8px;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
   z-index: 30;
+}
+
+.note-tooltip {
+  position: relative;
+  display: inline-flex;
+}
+
+.note-tooltip-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.note-tooltip-trigger svg {
+  width: 15px;
+  height: 15px;
+  stroke: currentColor;
+}
+
+.note-tooltip-trigger:hover {
+  background: #fdecea;
+  color: #c0392b;
+}
+
+.note-tooltip-popover {
+  /* Fixed (not absolute) so it escapes .order-card's overflow:hidden clip —
+     top/left come from an inline style computed from the trigger's real
+     screen position (see NoteTooltip.jsx). */
+  position: fixed;
+  transform: translateY(-50%);
+  width: 260px;
+  background: #ffffff;
+  color: var(--text-dark);
+  border: 2px solid #e5342b;
+  border-radius: 8px;
+  padding: 10px 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+  z-index: 30;
+}
+
+.note-tooltip-title {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #c0392b;
+}
+
+.note-tooltip-text {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-dark);
 }
 
 /* charts */

@@ -142,6 +142,27 @@ export const EyeIcon = () => (
   </svg>
 );
 
+export const ClockIcon = () => (
+  <svg {...iconProps}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 7v5l3 3" />
+  </svg>
+);
+
+export const ReceiptIcon = () => (
+  <svg {...iconProps}>
+    <path d="M6 2h12v19l-3-2-3 2-3-2-3 2Z" />
+    <path d="M9 8h6M9 12h6" />
+  </svg>
+);
+
+export const NoteIcon = () => (
+  <svg {...iconProps}>
+    <path d="M21 15a2 2 0 0 1-2 2H8l-5 4V6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z" />
+    <path d="M7 8h10M7 12h6" />
+  </svg>
+);
+
 export const EyeOffIcon = () => (
   <svg {...iconProps}>
     <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c6.5 0 10 8 10 8a17 17 0 0 1-2.24 3.36" />
