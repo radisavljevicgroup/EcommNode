@@ -171,6 +171,47 @@ export const NoteIcon = () => (
   </svg>
 );
 
+export const MailIcon = () => (
+  <svg {...iconProps}>
+    <rect x="2" y="4" width="20" height="16" rx="2" />
+    <path d="m2 6 10 7 10-7" />
+  </svg>
+);
+
+export const PhoneIcon = () => (
+  <svg {...iconProps}>
+    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.362 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.338 1.85.573 2.81.7A2 2 0 0 1 22 16.92Z" />
+  </svg>
+);
+
+export const LockIcon = () => (
+  <svg {...iconProps}>
+    <rect x="3" y="11" width="18" height="11" rx="2" />
+    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+  </svg>
+);
+
+export const BuildingIcon = () => (
+  <svg {...iconProps}>
+    <rect x="4" y="2" width="16" height="20" rx="1" />
+    <path d="M9 22v-4h6v4M9 6h.01M15 6h.01M9 10h.01M15 10h.01M9 14h.01M15 14h.01" />
+  </svg>
+);
+
+export const TrendIcon = () => (
+  <svg {...iconProps}>
+    <path d="m3 17 6-6 4 4 8-8" />
+    <path d="M15 7h6v6" />
+  </svg>
+);
+
+export const SearchIcon = () => (
+  <svg {...iconProps}>
+    <circle cx="11" cy="11" r="7" />
+    <path d="m21 21-4.3-4.3" />
+  </svg>
+);
+
 export const EyeOffIcon = () => (
   <svg {...iconProps}>
     <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c6.5 0 10 8 10 8a17 17 0 0 1-2.24 3.36" />

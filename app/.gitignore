@@ -11,12 +11,17 @@ node_modules
 dist
 dist-ssr
 *.local
+.env
 
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
 .idea
 .DS_Store
+
+# Premium integrations — source lives in the private shopstack-premium
+# repo, only vendored here locally at runtime, never tracked publicly.
+src/premium/
 *.suo
 *.ntvs*
 *.njsproj

@@ -1,3 +1,5 @@
+const fs = require("fs");
+const path = require("path");
 const express = require("express");
 const cors = require("cors");
 const dotenv = require("dotenv");
@@ -6,6 +8,8 @@ const connectRouter = require("./routes/connect");
 const ordersRouter = require("./routes/orders");
 const analyticsRouter = require("./routes/analytics");
 const settingsRouter = require("./routes/settings");
+const ga4Router = require("./routes/ga4");
+const gscRouter = require("./routes/gsc");
 
 dotenv.config();
 
@@ -25,6 +29,22 @@ app.use("/api", connectRouter);
 app.use("/api", ordersRouter);
 app.use("/api", analyticsRouter);
 app.use("/api", settingsRouter);
+app.use("/api", ga4Router);
+app.use("/api", gscRouter);
+
+// Premium integrations (e.g. Eurocom International) live outside this
+// open-source repo — each one is a self-contained router at
+// server/premium/<name>/index.js. That folder is gitignored, so a public
+// checkout simply has none of them and this loop mounts nothing.
+const premiumDir = path.join(__dirname, "premium");
+if (fs.existsSync(premiumDir)) {
+  fs.readdirSync(premiumDir).forEach((name) => {
+    const entry = path.join(premiumDir, name, "index.js");
+    if (fs.existsSync(entry)) {
+      app.use("/api", require(entry));
+    }
+  });
+}
 
 app.use((req, res) => {
   res.status(404).json({ error: "Ruta nije pronađena." });

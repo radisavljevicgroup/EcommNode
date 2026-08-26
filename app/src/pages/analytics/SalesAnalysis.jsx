@@ -11,6 +11,7 @@ import {
 import MultiSelect from "../../components/MultiSelect";
 import DateRangePicker, { PRESETS } from "../../components/DateRangePicker";
 import QuadrantCard from "../../components/QuadrantCard";
+import MetricTrendModal from "../../components/MetricTrendModal";
 import RevenueTrendChart from "../../components/charts/RevenueTrendChart";
 import TopProductsChart from "../../components/charts/TopProductsChart";
 import GeoDistributionChart from "../../components/charts/GeoDistributionChart";
@@ -31,6 +32,8 @@ export default function SalesAnalysis() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [syncStatus, setSyncStatus] = useState([]);
+  const [chartMetric, setChartMetric] = useState(null);
+  const [productSortBy, setProductSortBy] = useState("revenue");
 
   const [from, to] = range;
 
@@ -78,7 +81,7 @@ export default function SalesAnalysis() {
     Promise.all([
       fetchAnalyticsSummary(filters),
       fetchAnalyticsTrends(filters),
-      fetchTopProducts(filters),
+      fetchTopProducts({ ...filters, sortBy: productSortBy }),
       fetchGeoDistribution(filters),
     ])
       .then(([s, t, p, g]) => {
@@ -99,7 +102,7 @@ export default function SalesAnalysis() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [idsKey, from, to]);
+  }, [idsKey, from, to, productSortBy]);
 
   useEffect(() => {
     if (selectedIds.length === 0) return undefined;
@@ -177,6 +180,7 @@ export default function SalesAnalysis() {
                 loading={loading}
                 currency={summary?.currency || "RSD"}
                 wide={q.wide}
+                onMetricClick={setChartMetric}
               />
             ))}
           </div>
@@ -194,10 +198,22 @@ export default function SalesAnalysis() {
               categories={topProducts.categories}
               currency={summary?.currency || "RSD"}
               showSiteTag={selectedIds.length > 1}
+              sortBy={productSortBy}
+              onSortByChange={setProductSortBy}
             />
           )}
           {geo && <GeoDistributionChart data={geo} currency={summary?.currency || "RSD"} />}
         </>
+      )}
+
+      {chartMetric && (
+        <MetricTrendModal
+          metric={chartMetric}
+          connectionIds={selectedIds}
+          from={from}
+          to={to}
+          onClose={() => setChartMetric(null)}
+        />
       )}
     </div>
   );

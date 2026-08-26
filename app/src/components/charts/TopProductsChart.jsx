@@ -4,12 +4,46 @@ function formatMoney(value, currency) {
   return `${Math.round(value).toLocaleString("sr-RS")} ${currency}`;
 }
 
-export default function TopProductsChart({ bestsellers, categories, currency, showSiteTag }) {
+function formatUnits(value) {
+  return `${Math.round(value).toLocaleString("sr-RS")} kom`;
+}
+
+export default function TopProductsChart({
+  bestsellers,
+  categories,
+  currency,
+  showSiteTag,
+  sortBy = "revenue",
+  onSortByChange,
+}) {
   return (
     <>
       <div className="chart-card">
-        <h3>Top proizvodi</h3>
-        <p className="chart-subtitle">Deset najprodavanijih proizvoda u izabranom periodu</p>
+        <div className="chart-card-head">
+          <h3>Top proizvodi</h3>
+          {onSortByChange && (
+            <div className="filter-tabs">
+              <button
+                type="button"
+                className={"filter-tab" + (sortBy === "revenue" ? " active" : "")}
+                onClick={() => onSortByChange("revenue")}
+              >
+                Po prihodu
+              </button>
+              <button
+                type="button"
+                className={"filter-tab" + (sortBy === "units" ? " active" : "")}
+                onClick={() => onSortByChange("units")}
+              >
+                Po količini
+              </button>
+            </div>
+          )}
+        </div>
+        <p className="chart-subtitle">
+          Deset najprodavanijih proizvoda u izabranom periodu (
+          {sortBy === "units" ? "po prodatoj količini" : "po prihodu"})
+        </p>
 
         {bestsellers.length === 0 ? (
           <div className="empty-hint">Nema podataka.</div>
@@ -25,7 +59,9 @@ export default function TopProductsChart({ bestsellers, categories, currency, sh
                 )}
                 <p className="top-product-name">{p.name}</p>
                 {p.sku && <p className="top-product-sku">Šifra: {p.sku}</p>}
-                <p className="top-product-revenue">{formatMoney(p.revenue, currency)}</p>
+                <p className="top-product-revenue">
+                  {sortBy === "units" ? formatUnits(p.units) : formatMoney(p.revenue, currency)}
+                </p>
               </div>
             ))}
           </div>

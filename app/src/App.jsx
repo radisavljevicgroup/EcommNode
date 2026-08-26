@@ -4,8 +4,11 @@ import Dashboard from "./pages/Dashboard";
 import Orders from "./pages/Orders";
 import Analytics from "./pages/Analytics";
 import Settings from "./pages/Settings";
+import Login from "./pages/Login";
+import Register from "./pages/Register";
 
-const ROUTES = new Set(NAV_ITEMS.map((i) => i.route));
+const AUTH_ROUTES = new Set(["login", "register"]);
+const ROUTES = new Set([...NAV_ITEMS.map((i) => i.route), ...AUTH_ROUTES]);
 
 function routeFromHash() {
   const hash = window.location.hash.replace(/^#\/?/, "");
@@ -26,6 +29,9 @@ export default function App() {
     window.location.hash = "/" + r;
     setRoute(r.split("?")[0]);
   };
+
+  if (route === "login") return <Login onNavigate={navigate} />;
+  if (route === "register") return <Register onNavigate={navigate} />;
 
   return (
     <>

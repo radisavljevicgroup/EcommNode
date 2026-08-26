@@ -68,9 +68,9 @@ router.get("/analytics/top-products", async (req, res) => {
     const orders = getOrdersForConnectionsTagged(connections);
     const categoryMap = getProductCategoryMap(connections);
     const categoryImageMap = getCategoryImageMap(connections);
-    const { from, to } = req.query;
+    const { from, to, sortBy } = req.query;
     res.json(
-      analytics.computeTopProducts(orders, { from, to }, categoryMap, categoryImageMap)
+      analytics.computeTopProducts(orders, { from, to, sortBy }, categoryMap, categoryImageMap)
     );
   } catch {
     res.status(400).json({ error: "Ne mogu da učitam top proizvode." });
@@ -86,6 +86,36 @@ router.get("/analytics/geo", async (req, res) => {
     res.json(analytics.computeGeoDistribution(orders, { from, to }));
   } catch {
     res.status(400).json({ error: "Ne mogu da učitam geografsku raspodelu." });
+  }
+});
+
+const METRIC_KEYS = new Set([
+  "orderCount",
+  "aov",
+  "upt",
+  "shippingPercent",
+  "rpr",
+  "ltv",
+  "tbo",
+  "clv",
+  "ofct",
+  "returnRate",
+]);
+
+router.get("/analytics/metric-trend", async (req, res) => {
+  const { metric, from, to } = req.query;
+  if (!METRIC_KEYS.has(metric)) {
+    return res.status(400).json({ error: "Nepoznata metrika." });
+  }
+  const connections = resolveConnections(req);
+  if (!connections.length || !from || !to) {
+    return res.json({ unit: "day", series: [], currency: "RSD" });
+  }
+  try {
+    const orders = await getOrdersForConnections(connections);
+    res.json(analytics.computeMetricTrend(orders, { from, to }, metric));
+  } catch {
+    res.status(400).json({ error: "Ne mogu da izračunam trend metrike." });
   }
 });
 

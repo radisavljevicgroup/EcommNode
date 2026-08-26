@@ -1,3 +1,7 @@
 node_modules
 .env
 data/
+
+# Premium integrations — source lives in the private shopstack-premium
+# repo, only vendored here locally at runtime, never tracked publicly.
+premium/

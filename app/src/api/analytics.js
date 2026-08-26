@@ -9,11 +9,12 @@ async function request(path) {
   return data;
 }
 
-function buildQuery({ connectionIds, from, to }) {
+function buildQuery({ connectionIds, from, to, sortBy }) {
   const params = new URLSearchParams();
   if (connectionIds?.length) params.set("connectionIds", connectionIds.join(","));
   if (from) params.set("from", from);
   if (to) params.set("to", to);
+  if (sortBy) params.set("sortBy", sortBy);
   return params.toString();
 }
 
@@ -31,6 +32,10 @@ export function fetchTopProducts(filters) {
 
 export function fetchGeoDistribution(filters) {
   return request(`/analytics/geo?${buildQuery(filters)}`);
+}
+
+export function fetchMetricTrend(metric, filters) {
+  return request(`/analytics/metric-trend?metric=${metric}&${buildQuery(filters)}`);
 }
 
 export function fetchSyncStatus(filters) {

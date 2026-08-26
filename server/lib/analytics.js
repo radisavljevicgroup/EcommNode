@@ -211,6 +211,67 @@ function computeSummary(allOrders, { from, to }) {
   };
 }
 
+// ---- per-metric trend (for the "chart this metric" modal) --------------
+
+function bucketRanges(from, to) {
+  const start = new Date(from);
+  const end = new Date(to);
+  const spanDays = Math.max((end - start) / DAY_MS, 1);
+
+  let unit = "month";
+  if (spanDays <= 31) unit = "day";
+  else if (spanDays <= 180) unit = "week";
+
+  const buckets = [];
+  let cursor = new Date(start);
+
+  while (cursor <= end) {
+    let bucketEnd;
+    let next;
+    if (unit === "day") {
+      bucketEnd = new Date(cursor);
+      bucketEnd.setHours(23, 59, 59, 999);
+      next = new Date(cursor);
+      next.setDate(next.getDate() + 1);
+    } else if (unit === "week") {
+      bucketEnd = new Date(cursor);
+      bucketEnd.setDate(bucketEnd.getDate() + 6);
+      bucketEnd.setHours(23, 59, 59, 999);
+      next = new Date(cursor);
+      next.setDate(next.getDate() + 7);
+    } else {
+      bucketEnd = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0, 23, 59, 59, 999);
+      next = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
+    }
+
+    const clampedEnd = bucketEnd > end ? end : bucketEnd;
+    const label =
+      unit === "day"
+        ? cursor.toISOString().slice(0, 10)
+        : unit === "week"
+          ? cursor.toISOString().slice(0, 10)
+          : monthKey(cursor.toISOString());
+
+    buckets.push({ from: cursor.toISOString(), to: clampedEnd.toISOString(), label });
+    cursor = next;
+  }
+
+  return { unit, buckets };
+}
+
+function computeMetricTrend(allOrders, { from, to }, metricKey) {
+  const { unit, buckets } = bucketRanges(from, to);
+  const series = buckets.map((b) => {
+    const summary = computeSummary(allOrders, { from: b.from, to: b.to });
+    return { label: b.label, value: summary[metricKey] ?? 0 };
+  });
+  return {
+    unit,
+    series,
+    currency: allOrders[0]?.currency || "RSD",
+  };
+}
+
 function monthKey(dateStr) {
   const d = new Date(dateStr);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
@@ -250,7 +311,7 @@ function computeTrends(allOrders, { from, to }) {
 
 function computeTopProducts(
   allOrders,
-  { from, to },
+  { from, to, sortBy = "revenue" },
   productCategoryMap,
   categoryImageMap,
   limit = 10
@@ -295,7 +356,8 @@ function computeTopProducts(
     });
   });
 
-  const products = [...productMap.values()].sort((a, b) => b.revenue - a.revenue);
+  const sortKey = sortBy === "units" ? "units" : "revenue";
+  const products = [...productMap.values()].sort((a, b) => b[sortKey] - a[sortKey]);
   const categories = [...categoryMap.values()]
     .map((c) => ({
       name: c.name,
@@ -347,5 +409,6 @@ module.exports = {
   computeTrends,
   computeTopProducts,
   computeGeoDistribution,
+  computeMetricTrend,
   filterByRange,
 };
