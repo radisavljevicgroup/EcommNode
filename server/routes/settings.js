@@ -8,8 +8,12 @@ router.get("/settings", (req, res) => {
 });
 
 router.put("/settings", (req, res) => {
-  const { staleOrderThresholdDays, staleTrackingEnabled, unfiscalizedTrackingEnabled } =
-    req.body || {};
+  const {
+    staleOrderThresholdDays,
+    staleTrackingEnabled,
+    unfiscalizedTrackingEnabled,
+    enabledPremiumTools,
+  } = req.body || {};
   const patch = {};
 
   if (staleOrderThresholdDays !== undefined) {
@@ -24,6 +28,15 @@ router.put("/settings", (req, res) => {
   }
   if (unfiscalizedTrackingEnabled !== undefined) {
     patch.unfiscalizedTrackingEnabled = Boolean(unfiscalizedTrackingEnabled);
+  }
+  if (enabledPremiumTools !== undefined) {
+    if (
+      !Array.isArray(enabledPremiumTools) ||
+      !enabledPremiumTools.every((k) => typeof k === "string")
+    ) {
+      return res.status(400).json({ error: "enabledPremiumTools mora biti niz stringova." });
+    }
+    patch.enabledPremiumTools = enabledPremiumTools;
   }
 
   res.json(updateSettings(patch));

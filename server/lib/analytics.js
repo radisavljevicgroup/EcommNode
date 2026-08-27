@@ -411,4 +411,8 @@ module.exports = {
   computeGeoDistribution,
   computeMetricTrend,
   filterByRange,
+  realized,
+  customerKey,
+  groupByCustomer,
+  normalizeCityKey,
 };

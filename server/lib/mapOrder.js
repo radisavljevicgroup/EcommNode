@@ -59,6 +59,12 @@ function mapOrder(order, sourceSiteUrl) {
       quantity: item.quantity,
       price: item.price,
       total: item.total,
+      // WooCommerce keeps this as the pre-discount line total (regular
+      // price × qty) even after the item itself was discounted — comparing
+      // it against `total` is how a line item is detected as sold at a
+      // reduced price (product-level sale or coupon), since this system
+      // has no separate promotions/campaigns table to check against.
+      subtotal: item.subtotal,
       image: item.image?.src || "",
     })),
   };

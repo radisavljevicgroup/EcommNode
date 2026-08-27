@@ -98,6 +98,15 @@ export const PersonIcon = () => (
   </svg>
 );
 
+export const UsersIcon = () => (
+  <svg {...iconProps}>
+    <circle cx="9" cy="8" r="3.5" />
+    <path d="M2.5 20v-1a6.5 6.5 0 0 1 13 0v1" />
+    <path d="M16.5 5.5a3.5 3.5 0 0 1 0 6.8" />
+    <path d="M20.5 20v-1a6.3 6.3 0 0 0 -4.2 -6" />
+  </svg>
+);
+
 export const CreditCardIcon = () => (
   <svg {...iconProps}>
     <rect x="2" y="5" width="20" height="14" rx="2" />
@@ -202,6 +211,22 @@ export const TrendIcon = () => (
   <svg {...iconProps}>
     <path d="m3 17 6-6 4 4 8-8" />
     <path d="M15 7h6v6" />
+  </svg>
+);
+
+export const LayersIcon = () => (
+  <svg {...iconProps}>
+    <path d="m12 2 9 5-9 5-9-5 9-5Z" />
+    <path d="m3 12 9 5 9-5" />
+    <path d="m3 17 9 5 9-5" />
+  </svg>
+);
+
+export const ImageIcon = () => (
+  <svg {...iconProps}>
+    <rect x="3" y="3" width="18" height="18" rx="2" />
+    <circle cx="9" cy="9" r="2" />
+    <path d="m21 15-5-5L5 21" />
   </svg>
 );
 

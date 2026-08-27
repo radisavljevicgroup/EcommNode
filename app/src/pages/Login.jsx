@@ -92,6 +92,16 @@ export default function Login({ onNavigate }) {
           </button>
         </AuthField>
 
+        <div className="auth-forgot-row">
+          <button
+            type="button"
+            className="auth-link"
+            onClick={() => onNavigate("zaboravljena-lozinka")}
+          >
+            Zaboravio/la si lozinku?
+          </button>
+        </div>
+
         {error && <div className="auth-error">{error}</div>}
 
         <button className="auth-submit" type="submit" disabled={loading}>

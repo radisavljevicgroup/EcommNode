@@ -55,6 +55,7 @@ export default function SalesAnalysis() {
       // whatever was previously loaded on screen.
       setSummary({
         orderCount: 0,
+        cr: null,
         aov: 0,
         upt: 0,
         shippingPercent: 0,

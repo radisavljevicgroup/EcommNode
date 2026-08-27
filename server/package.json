@@ -12,6 +12,7 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@supabase/supabase-js": "^2.112.4",
     "@woocommerce/woocommerce-rest-api": "^1.0.2",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",

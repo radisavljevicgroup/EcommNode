@@ -10,6 +10,7 @@ const analyticsRouter = require("./routes/analytics");
 const settingsRouter = require("./routes/settings");
 const ga4Router = require("./routes/ga4");
 const gscRouter = require("./routes/gsc");
+const workersRouter = require("./routes/workers");
 
 dotenv.config();
 
@@ -23,7 +24,7 @@ const LOCALHOST_ORIGIN = /^http:\/\/localhost:\d+$/;
 const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || LOCALHOST_ORIGIN;
 
 app.use(cors({ origin: CLIENT_ORIGIN }));
-app.use(express.json());
+app.use(express.json({ limit: "10mb" }));
 
 app.use("/api", connectRouter);
 app.use("/api", ordersRouter);
@@ -31,6 +32,7 @@ app.use("/api", analyticsRouter);
 app.use("/api", settingsRouter);
 app.use("/api", ga4Router);
 app.use("/api", gscRouter);
+app.use("/api", workersRouter);
 
 // Premium integrations (e.g. Eurocom International) live outside this
 // open-source repo — each one is a self-contained router at

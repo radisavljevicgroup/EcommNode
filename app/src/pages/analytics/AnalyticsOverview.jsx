@@ -13,11 +13,26 @@ import { fetchWooStatus } from "../../api/woocommerce";
 import { fetchAnalyticsTrends, fetchAnalyticsSummary } from "../../api/analytics";
 import { fetchGa4Status, fetchGa4Performance } from "../../api/ga4";
 import { fetchGscStatus, fetchGscPerformance } from "../../api/gsc";
+import { fetchSettings } from "../../api/settings";
 import QuadrantCard from "../../components/QuadrantCard";
 
 function isoDate(d) {
   return d.toISOString().slice(0, 10);
 }
+
+// Premium analytics tools (e.g. Napredna analiza prodaje) aren't part of
+// this open-source checkout — each one lives in the private
+// shopstack-premium repo and is only vendored locally into
+// app/src/premium/<name>/analyticsTab.jsx (gitignored). A module can
+// export an `overview` ({ key, title, navigateKey, Component }) to get a
+// summary card here, shown only while the tool is switched on in
+// Settings → Svi alati.
+const premiumAnalyticsModules = import.meta.glob("../../premium/*/analyticsTab.jsx", {
+  eager: true,
+});
+const PREMIUM_OVERVIEWS = Object.values(premiumAnalyticsModules)
+  .map((mod) => mod.overview)
+  .filter(Boolean);
 
 const GA4_METRICS = [
   { key: "sessions", label: "Sesije", format: "integer", definition: "Ukupan broj sesija (poseta) na sajtu u periodu." },
@@ -78,6 +93,8 @@ export default function AnalyticsOverview({ onNavigate }) {
   const [gscData, setGscData] = useState(null);
   const [gscLoading, setGscLoading] = useState(true);
 
+  const [enabledPremiumTools, setEnabledPremiumTools] = useState([]);
+
   useEffect(() => {
     fetchWooStatus()
       .then((data) => {
@@ -129,6 +146,14 @@ export default function AnalyticsOverview({ onNavigate }) {
       .catch(() => {})
       .finally(() => setGscLoading(false));
   }, []);
+
+  useEffect(() => {
+    fetchSettings()
+      .then((data) => setEnabledPremiumTools(data.enabledPremiumTools || []))
+      .catch(() => {});
+  }, []);
+
+  const activeOverviews = PREMIUM_OVERVIEWS.filter((o) => enabledPremiumTools.includes(o.key));
 
   return (
     <div className="analytics-page">
@@ -278,6 +303,22 @@ export default function AnalyticsOverview({ onNavigate }) {
           )}
         </div>
       )}
+
+      {activeOverviews.map((o) => (
+        <div className="chart-card" key={o.key}>
+          <div className="chart-card-head">
+            <h3>{o.title}</h3>
+            <button
+              type="button"
+              className="performance-link"
+              onClick={() => onNavigate(o.navigateKey)}
+            >
+              Kompletan izveštaj →
+            </button>
+          </div>
+          <o.Component onNavigate={onNavigate} />
+        </div>
+      ))}
     </div>
   );
 }

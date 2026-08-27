@@ -4,6 +4,10 @@ const DEFAULT_SETTINGS = {
   staleOrderThresholdDays: 30,
   staleTrackingEnabled: true,
   unfiscalizedTrackingEnabled: true,
+  // Which premium tools (identified by their toolCard.key) the user has
+  // switched on — off by default. Today this is a manual toggle; later
+  // it'll also be gated by an actual subscription/payment check.
+  enabledPremiumTools: [],
 };
 
 const file = createJsonFile("settings.json", DEFAULT_SETTINGS);

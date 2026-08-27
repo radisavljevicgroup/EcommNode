@@ -11,6 +11,13 @@ export const KPI_QUADRANTS = [
         definition: "Ukupan broj realizovanih porudžbina u periodu.",
         format: "integer",
       },
+      {
+        key: "cr",
+        label: "CR",
+        definition:
+          "Conversion Rate — procenat GA4 poseta koje su rezultovale porudžbinom (Broj porudžbina / GA4 sesije). Računa se samo za prodavnice koje imaju povezan Google Analytics 4.",
+        format: "percent",
+      },
     ],
   },
   {

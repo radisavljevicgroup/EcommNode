@@ -82,7 +82,12 @@ async function runReport(connection, token, body) {
 function aggregateTrend(dateRows, unit) {
   const sorted = [...dateRows].sort((a, b) => (a.date < b.date ? -1 : 1));
   if (unit === "day") {
-    return sorted.map((r) => ({ date: r.date, sessions: r.sessions, activeUsers: r.activeUsers }));
+    return sorted.map((r) => ({
+      date: r.date,
+      sessions: r.sessions,
+      activeUsers: r.activeUsers,
+      conversions: r.conversions,
+    }));
   }
   const buckets = new Map();
   sorted.forEach((r) => {
@@ -137,9 +142,11 @@ async function getPerformance(connection, { from, to } = {}) {
     runReport(connection, token, {
       dateRanges: [dateRange],
       dimensions: [{ name: "sessionDefaultChannelGroup" }],
-      metrics: [{ name: "sessions" }, { name: "activeUsers" }],
+      metrics: [{ name: "sessions" }, { name: "activeUsers" }, { name: "conversions" }],
       orderBys: [{ metric: { metricName: "sessions" }, desc: true }],
-      limit: 10,
+      // GA4 has ~15 default channel groups — a limit of 10 would silently
+      // drop some, undercounting the total conversions total below it.
+      limit: 20,
     }),
   ]);
 
@@ -175,9 +182,10 @@ async function getPerformance(connection, { from, to } = {}) {
     channel: r.dimensionValues[0].value,
     sessions: metricValue(r, 0),
     activeUsers: metricValue(r, 1),
+    conversions: metricValue(r, 2),
   }));
 
   return { dateRange, totals, trend, topPages, topChannels };
 }
 
-module.exports = { testConnection, getPerformance };
+module.exports = { testConnection, getPerformance, weekStart };
