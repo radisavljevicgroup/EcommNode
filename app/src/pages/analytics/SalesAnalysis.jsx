@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { fetchWooStatus } from "../../api/woocommerce";
+import { fetchShopifyStatus } from "../../api/shopify";
 import {
   fetchAnalyticsSummary,
   fetchAnalyticsTrends,
@@ -34,13 +35,14 @@ export default function SalesAnalysis() {
   const [syncStatus, setSyncStatus] = useState([]);
   const [chartMetric, setChartMetric] = useState(null);
   const [productSortBy, setProductSortBy] = useState("revenue");
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const [from, to] = range;
 
   useEffect(() => {
-    fetchWooStatus()
-      .then((data) => {
-        const list = data.connections || [];
+    Promise.all([fetchWooStatus(), fetchShopifyStatus()])
+      .then(([woo, shopify]) => {
+        const list = [...(woo.connections || []), ...(shopify.connections || [])];
         setConnections(list);
         setSelectedIds(list.map((c) => c.id));
       })
@@ -63,6 +65,8 @@ export default function SalesAnalysis() {
         ltv: 0,
         tbo: 0,
         clv: 0,
+        cac: null,
+        cacCurrency: null,
         ofct: 0,
         returnRate: 0,
         currency: "RSD",
@@ -103,7 +107,7 @@ export default function SalesAnalysis() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [idsKey, from, to, productSortBy]);
+  }, [idsKey, from, to, productSortBy, refreshKey]);
 
   useEffect(() => {
     if (selectedIds.length === 0) return undefined;
@@ -120,6 +124,18 @@ export default function SalesAnalysis() {
   }, [idsKey]);
 
   const anySyncing = syncStatus.some((s) => s.syncing);
+
+  // The sync banner promises the numbers below refresh automatically once
+  // background sync finishes — without this, nothing actually re-fetches
+  // them, so a sync that completes after the KPI data already loaded left
+  // stale (often incomplete) numbers on screen indefinitely.
+  const wasSyncing = useRef(false);
+  useEffect(() => {
+    if (wasSyncing.current && !anySyncing) {
+      setRefreshKey((k) => k + 1);
+    }
+    wasSyncing.current = anySyncing;
+  }, [anySyncing]);
 
   const handleManualSync = () => {
     triggerSync({ connectionIds: selectedIds });
@@ -165,7 +181,7 @@ export default function SalesAnalysis() {
 
       {connections.length === 0 ? (
         <div className="empty-hint">
-          Poveži WooCommerce u Podešavanja → Integracije da bi video analitiku.
+          Poveži WooCommerce ili Shopify prodavnicu u Podešavanja → Integracije da bi video analitiku.
         </div>
       ) : error ? (
         <div className="woo-error">{error}</div>

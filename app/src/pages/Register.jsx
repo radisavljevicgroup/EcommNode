@@ -97,7 +97,7 @@ export default function Register({ onNavigate }) {
     >
       <h1 className="auth-title">Registruj se</h1>
       <p className="auth-subtitle">
-        Poveži svoje prodavnice i automatizuj svakodnevni rad uz <span>Shopstack</span>
+        Poveži svoje prodavnice i automatizuj svakodnevni rad uz <span>EcommNode</span>
       </p>
 
       <form className="auth-form" onSubmit={handleSubmit}>

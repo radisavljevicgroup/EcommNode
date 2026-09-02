@@ -28,8 +28,13 @@ export default function QuadrantCard({
 }) {
   const [primary, ...subs] = metrics;
 
+  // Most metrics share the card-level currency (store order currency), but
+  // some (CAC, pulled from an ad platform) carry their own — e.g. Meta
+  // spend in EUR alongside RSD revenue metrics in the same card.
   const renderValue = (metric) =>
-    loading || !values ? "…" : formatKpiValue(metric.format, values[metric.key], currency);
+    loading || !values
+      ? "…"
+      : formatKpiValue(metric.format, values[metric.key], values[`${metric.key}Currency`] || currency);
 
   if (wide) {
     const row = (

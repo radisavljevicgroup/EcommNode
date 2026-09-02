@@ -1,5 +1,6 @@
 const { Router } = require("express");
 const { getConnections } = require("../lib/store");
+const { getConnections: getShopifyConnections } = require("../lib/shopifyStore");
 const {
   getOrdersForConnections,
   getOrdersForConnectionsTagged,
@@ -7,58 +8,20 @@ const {
   syncConnection,
 } = require("../lib/ordersCache");
 const { getProductCategoryMap, getCategoryImageMap } = require("../lib/productsCache");
-const { getConnections: getGa4Connections } = require("../lib/ga4Store");
+const { getConnections: getMetaConnections } = require("../lib/metaStore");
 const ga4 = require("../lib/ga4");
+const meta = require("../lib/meta");
 const analytics = require("../lib/analytics");
+const { linkedGa4Connections, computeConversionRate } = require("../lib/conversionRate");
 
 const router = Router();
 
 function resolveConnections(req) {
-  const all = getConnections();
+  const all = [...getConnections(), ...getShopifyConnections()];
   const { connectionIds } = req.query;
   if (!connectionIds) return all;
   const ids = connectionIds.split(",").filter(Boolean);
   return all.filter((c) => ids.includes(c.id));
-}
-
-// CR isn't a WooCommerce-only number — it needs GA4 sessions for the same
-// store, so unlike the rest of analytics.js this can't live there without
-// giving that module a GA4 dependency it otherwise doesn't need. Only
-// WooCommerce connections that have a GA4 property actually targeting them
-// contribute; stores with no GA4 link are silently excluded rather than
-// pulling the blended rate toward zero.
-function linkedGa4Connections(connections) {
-  return getGa4Connections().filter((g) => connections.some((c) => c.id === g.targetConnectionId));
-}
-
-async function computeConversionRate(connections, { from, to }) {
-  const ga4Connections = linkedGa4Connections(connections);
-  if (!ga4Connections.length) return null;
-
-  let totalOrders = 0;
-  let totalSessions = 0;
-
-  await Promise.all(
-    ga4Connections.map(async (g) => {
-      const wooConn = connections.find((c) => c.id === g.targetConnectionId);
-      if (!wooConn) return;
-      try {
-        const [orders, perf] = await Promise.all([
-          getOrdersForConnections([wooConn]),
-          ga4.getPerformance(g, { from, to }),
-        ]);
-        const periodOrders = analytics.realized(analytics.filterByRange(orders, from, to));
-        totalOrders += periodOrders.length;
-        totalSessions += perf.totals.sessions;
-      } catch {
-        // this store's GA4 fetch failed (auth/quota) — skip it rather than
-        // fail the whole summary over one bad connection
-      }
-    })
-  );
-
-  if (totalSessions === 0) return null;
-  return (totalOrders / totalSessions) * 100;
 }
 
 // Buckets orders onto the exact same day/week/month keys GA4's own trend
@@ -112,6 +75,92 @@ async function computeCrTrend(connections, { from, to }) {
   return { unit, series, currency: "RSD" };
 }
 
+// CAC, like CR, pulls from a different integration (Meta Ads spend) — a
+// Meta connection can target several stores at once (one ad account
+// running the whole portfolio), so "linked" means at least one overlap,
+// not an exact match.
+function linkedMetaConnections(connections) {
+  return getMetaConnections().filter((m) =>
+    (m.targetConnectionIds || []).some((id) => connections.some((c) => c.id === id))
+  );
+}
+
+async function computeCac(connections, allOrders, { from, to }) {
+  const metaConnections = linkedMetaConnections(connections);
+  if (!metaConnections.length) return null;
+
+  let totalSpend = 0;
+  let currency = null;
+
+  await Promise.all(
+    metaConnections.map(async (m) => {
+      try {
+        const perf = await meta.getPerformance(m, { from, to });
+        totalSpend += perf.totals.spend;
+        if (!currency) currency = perf.currency;
+      } catch {
+        // this Meta connection's fetch failed (auth/permission) — skip it
+        // rather than fail the whole summary over one bad connection
+      }
+    })
+  );
+
+  const periodOrders = analytics.filterByRange(allOrders, from, to);
+  const newCustomers = analytics.newCustomerCount(periodOrders, allOrders, from, to);
+  if (newCustomers === 0) return null;
+
+  return { value: totalSpend / newCustomers, currency: currency || "RSD" };
+}
+
+async function computeCacTrend(connections, allOrders, { from, to }) {
+  const metaConnections = linkedMetaConnections(connections);
+  if (!metaConnections.length) return { unit: "day", series: [], currency: "RSD" };
+
+  const spanDays = Math.max((new Date(to) - new Date(from)) / (1000 * 60 * 60 * 24), 1);
+  const unit = spanDays <= 31 ? "day" : spanDays <= 180 ? "week" : "month";
+
+  const spendByLabel = new Map();
+  let currency = null;
+
+  await Promise.all(
+    metaConnections.map(async (m) => {
+      try {
+        const perf = await meta.getPerformance(m, { from, to });
+        if (!currency) currency = perf.currency;
+        perf.trend.forEach((row) => {
+          const key = crBucketKey(row.date, unit);
+          spendByLabel.set(key, (spendByLabel.get(key) || 0) + row.spend);
+        });
+      } catch {
+        // skip this Meta connection's data on failure
+      }
+    })
+  );
+
+  // Bucketed by each customer's first-ever order date, not by every order
+  // in the period — matches computeCac's "new customer" definition.
+  const customersByLabel = new Map();
+  const history = analytics.groupByCustomer(allOrders);
+  history.forEach((hist) => {
+    if (!hist.length) return;
+    const firstOrder = hist.reduce((earliest, o) =>
+      new Date(o.dateCreated) < new Date(earliest.dateCreated) ? o : earliest
+    );
+    if (!analytics.inRange(firstOrder.dateCreated, from, to)) return;
+    const key = crBucketKey(firstOrder.dateCreated, unit);
+    customersByLabel.set(key, (customersByLabel.get(key) || 0) + 1);
+  });
+
+  const labels = [...new Set([...spendByLabel.keys(), ...customersByLabel.keys()])].sort();
+  const series = labels.map((label) => {
+    const spend = spendByLabel.get(label) || 0;
+    const customers = customersByLabel.get(label) || 0;
+    return { label, value: customers > 0 ? spend / customers : 0 };
+  });
+
+  return { unit, series, currency: currency || "RSD" };
+}
+
 router.get("/analytics/summary", async (req, res) => {
   const connections = resolveConnections(req);
   if (!connections.length) {
@@ -125,6 +174,8 @@ router.get("/analytics/summary", async (req, res) => {
       ltv: 0,
       tbo: 0,
       clv: 0,
+      cac: null,
+      cacCurrency: null,
       ofct: 0,
       returnRate: 0,
       currency: "RSD",
@@ -135,6 +186,9 @@ router.get("/analytics/summary", async (req, res) => {
     const { from, to } = req.query;
     const summary = analytics.computeSummary(orders, { from, to });
     summary.cr = await computeConversionRate(connections, { from, to });
+    const cacResult = await computeCac(connections, orders, { from, to });
+    summary.cac = cacResult?.value ?? null;
+    summary.cacCurrency = cacResult?.currency ?? null;
     res.json(summary);
   } catch {
     res.status(400).json({ error: "Ne mogu da izračunam analitiku." });
@@ -195,6 +249,7 @@ const METRIC_KEYS = new Set([
   "ltv",
   "tbo",
   "clv",
+  "cac",
   "ofct",
   "returnRate",
 ]);
@@ -213,6 +268,9 @@ router.get("/analytics/metric-trend", async (req, res) => {
       return res.json(await computeCrTrend(connections, { from, to }));
     }
     const orders = await getOrdersForConnections(connections);
+    if (metric === "cac") {
+      return res.json(await computeCacTrend(connections, orders, { from, to }));
+    }
     res.json(analytics.computeMetricTrend(orders, { from, to }, metric));
   } catch {
     res.status(400).json({ error: "Ne mogu da izračunam trend metrike." });

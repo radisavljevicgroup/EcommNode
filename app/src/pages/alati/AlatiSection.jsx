@@ -3,7 +3,7 @@ import { fetchSettings, updateSettings } from "../../api/settings";
 import { TOOLS } from "./catalog";
 
 // Premium tools (e.g. Napredna analiza prodaje) aren't part of this
-// open-source checkout — each one lives in the private shopstack-premium
+// open-source checkout — each one lives in the private ecommnode-premium
 // repo and is only vendored locally into app/src/premium/<name>/
 // analyticsTab.jsx (gitignored). If none are present, the glob matches
 // nothing and no premium cards render.

@@ -60,7 +60,7 @@ export default function Login({ onNavigate }) {
     >
       <h1 className="auth-title">Prijavi se</h1>
       <p className="auth-subtitle">
-        Nastavi tamo gde si stao uz <span>Shopstack</span>
+        Nastavi tamo gde si stao uz <span>EcommNode</span>
       </p>
 
       <form className="auth-form" onSubmit={handleSubmit}>

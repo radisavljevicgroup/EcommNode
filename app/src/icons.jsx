@@ -67,6 +67,13 @@ export const BagIcon = () => (
   </svg>
 );
 
+export const MetaIcon = () => (
+  <svg {...iconProps}>
+    <circle cx="8.5" cy="12" r="5" />
+    <circle cx="15.5" cy="12" r="5" />
+  </svg>
+);
+
 export const CpuIcon = () => (
   <svg {...iconProps}>
     <rect x="5" y="5" width="14" height="14" rx="2" />
@@ -237,11 +244,36 @@ export const SearchIcon = () => (
   </svg>
 );
 
+export const ChatIcon = () => (
+  <svg {...iconProps}>
+    <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5Z" />
+  </svg>
+);
+
+export const SendIcon = () => (
+  <svg {...iconProps}>
+    <path d="m22 2-7 20-4-9-9-4Z" />
+    <path d="M22 2 11 13" />
+  </svg>
+);
+
 export const EyeOffIcon = () => (
   <svg {...iconProps}>
     <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c6.5 0 10 8 10 8a17 17 0 0 1-2.24 3.36" />
     <path d="M6.53 6.53A17.4 17.4 0 0 0 2 12s3.5 8 10 8a9.17 9.17 0 0 0 5-1.47" />
     <path d="M2 2l20 20" />
     <path d="M9.88 9.88a3 3 0 0 0 4.24 4.24" />
+  </svg>
+);
+
+export const CheckIcon = () => (
+  <svg {...iconProps}>
+    <path d="M20 6 9 17l-5-5" />
+  </svg>
+);
+
+export const PlusIcon = () => (
+  <svg {...iconProps}>
+    <path d="M12 5v14M5 12h14" />
   </svg>
 );

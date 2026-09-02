@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 import IconRail from "../components/IconRail";
-import { HomeIcon, ChartIcon, SearchIcon, TrendIcon } from "../icons";
+import { HomeIcon, ChartIcon, SearchIcon, TrendIcon, MetaIcon } from "../icons";
 import AnalyticsOverview from "./analytics/AnalyticsOverview";
 import SalesAnalysis from "./analytics/SalesAnalysis";
 import SearchConsole from "./analytics/SearchConsole";
 import GoogleAnalytics from "./analytics/GoogleAnalytics";
+import MetaAds from "./analytics/MetaAds";
 import { fetchGscStatus } from "../api/gsc";
 import { fetchGa4Status } from "../api/ga4";
+import { fetchMetaStatus } from "../api/meta";
 import { fetchSettings } from "../api/settings";
 
 const BASE_RAIL_ITEMS = [
@@ -16,7 +18,7 @@ const BASE_RAIL_ITEMS = [
 
 // Premium analytics tools (e.g. Napredna analiza prodaje) aren't part of
 // this open-source checkout — each one lives in the private
-// shopstack-premium repo and is only vendored locally into
+// ecommnode-premium repo and is only vendored locally into
 // app/src/premium/<name>/analyticsTab.jsx (gitignored). If none are
 // present, the glob matches nothing and no premium tabs render.
 const premiumAnalyticsModules = import.meta.glob("../premium/*/analyticsTab.jsx", {
@@ -28,6 +30,7 @@ export default function Analytics() {
   const [section, setSection] = useState("pocetna");
   const [hasGsc, setHasGsc] = useState(false);
   const [hasGa4, setHasGa4] = useState(false);
+  const [hasMeta, setHasMeta] = useState(false);
   const [enabledPremiumTools, setEnabledPremiumTools] = useState([]);
 
   useEffect(() => {
@@ -39,6 +42,12 @@ export default function Analytics() {
   useEffect(() => {
     fetchGa4Status()
       .then((data) => setHasGa4((data.connections || []).length > 0))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    fetchMetaStatus()
+      .then((data) => setHasMeta((data.connections || []).length > 0))
       .catch(() => {});
   }, []);
 
@@ -72,6 +81,7 @@ export default function Analytics() {
     ...BASE_RAIL_ITEMS,
     ...(hasGa4 ? [{ key: "google-analytics", icon: TrendIcon, label: "Google Analytics 4" }] : []),
     ...(hasGsc ? [{ key: "search-console", icon: SearchIcon, label: "Search Console" }] : []),
+    ...(hasMeta ? [{ key: "meta-ads", icon: MetaIcon, label: "Meta Ads" }] : []),
     ...premiumRailItems,
   ];
 
@@ -89,6 +99,8 @@ export default function Analytics() {
             <GoogleAnalytics />
           ) : section === "search-console" && hasGsc ? (
             <SearchConsole />
+          ) : section === "meta-ads" && hasMeta ? (
+            <MetaAds />
           ) : activePremiumTab ? (
             <activePremiumTab.Component />
           ) : (

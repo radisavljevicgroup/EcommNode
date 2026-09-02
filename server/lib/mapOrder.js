@@ -30,6 +30,7 @@ function isFiscalized(order) {
 function mapOrder(order, sourceSiteUrl) {
   return {
     id: order.id,
+    platform: "woocommerce",
     number: order.number,
     status: order.status,
     dateCreated: order.date_created,

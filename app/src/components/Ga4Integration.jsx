@@ -2,8 +2,9 @@ import { useState } from "react";
 import googleAnalyticsLogo from "../assets/google-analytics.png";
 import { disconnectGa4 } from "../api/ga4";
 import { siteLabel } from "../utils/site";
+import IntegrationGroupCard from "./IntegrationGroupCard";
 
-export default function Ga4Integration({ connection, onDisconnected, onResult }) {
+function PropertyRow({ connection, onDisconnected, onResult }) {
   const [removing, setRemoving] = useState(false);
 
   const handleRemove = async () => {
@@ -19,16 +20,10 @@ export default function Ga4Integration({ connection, onDisconnected, onResult })
   };
 
   return (
-    <div className="woo-integration-card">
-      <div className="woo-integration-head">
-        <span className="integration-badge">
-          <img src={googleAnalyticsLogo} alt="Google Analytics 4" />
-        </span>
+    <div className="meta-account-row">
+      <div className="meta-account-row-main">
         <div className="integration-info">
-          <p className="integration-name">
-            {connection.label}
-            <span className="status-pill">Povezano</span>
-          </p>
+          <p className="integration-name">{connection.label}</p>
           <p className="integration-site">
             Property {connection.propertyId} → {siteLabel(connection.targetSiteUrl)}
           </p>
@@ -43,5 +38,27 @@ export default function Ga4Integration({ connection, onDisconnected, onResult })
         </button>
       </div>
     </div>
+  );
+}
+
+export default function Ga4Integration({ connections, onDisconnected, onConnectClick, onResult }) {
+  return (
+    <IntegrationGroupCard
+      icon={googleAnalyticsLogo}
+      iconAlt="Google Analytics 4"
+      name="Google Analytics 4"
+      connections={connections}
+      countLabel={(n) => `${n} ${n === 1 ? "veza povezana" : "veze povezano"}`}
+      addLabel="+ Poveži još jednu"
+      onConnectClick={onConnectClick}
+      renderRow={(connection) => (
+        <PropertyRow
+          key={connection.id}
+          connection={connection}
+          onDisconnected={onDisconnected}
+          onResult={onResult}
+        />
+      )}
+    />
   );
 }

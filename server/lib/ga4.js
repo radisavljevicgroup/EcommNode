@@ -100,7 +100,18 @@ function aggregateTrend(dateRows, unit) {
   return [...buckets.values()];
 }
 
+// "Analiza prodaje" fires this on every page load and every filter change
+// (brand/date range), and each call is 4 real HTTP round-trips to the GA4
+// Data API — a short cache absorbs repeated loads of the same range instead
+// of re-fetching identical numbers every time.
+const performanceCache = new Map();
+const CACHE_TTL_MS = 5 * 60 * 1000;
+
 async function getPerformance(connection, { from, to } = {}) {
+  const cacheKey = `${connection.id}::${from || ""}::${to || ""}`;
+  const cached = performanceCache.get(cacheKey);
+  if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.data;
+
   const serviceAccount = parseServiceAccount(connection.serviceAccountJson);
   const token = await getAccessToken(serviceAccount, GA4_SCOPE);
 
@@ -185,7 +196,9 @@ async function getPerformance(connection, { from, to } = {}) {
     conversions: metricValue(r, 2),
   }));
 
-  return { dateRange, totals, trend, topPages, topChannels };
+  const result = { dateRange, totals, trend, topPages, topChannels };
+  performanceCache.set(cacheKey, { data: result, at: Date.now() });
+  return result;
 }
 
 module.exports = { testConnection, getPerformance, weekStart };

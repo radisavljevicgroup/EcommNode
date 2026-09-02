@@ -19,7 +19,7 @@ dist-ssr
 .idea
 .DS_Store
 
-# Premium integrations — source lives in the private shopstack-premium
+# Premium integrations — source lives in the private ecommnode-premium
 # repo, only vendored here locally at runtime, never tracked publicly.
 src/premium/
 *.suo

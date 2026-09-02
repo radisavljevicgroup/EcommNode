@@ -10,9 +10,11 @@ import {
   CartesianGrid,
 } from "recharts";
 import { fetchWooStatus } from "../../api/woocommerce";
+import { fetchShopifyStatus } from "../../api/shopify";
 import { fetchAnalyticsTrends, fetchAnalyticsSummary } from "../../api/analytics";
 import { fetchGa4Status, fetchGa4Performance } from "../../api/ga4";
 import { fetchGscStatus, fetchGscPerformance } from "../../api/gsc";
+import { fetchMetaStatus, fetchMetaPerformance } from "../../api/meta";
 import { fetchSettings } from "../../api/settings";
 import QuadrantCard from "../../components/QuadrantCard";
 
@@ -22,7 +24,7 @@ function isoDate(d) {
 
 // Premium analytics tools (e.g. Napredna analiza prodaje) aren't part of
 // this open-source checkout — each one lives in the private
-// shopstack-premium repo and is only vendored locally into
+// ecommnode-premium repo and is only vendored locally into
 // app/src/premium/<name>/analyticsTab.jsx (gitignored). A module can
 // export an `overview` ({ key, title, navigateKey, Component }) to get a
 // summary card here, shown only while the tool is switched on in
@@ -54,6 +56,18 @@ const GA4_METRICS = [
     format: "percent",
     definition:
       "Procenat sesija koje GA4 smatra angažovanim (trajale duže od 10s, imale conversion događaj, ili 2+ pregleda stranice).",
+  },
+];
+
+const META_METRICS = [
+  { key: "spend", label: "Potrošnja", format: "currency", definition: "Ukupno potrošeno na Meta oglase u periodu." },
+  { key: "clicks", label: "Klikovi", format: "integer", definition: "Ukupan broj klikova na oglase u periodu." },
+  { key: "ctr", label: "CTR", format: "percent", definition: "Klikovi podeljeni sa prikazima." },
+  {
+    key: "cpa",
+    label: "CPA",
+    format: "currency",
+    definition: "Prosečna cena po kupovini (Potrošnja / Kupovine).",
   },
 ];
 
@@ -93,12 +107,16 @@ export default function AnalyticsOverview({ onNavigate }) {
   const [gscData, setGscData] = useState(null);
   const [gscLoading, setGscLoading] = useState(true);
 
+  const [metaConnections, setMetaConnections] = useState([]);
+  const [metaData, setMetaData] = useState(null);
+  const [metaLoading, setMetaLoading] = useState(true);
+
   const [enabledPremiumTools, setEnabledPremiumTools] = useState([]);
 
   useEffect(() => {
-    fetchWooStatus()
-      .then((data) => {
-        const list = data.connections || [];
+    Promise.all([fetchWooStatus(), fetchShopifyStatus()])
+      .then(([woo, shopify]) => {
+        const list = [...(woo.connections || []), ...(shopify.connections || [])];
         setConnections(list);
         if (list.length === 0) return null;
 
@@ -148,6 +166,21 @@ export default function AnalyticsOverview({ onNavigate }) {
   }, []);
 
   useEffect(() => {
+    fetchMetaStatus()
+      .then((data) => {
+        const list = data.connections || [];
+        setMetaConnections(list);
+        if (list.length === 0) return null;
+
+        const to = isoDate(new Date());
+        const from = isoDate(new Date(new Date().setMonth(new Date().getMonth() - 3)));
+        return fetchMetaPerformance(list[0].id, from, to).then(setMetaData);
+      })
+      .catch(() => {})
+      .finally(() => setMetaLoading(false));
+  }, []);
+
+  useEffect(() => {
     fetchSettings()
       .then((data) => setEnabledPremiumTools(data.enabledPremiumTools || []))
       .catch(() => {});
@@ -160,13 +193,13 @@ export default function AnalyticsOverview({ onNavigate }) {
       <div className="settings-header">
         <h1 className="settings-title">Analitika</h1>
         <p className="settings-subtitle">
-          Pregled poslovanja preko svih povezanih WooCommerce prodavnica.
+          Pregled poslovanja preko svih povezanih prodavnica.
         </p>
       </div>
 
       {connections.length === 0 ? (
         <div className="empty-hint">
-          Poveži WooCommerce u Podešavanja → Integracije da bi video analitiku.
+          Poveži WooCommerce ili Shopify prodavnicu u Podešavanja → Integracije da bi video analitiku.
         </div>
       ) : (
         <div className="chart-card">
@@ -294,6 +327,54 @@ export default function AnalyticsOverview({ onNavigate }) {
                   type="monotone"
                   dataKey="impressions"
                   name="Prikazi"
+                  stroke="#9d8189"
+                  strokeWidth={2}
+                  dot={false}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+      )}
+
+      {metaConnections.length > 0 && (
+        <div className="chart-card">
+          <div className="chart-card-head">
+            <h3>Meta Ads</h3>
+            <button
+              type="button"
+              className="performance-link"
+              onClick={() => onNavigate("meta-ads")}
+            >
+              Kompletan izveštaj →
+            </button>
+          </div>
+
+          <div className="overview-quadrant-wrap">
+            <QuadrantCard metrics={META_METRICS} values={metaData?.totals} loading={metaLoading} currency={metaData?.currency || "RSD"} wide bare />
+          </div>
+
+          {!metaLoading && metaData?.trend?.length === 0 ? (
+            <div className="empty-hint">Nema podataka za poslednja 3 meseca.</div>
+          ) : (
+            <ResponsiveContainer width="100%" height={200}>
+              <LineChart data={metaData?.trend || []}>
+                <XAxis dataKey="date" tick={{ fontSize: 12 }} />
+                <YAxis tick={{ fontSize: 12 }} width={60} />
+                <Tooltip />
+                <Legend />
+                <Line
+                  type="monotone"
+                  dataKey="spend"
+                  name="Potrošnja"
+                  stroke="#480ca8"
+                  strokeWidth={2}
+                  dot={false}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="clicks"
+                  name="Klikovi"
                   stroke="#9d8189"
                   strokeWidth={2}
                   dot={false}

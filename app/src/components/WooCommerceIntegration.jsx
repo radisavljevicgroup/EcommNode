@@ -1,8 +1,9 @@
 import { useState } from "react";
 import woocommerceLogo from "../assets/woocommerce.png";
 import { disconnectWoo } from "../api/woocommerce";
+import IntegrationGroupCard from "./IntegrationGroupCard";
 
-export default function WooCommerceIntegration({ connection, onDisconnected, onResult }) {
+function StoreRow({ connection, onDisconnected, onResult }) {
   const [removing, setRemoving] = useState(false);
 
   const handleRemove = async () => {
@@ -18,16 +19,9 @@ export default function WooCommerceIntegration({ connection, onDisconnected, onR
   };
 
   return (
-    <div className="woo-integration-card">
-      <div className="woo-integration-head">
-        <span className="integration-badge">
-          <img src={woocommerceLogo} alt="WooCommerce" />
-        </span>
+    <div className="meta-account-row">
+      <div className="meta-account-row-main">
         <div className="integration-info">
-          <p className="integration-name">
-            WooCommerce
-            <span className="status-pill">Povezano</span>
-          </p>
           <p className="integration-site">{connection.siteUrl}</p>
         </div>
         <button
@@ -40,5 +34,27 @@ export default function WooCommerceIntegration({ connection, onDisconnected, onR
         </button>
       </div>
     </div>
+  );
+}
+
+export default function WooCommerceIntegration({ connections, onDisconnected, onConnectClick, onResult }) {
+  return (
+    <IntegrationGroupCard
+      icon={woocommerceLogo}
+      iconAlt="WooCommerce"
+      name="WooCommerce"
+      connections={connections}
+      countLabel={(n) => `${n} ${n === 1 ? "prodavnica povezana" : "prodavnica povezano"}`}
+      addLabel="+ Dodaj prodavnicu"
+      onConnectClick={onConnectClick}
+      renderRow={(connection) => (
+        <StoreRow
+          key={connection.id}
+          connection={connection}
+          onDisconnected={onDisconnected}
+          onResult={onResult}
+        />
+      )}
+    />
   );
 }

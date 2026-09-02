@@ -1,5 +1,6 @@
 const { createJsonFile } = require("./jsonFile");
 const { createWooClient } = require("./woocommerce");
+const { fetchAllShopifyProductsRaw } = require("./shopify");
 
 const file = createJsonFile("products-cache.json", {});
 let cache = file.read();
@@ -90,15 +91,35 @@ async function fetchAllCategories(connection) {
   return categories;
 }
 
+// Shopify products carry their variants (with SKUs) inline in the same
+// response, unlike WooCommerce which needs a separate per-product
+// variation fetch — and product_type is the closest equivalent to a Woo
+// category, though it has no associated image (no fetchAllCategories
+// equivalent — getCategoryImageMap simply has no entries for Shopify).
+async function fetchAllShopifyProducts(connection) {
+  const products = await fetchAllShopifyProductsRaw(connection);
+  return products.map((p) => ({
+    id: p.id,
+    name: p.title,
+    sku: p.variants?.[0]?.sku || "",
+    categories: p.product_type ? [p.product_type] : [],
+  }));
+}
+
 async function syncConnection(connection) {
   if (syncing.has(connection.id)) return;
   syncing.add(connection.id);
   try {
-    const [products, categories] = await Promise.all([
-      fetchAllProducts(connection),
-      fetchAllCategories(connection),
-    ]);
-    cache[connection.id] = { syncedAt: new Date().toISOString(), products, categories };
+    if (connection.platform === "shopify") {
+      const products = await fetchAllShopifyProducts(connection);
+      cache[connection.id] = { syncedAt: new Date().toISOString(), products, categories: [] };
+    } else {
+      const [products, categories] = await Promise.all([
+        fetchAllProducts(connection),
+        fetchAllCategories(connection),
+      ]);
+      cache[connection.id] = { syncedAt: new Date().toISOString(), products, categories };
+    }
     file.write(cache);
   } catch {
     // leave the previous cache entry (if any) in place; next stale check retries

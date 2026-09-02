@@ -19,8 +19,8 @@ export default function GeoDistributionChart({ data, currency }) {
       )}
 
       <div className="channel-note">
-        <strong>Kanali akvizicije i tip uređaja:</strong> podaci nisu dostupni — WooCommerce
-        podrazumevano ne prati ove informacije bez posebnog tracking plugin-a.
+        <strong>Kanali akvizicije i tip uređaja:</strong> podaci nisu dostupni — prodavnica
+        podrazumevano ne prati ove informacije bez posebnog tracking rešenja.
       </div>
     </div>
   );

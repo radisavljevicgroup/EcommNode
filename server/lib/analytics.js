@@ -48,10 +48,21 @@ function normalizeCityKey(city) {
   return CITY_KEY_ALIASES[key] || key;
 }
 
+// A bare "YYYY-MM-DD" upper bound (what the date picker sends) parses as
+// that day's UTC midnight — i.e. the very start of the day, not "through
+// the end of it". Left uncorrected, every order from that day is excluded,
+// and when `from` is the same date (e.g. viewing "Ovaj mesec" on the 1st,
+// where the range is just today), the whole range collapses to a zero-width
+// window and everything gets filtered out.
+function endOfDayIfDateOnly(dateStr) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
+  return new Date(new Date(dateStr).getTime() + DAY_MS - 1).toISOString();
+}
+
 function inRange(dateStr, from, to) {
   const t = new Date(dateStr).getTime();
   if (from && t < new Date(from).getTime()) return false;
-  if (to && t > new Date(to).getTime()) return false;
+  if (to && t > new Date(endOfDayIfDateOnly(to)).getTime()) return false;
   return true;
 }
 
@@ -174,6 +185,24 @@ function clvEstimate(allOrders) {
   const avgFreqPerYear = freqSum / n;
   const avgLifespanYears = lifespanSum / n;
   return avgOrderValue * avgFreqPerYear * avgLifespanYears;
+}
+
+// A customer counts as "new" in a period if their earliest order ever
+// (across all history, not just this period) falls inside it — the
+// standard CAC denominator, distinct from rpr/ltv's "active in period".
+function newCustomerCount(periodOrders, allOrders, from, to) {
+  const history = groupByCustomer(allOrders);
+  const active = activeCustomerEmails(periodOrders);
+  let count = 0;
+  active.forEach((key) => {
+    const hist = history.get(key) || [];
+    if (!hist.length) return;
+    const firstOrder = hist.reduce((earliest, o) =>
+      new Date(o.dateCreated) < new Date(earliest.dateCreated) ? o : earliest
+    );
+    if (inRange(firstOrder.dateCreated, from, to)) count += 1;
+  });
+  return count;
 }
 
 function ofct(periodOrders) {
@@ -415,4 +444,6 @@ module.exports = {
   customerKey,
   groupByCustomer,
   normalizeCityKey,
+  newCustomerCount,
+  inRange,
 };

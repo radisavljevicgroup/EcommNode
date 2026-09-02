@@ -99,6 +99,13 @@ export const KPI_QUADRANTS = [
           "Predikcija životne vrednosti — procenjena ukupna vrednost koju će prosečan kupac doneti tokom celog svog životnog veka. Heuristička procena (AOV × učestalost kupovine × procenjeni životni vek), ne pravi prediktivni model.",
         format: "currency",
       },
+      {
+        key: "cac",
+        label: "CAC",
+        definition:
+          "Customer Acquisition Cost — prosečna cena akvizicije novog kupca (Potrošnja na Meta oglase / Broj novih kupaca u periodu — kupac čija je prva ikad porudžbina u ovom periodu). Računa se samo za prodavnice koje imaju povezan Meta Ads.",
+        format: "currency",
+      },
     ],
   },
 ];

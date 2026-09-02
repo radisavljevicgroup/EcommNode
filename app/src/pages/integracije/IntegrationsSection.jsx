@@ -1,22 +1,34 @@
 import { useEffect, useRef, useState } from "react";
 import woocommerceLogo from "../../assets/woocommerce.png";
+import shopifyLogo from "../../assets/shopify.png";
 import googleAnalyticsLogo from "../../assets/google-analytics.png";
 import googleSearchConsoleLogo from "../../assets/google-search-console.jpg";
+import metaLogo from "../../assets/meta.jpg";
 import WooCommerceIntegration from "../../components/WooCommerceIntegration";
 import WooCommerceConnectModal from "../../components/WooCommerceConnectModal";
+import ShopifyIntegration from "../../components/ShopifyIntegration";
+import ShopifyConnectModal from "../../components/ShopifyConnectModal";
 import Ga4Integration from "../../components/Ga4Integration";
 import Ga4ConnectModal from "../../components/Ga4ConnectModal";
 import GscIntegration from "../../components/GscIntegration";
 import GscConnectModal from "../../components/GscConnectModal";
+import MetaIntegration from "../../components/MetaIntegration";
+import MetaConnectModal from "../../components/MetaConnectModal";
+import InboxChannelIntegration from "../../components/InboxChannelIntegration";
+import InboxChannelConnectModal from "../../components/InboxChannelConnectModal";
+import PlatformBadge from "../../components/PlatformBadge";
 import Toast from "../../components/Toast";
 import { fetchWooStatus } from "../../api/woocommerce";
+import { fetchShopifyStatus } from "../../api/shopify";
 import { fetchGa4Status } from "../../api/ga4";
 import { fetchGscStatus } from "../../api/gsc";
+import { fetchMetaStatus } from "../../api/meta";
+import { fetchInboxConnections } from "../../api/inboxConnections";
 import { INTEGRATION_CATALOG } from "./catalog";
 
 // Premium integrations (e.g. Eurocom International) aren't part of this
 // open-source checkout — their source lives in the private
-// shopstack-premium repo and is only vendored locally into
+// ecommnode-premium repo and is only vendored locally into
 // app/src/premium/<name>/index.jsx (gitignored). If that folder is absent,
 // the glob simply matches nothing and no premium cards render.
 const premiumModules = import.meta.glob("../../premium/*/index.jsx", { eager: true });
@@ -41,6 +53,9 @@ export default function IntegrationsSection() {
   const [wooConnections, setWooConnections] = useState([]);
   const [wooChecking, setWooChecking] = useState(true);
   const [showWooModal, setShowWooModal] = useState(false);
+  const [shopifyConnections, setShopifyConnections] = useState([]);
+  const [shopifyChecking, setShopifyChecking] = useState(true);
+  const [showShopifyModal, setShowShopifyModal] = useState(false);
   const [premiumCounts, setPremiumCounts] = useState({});
   const [ga4Connections, setGa4Connections] = useState([]);
   const [ga4Checking, setGa4Checking] = useState(true);
@@ -48,6 +63,13 @@ export default function IntegrationsSection() {
   const [gscConnections, setGscConnections] = useState([]);
   const [gscChecking, setGscChecking] = useState(true);
   const [showGscModal, setShowGscModal] = useState(false);
+  const [metaConnections, setMetaConnections] = useState([]);
+  const [metaChecking, setMetaChecking] = useState(true);
+  const [showMetaModal, setShowMetaModal] = useState(false);
+  const [inboxConnections, setInboxConnections] = useState([]);
+  const [inboxChecking, setInboxChecking] = useState(true);
+  const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
+  const [showViberModal, setShowViberModal] = useState(false);
   const [toast, setToast] = useState(null);
   const toastTimer = useRef(null);
 
@@ -65,6 +87,13 @@ export default function IntegrationsSection() {
   }, []);
 
   useEffect(() => {
+    fetchShopifyStatus()
+      .then((data) => setShopifyConnections(data.connections || []))
+      .catch(() => {})
+      .finally(() => setShopifyChecking(false));
+  }, []);
+
+  useEffect(() => {
     fetchGa4Status()
       .then((data) => setGa4Connections(data.connections || []))
       .catch(() => {})
@@ -78,6 +107,20 @@ export default function IntegrationsSection() {
       .finally(() => setGscChecking(false));
   }, []);
 
+  useEffect(() => {
+    fetchMetaStatus()
+      .then((data) => setMetaConnections(data.connections || []))
+      .catch(() => {})
+      .finally(() => setMetaChecking(false));
+  }, []);
+
+  useEffect(() => {
+    fetchInboxConnections()
+      .then((data) => setInboxConnections(data.connections || []))
+      .catch(() => {})
+      .finally(() => setInboxChecking(false));
+  }, []);
+
   const handleWooConnected = (connection) => {
     setWooConnections((prev) => [...prev, connection]);
     setShowWooModal(false);
@@ -85,6 +128,15 @@ export default function IntegrationsSection() {
 
   const handleWooDisconnected = (id) => {
     setWooConnections((prev) => prev.filter((c) => c.id !== id));
+  };
+
+  const handleShopifyConnected = (connection) => {
+    setShopifyConnections((prev) => [...prev, connection]);
+    setShowShopifyModal(false);
+  };
+
+  const handleShopifyDisconnected = (id) => {
+    setShopifyConnections((prev) => prev.filter((c) => c.id !== id));
   };
 
   const handleGa4Connected = (connection) => {
@@ -104,6 +156,32 @@ export default function IntegrationsSection() {
   const handleGscDisconnected = (id) => {
     setGscConnections((prev) => prev.filter((c) => c.id !== id));
   };
+
+  const handleMetaConnected = (connection) => {
+    setMetaConnections((prev) => [...prev, connection]);
+    setShowMetaModal(false);
+  };
+
+  const handleMetaDisconnected = (id) => {
+    setMetaConnections((prev) => prev.filter((c) => c.id !== id));
+  };
+
+  const handleMetaUpdated = (connection) => {
+    setMetaConnections((prev) => prev.map((c) => (c.id === connection.id ? connection : c)));
+  };
+
+  const handleInboxConnected = (connection) => {
+    setInboxConnections((prev) => [...prev, connection]);
+    setShowWhatsAppModal(false);
+    setShowViberModal(false);
+  };
+
+  const handleInboxDisconnected = (id) => {
+    setInboxConnections((prev) => prev.filter((c) => c.id !== id));
+  };
+
+  const whatsappConnections = inboxConnections.filter((c) => c.platform === "whatsapp");
+  const viberConnections = inboxConnections.filter((c) => c.platform === "viber");
 
   const connect = (key) => {
     setConnectedKeys((prev) => (prev.includes(key) ? prev : [...prev, key]));
@@ -126,7 +204,7 @@ export default function IntegrationsSection() {
       <div className="settings-header">
         <h1 className="settings-title">Integracije</h1>
         <p className="settings-subtitle">
-          Poveži Shopstack sa svojim online prodavnicama.
+          Poveži EcommNode sa svojim online prodavnicama.
         </p>
       </div>
 
@@ -149,14 +227,23 @@ export default function IntegrationsSection() {
 
       {filter === "moje" ? (
         <>
-          {wooConnections.map((connection) => (
+          {wooConnections.length > 0 && (
             <WooCommerceIntegration
-              key={connection.id}
-              connection={connection}
+              connections={wooConnections}
               onDisconnected={handleWooDisconnected}
+              onConnectClick={() => setShowWooModal(true)}
               onResult={showToast}
             />
-          ))}
+          )}
+
+          {shopifyConnections.length > 0 && (
+            <ShopifyIntegration
+              connections={shopifyConnections}
+              onDisconnected={handleShopifyDisconnected}
+              onConnectClick={() => setShowShopifyModal(true)}
+              onResult={showToast}
+            />
+          )}
 
           {PREMIUM_INTEGRATIONS.map(({ key, Component }) => (
             <Component
@@ -168,29 +255,65 @@ export default function IntegrationsSection() {
             />
           ))}
 
-          {ga4Connections.map((connection) => (
+          {ga4Connections.length > 0 && (
             <Ga4Integration
-              key={connection.id}
-              connection={connection}
+              connections={ga4Connections}
               onDisconnected={handleGa4Disconnected}
+              onConnectClick={() => setShowGa4Modal(true)}
               onResult={showToast}
             />
-          ))}
+          )}
 
-          {gscConnections.map((connection) => (
+          {gscConnections.length > 0 && (
             <GscIntegration
-              key={connection.id}
-              connection={connection}
+              connections={gscConnections}
               onDisconnected={handleGscDisconnected}
+              onConnectClick={() => setShowGscModal(true)}
               onResult={showToast}
             />
-          ))}
+          )}
+
+          {metaConnections.length > 0 && (
+            <MetaIntegration
+              connections={metaConnections}
+              wooConnections={wooConnections}
+              onDisconnected={handleMetaDisconnected}
+              onConnectClick={() => setShowMetaModal(true)}
+              onUpdated={handleMetaUpdated}
+              onResult={showToast}
+            />
+          )}
+
+          {whatsappConnections.length > 0 && (
+            <InboxChannelIntegration
+              platform="whatsapp"
+              name="WhatsApp Business"
+              connections={whatsappConnections}
+              onDisconnected={handleInboxDisconnected}
+              onConnectClick={() => setShowWhatsAppModal(true)}
+              onResult={showToast}
+            />
+          )}
+
+          {viberConnections.length > 0 && (
+            <InboxChannelIntegration
+              platform="viber"
+              name="Viber"
+              connections={viberConnections}
+              onDisconnected={handleInboxDisconnected}
+              onConnectClick={() => setShowViberModal(true)}
+              onResult={showToast}
+            />
+          )}
 
           {myIntegrations.length === 0 &&
           wooConnections.length === 0 &&
+          shopifyConnections.length === 0 &&
           Object.values(premiumCounts).every((n) => !n) &&
           ga4Connections.length === 0 &&
-          gscConnections.length === 0 ? (
+          gscConnections.length === 0 &&
+          metaConnections.length === 0 &&
+          inboxConnections.length === 0 ? (
             <div className="empty-hint">Još uvek nemaš povezanih integracija.</div>
           ) : (
             myIntegrations.map((p) => (
@@ -236,6 +359,29 @@ export default function IntegrationsSection() {
               onClick={() => setShowWooModal(true)}
             >
               {wooConnections.length > 0 ? "+ Poveži još jednu" : "Poveži"}
+            </button>
+          </div>
+
+          <div className="integration-grid-card">
+            <span className="integration-badge">
+              <img src={shopifyLogo} alt="Shopify" />
+            </span>
+            <p className="integration-grid-name">
+              Shopify
+              {shopifyConnections.length > 0 && (
+                <span className="status-pill">{shopifyConnections.length}</span>
+              )}
+            </p>
+            <p className="integration-grid-desc">
+              Poveži svoju Shopify prodavnicu
+            </p>
+            <button
+              type="button"
+              className="integration-grid-action"
+              disabled={shopifyChecking}
+              onClick={() => setShowShopifyModal(true)}
+            >
+              {shopifyConnections.length > 0 ? "+ Poveži još jednu" : "Poveži"}
             </button>
           </div>
 
@@ -297,6 +443,72 @@ export default function IntegrationsSection() {
             )}
           </div>
 
+          <div className="integration-grid-card">
+            <span className="integration-badge">
+              <img src={metaLogo} alt="Meta Ads" />
+            </span>
+            <p className="integration-grid-name">
+              Meta Ads
+              {metaConnections.length > 0 && (
+                <span className="status-pill">{metaConnections.length}</span>
+              )}
+            </p>
+            <p className="integration-grid-desc">Prati potrošnju i performanse Meta oglasa</p>
+            <button
+              type="button"
+              className="integration-grid-action"
+              disabled={metaChecking || wooConnections.length === 0}
+              onClick={() => setShowMetaModal(true)}
+            >
+              {metaConnections.length > 0 ? "+ Poveži još jednu" : "Poveži"}
+            </button>
+            {wooConnections.length === 0 && (
+              <p className="woo-field-hint">Prvo poveži WooCommerce prodavnicu.</p>
+            )}
+          </div>
+
+          <div className="integration-grid-card">
+            <span className="integration-badge">
+              <PlatformBadge platform="whatsapp" />
+            </span>
+            <p className="integration-grid-name">
+              WhatsApp Business
+              {whatsappConnections.length > 0 && (
+                <span className="status-pill">{whatsappConnections.length}</span>
+              )}
+            </p>
+            <p className="integration-grid-desc">Primaj i odgovaraj na WhatsApp poruke u Porukama</p>
+            <button
+              type="button"
+              className="integration-grid-action"
+              disabled={inboxChecking}
+              onClick={() => setShowWhatsAppModal(true)}
+            >
+              {whatsappConnections.length > 0 ? "+ Poveži još jedan brend" : "Poveži"}
+            </button>
+          </div>
+
+          <div className="integration-grid-card">
+            <span className="integration-badge">
+              <PlatformBadge platform="viber" />
+            </span>
+            <p className="integration-grid-name">
+              Viber
+              {viberConnections.length > 0 && (
+                <span className="status-pill">{viberConnections.length}</span>
+              )}
+            </p>
+            <p className="integration-grid-desc">Primaj i odgovaraj na Viber poruke u Porukama</p>
+            <button
+              type="button"
+              className="integration-grid-action"
+              disabled={inboxChecking}
+              onClick={() => setShowViberModal(true)}
+            >
+              {viberConnections.length > 0 ? "+ Poveži još jedan brend" : "Poveži"}
+            </button>
+          </div>
+
           {INTEGRATION_CATALOG.map((p) => {
             const isConnected = connectedKeys.includes(p.key);
             return (
@@ -331,6 +543,14 @@ export default function IntegrationsSection() {
         />
       )}
 
+      {showShopifyModal && (
+        <ShopifyConnectModal
+          onClose={() => setShowShopifyModal(false)}
+          onConnected={handleShopifyConnected}
+          onResult={showToast}
+        />
+      )}
+
       {showGa4Modal && (
         <Ga4ConnectModal
           wooConnections={wooConnections}
@@ -345,6 +565,33 @@ export default function IntegrationsSection() {
           wooConnections={wooConnections}
           onClose={() => setShowGscModal(false)}
           onConnected={handleGscConnected}
+          onResult={showToast}
+        />
+      )}
+
+      {showMetaModal && (
+        <MetaConnectModal
+          wooConnections={wooConnections}
+          onClose={() => setShowMetaModal(false)}
+          onConnected={handleMetaConnected}
+          onResult={showToast}
+        />
+      )}
+
+      {showWhatsAppModal && (
+        <InboxChannelConnectModal
+          platform="whatsapp"
+          onClose={() => setShowWhatsAppModal(false)}
+          onConnected={handleInboxConnected}
+          onResult={showToast}
+        />
+      )}
+
+      {showViberModal && (
+        <InboxChannelConnectModal
+          platform="viber"
+          onClose={() => setShowViberModal(false)}
+          onConnected={handleInboxConnected}
           onResult={showToast}
         />
       )}

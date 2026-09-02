@@ -1,6 +1,8 @@
 const { createJsonFile } = require("./jsonFile");
 const { createWooClient } = require("./woocommerce");
 const { mapOrder } = require("./mapOrder");
+const { mapShopifyOrder } = require("./mapShopifyOrder");
+const { fetchAllShopifyOrdersRaw } = require("./shopify");
 const { getStaleOrderThresholdDays } = require("./settingsStore");
 
 const file = createJsonFile("orders-cache.json", {});
@@ -20,7 +22,7 @@ const MAX_SYNC_PAGES = 50; // hard safety cap (~5,000 orders per store)
 const syncing = new Set();
 const syncErrors = new Map();
 
-async function fetchAllOrders(connection) {
+async function fetchAllWooOrders(connection) {
   const client = createWooClient(connection);
   const after = new Date();
   after.setMonth(after.getMonth() - SYNC_WINDOW_MONTHS);
@@ -42,6 +44,17 @@ async function fetchAllOrders(connection) {
     page += 1;
   }
   return orders;
+}
+
+async function fetchAllShopifyOrders(connection) {
+  const orders = await fetchAllShopifyOrdersRaw(connection, { sinceMonths: SYNC_WINDOW_MONTHS });
+  return orders.map((o) => mapShopifyOrder(o, null));
+}
+
+function fetchAllOrders(connection) {
+  return connection.platform === "shopify"
+    ? fetchAllShopifyOrders(connection)
+    : fetchAllWooOrders(connection);
 }
 
 async function syncConnection(connection) {

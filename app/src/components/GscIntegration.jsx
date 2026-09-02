@@ -2,8 +2,9 @@ import { useState } from "react";
 import googleSearchConsoleLogo from "../assets/google-search-console.jpg";
 import { disconnectGsc } from "../api/gsc";
 import { siteLabel } from "../utils/site";
+import IntegrationGroupCard from "./IntegrationGroupCard";
 
-export default function GscIntegration({ connection, onDisconnected, onResult }) {
+function PropertyRow({ connection, onDisconnected, onResult }) {
   const [removing, setRemoving] = useState(false);
 
   const handleRemove = async () => {
@@ -19,16 +20,10 @@ export default function GscIntegration({ connection, onDisconnected, onResult })
   };
 
   return (
-    <div className="woo-integration-card">
-      <div className="woo-integration-head">
-        <span className="integration-badge">
-          <img src={googleSearchConsoleLogo} alt="Google Search Console" />
-        </span>
+    <div className="meta-account-row">
+      <div className="meta-account-row-main">
         <div className="integration-info">
-          <p className="integration-name">
-            {connection.label}
-            <span className="status-pill">Povezano</span>
-          </p>
+          <p className="integration-name">{connection.label}</p>
           <p className="integration-site">
             {connection.siteUrl} → {siteLabel(connection.targetSiteUrl)}
           </p>
@@ -43,5 +38,27 @@ export default function GscIntegration({ connection, onDisconnected, onResult })
         </button>
       </div>
     </div>
+  );
+}
+
+export default function GscIntegration({ connections, onDisconnected, onConnectClick, onResult }) {
+  return (
+    <IntegrationGroupCard
+      icon={googleSearchConsoleLogo}
+      iconAlt="Google Search Console"
+      name="Google Search Console"
+      connections={connections}
+      countLabel={(n) => `${n} ${n === 1 ? "veza povezana" : "veze povezano"}`}
+      addLabel="+ Poveži još jednu"
+      onConnectClick={onConnectClick}
+      renderRow={(connection) => (
+        <PropertyRow
+          key={connection.id}
+          connection={connection}
+          onDisconnected={onDisconnected}
+          onResult={onResult}
+        />
+      )}
+    />
   );
 }

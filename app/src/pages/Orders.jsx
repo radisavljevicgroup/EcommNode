@@ -5,12 +5,22 @@ import {
   fetchStaleOrderCount,
   fetchUnfiscalizedCount,
 } from "../api/woocommerce";
-import { EyeIcon } from "../icons";
+import { fetchShopifyStatus } from "../api/shopify";
+import { EyeIcon, OrdersIcon, ChatIcon } from "../icons";
 import { siteLabel } from "../utils/site";
+import woocommerceLogo from "../assets/woocommerce.png";
+import shopifyLogo from "../assets/shopify.png";
 import Pagination from "../components/Pagination";
 import MultiSelect from "../components/MultiSelect";
 import NoteTooltip from "../components/NoteTooltip";
 import { ORDER_STATUS_OPTIONS } from "../constants/orderStatuses";
+import IconRail from "../components/IconRail";
+import Messages from "./Messages";
+
+const ORDERS_RAIL_ITEMS = [
+  { key: "porudzbine", icon: OrdersIcon, label: "Porudžbine" },
+  { key: "poruke", icon: ChatIcon, label: "Poruke" },
+];
 
 const PER_PAGE_OPTIONS = [10, 20, 30, 50];
 
@@ -23,6 +33,17 @@ const STATUS_META = {
   refunded: { label: "Refundirano", className: "refunded" },
   failed: { label: "Neuspešno", className: "failed" },
 };
+
+const PLATFORM_LOGOS = {
+  woocommerce: woocommerceLogo,
+  shopify: shopifyLogo,
+};
+
+function PlatformLogo({ platform }) {
+  const logo = PLATFORM_LOGOS[platform];
+  if (!logo) return null;
+  return <img className="order-source-logo" src={logo} alt="" />;
+}
 
 function StatusBadge({ status }) {
   const meta = STATUS_META[status] || { label: status, className: "default" };
@@ -98,7 +119,10 @@ function OrderCard({ order, expanded, onToggle }) {
           <p className="order-card-id">
             #{order.number || order.id}
             {order.sourceSiteUrl && (
-              <span className="order-source-tag">{siteLabel(order.sourceSiteUrl)}</span>
+              <span className="order-source-tag">
+                <PlatformLogo platform={order.platform} />
+                {siteLabel(order.sourceSiteUrl)}
+              </span>
             )}
             {order.customerNote && <NoteTooltip text={order.customerNote} />}
           </p>
@@ -106,7 +130,7 @@ function OrderCard({ order, expanded, onToggle }) {
         </div>
         <div className="order-card-meta">
           <StatusBadge status={order.status} />
-          <FiscalBadge fiscalized={order.fiscalized} />
+          {order.platform !== "shopify" && <FiscalBadge fiscalized={order.fiscalized} />}
           <div className="order-card-total">
             <strong>
               {order.total} {order.currency}
@@ -215,6 +239,21 @@ function OrdersSkeleton() {
 }
 
 export default function Orders() {
+  const [section, setSection] = useState("porudzbine");
+
+  return (
+    <div className="orders-layout">
+      <IconRail items={ORDERS_RAIL_ITEMS} active={section} onSelect={setSection} />
+      <div className="settings-main">
+        <div className="settings-wrap">
+          {section === "poruke" ? <Messages /> : <OrdersOverview />}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function OrdersOverview() {
   const [connections, setConnections] = useState([]);
   const [selectedId, setSelectedId] = useState("all");
   const [orders, setOrders] = useState([]);
@@ -238,8 +277,10 @@ export default function Orders() {
   const [expandedId, setExpandedId] = useState(null);
 
   useEffect(() => {
-    fetchWooStatus()
-      .then((data) => setConnections(data.connections || []))
+    Promise.all([fetchWooStatus(), fetchShopifyStatus()])
+      .then(([woo, shopify]) => {
+        setConnections([...(woo.connections || []), ...(shopify.connections || [])]);
+      })
       .catch(() => {})
       .finally(() => setLoadingStatus(false));
   }, []);
@@ -344,7 +385,7 @@ export default function Orders() {
   const loading = loadingStatus || loadingOrders;
 
   return (
-    <div className="page-body orders-page">
+    <div className="orders-page">
       <div className="orders-page-header">
         <div>
           <h1 className="settings-title">Porudžbine</h1>
@@ -420,6 +461,7 @@ export default function Orders() {
                 className={"filter-tab" + (selectedId === c.id ? " active" : "")}
                 onClick={() => handleStoreChange(c.id)}
               >
+                <PlatformLogo platform={c.platform} />
                 {siteLabel(c.siteUrl)}
               </button>
             ))}
@@ -455,7 +497,7 @@ export default function Orders() {
         <OrdersSkeleton />
       ) : connections.length === 0 ? (
         <div className="empty-hint">
-          Poveži WooCommerce u Podešavanja → Integracije da bi video porudžbine.
+          Poveži WooCommerce ili Shopify prodavnicu u Podešavanja → Integracije da bi video porudžbine.
         </div>
       ) : loading ? (
         <OrdersSkeleton />

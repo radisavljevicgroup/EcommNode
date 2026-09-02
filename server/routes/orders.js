@@ -1,5 +1,6 @@
 const { Router } = require("express");
 const { getConnections } = require("../lib/store");
+const { getConnections: getShopifyConnections } = require("../lib/shopifyStore");
 const { getOrdersPage, getStaleOrders, getUnfiscalizedOrders } = require("../lib/ordersCache");
 const {
   isStaleTrackingEnabled,
@@ -19,9 +20,9 @@ function parseStatus(req) {
 }
 
 router.get("/orders", async (req, res) => {
-  const connections = getConnections();
+  const connections = [...getConnections(), ...getShopifyConnections()];
   if (connections.length === 0) {
-    return res.status(401).json({ error: "Nisi povezan ni sa jednom WooCommerce prodavnicom." });
+    return res.status(401).json({ error: "Nisi povezan ni sa jednom prodavnicom." });
   }
 
   const { connectionId, search, stale, unfiscalized } = req.query;
@@ -86,7 +87,7 @@ router.get("/orders", async (req, res) => {
 
 router.get("/orders/stale-count", async (req, res) => {
   if (!isStaleTrackingEnabled()) return res.json({ count: 0 });
-  const connections = getConnections();
+  const connections = [...getConnections(), ...getShopifyConnections()];
   try {
     const result = await getStaleOrders(connections, { page: 1, perPage: 1 });
     res.json({ count: result.pagination.total });
@@ -97,7 +98,7 @@ router.get("/orders/stale-count", async (req, res) => {
 
 router.get("/orders/unfiscalized-count", async (req, res) => {
   if (!isUnfiscalizedTrackingEnabled()) return res.json({ count: 0 });
-  const connections = getConnections();
+  const connections = [...getConnections(), ...getShopifyConnections()];
   try {
     const result = await getUnfiscalizedOrders(connections, { page: 1, perPage: 1 });
     res.json({ count: result.pagination.total });

@@ -73,7 +73,7 @@ router.get("/status", (req, res) => {
 });
 
 function toPublic(connection) {
-  return { id: connection.id, siteUrl: connection.siteUrl };
+  return { id: connection.id, siteUrl: connection.siteUrl, platform: "woocommerce" };
 }
 
 module.exports = router;

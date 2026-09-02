@@ -1,11 +1,12 @@
 {
-  "name": "shopstack-server",
+  "name": "ecommnode-server",
   "version": "1.0.0",
-  "description": "Express API server for connecting Shopstack to a WooCommerce store",
+  "description": "Express API server for connecting EcommNode to a WooCommerce or Shopify store",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "dev": "node --watch index.js"
+    "dev": "node --watch index.js",
+    "seed:inbox": "node scripts/seedMockInbox.js"
   },
   "keywords": [],
   "author": "",

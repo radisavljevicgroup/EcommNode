@@ -24,7 +24,19 @@ function parseServiceAccount(raw) {
   return json;
 }
 
+// Access tokens are valid for an hour — without this cache, every single
+// GA4 report call paid for a full JWT-sign + OAuth round-trip first, which
+// was a meaningful chunk of "Analiza prodaje"'s load time on its own.
+const tokenCache = new Map();
+const REFRESH_BUFFER_MS = 5 * 60 * 1000;
+
 async function getAccessToken(serviceAccount, scope) {
+  const cacheKey = `${serviceAccount.client_email}::${scope}`;
+  const cached = tokenCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now() + REFRESH_BUFFER_MS) {
+    return cached.token;
+  }
+
   const now = Math.floor(Date.now() / 1000);
   const header = { alg: "RS256", typ: "JWT" };
   const claims = {
@@ -63,6 +75,11 @@ async function getAccessToken(serviceAccount, scope) {
     err.status = res.status;
     throw err;
   }
+
+  tokenCache.set(cacheKey, {
+    token: data.access_token,
+    expiresAt: Date.now() + (data.expires_in || 3600) * 1000,
+  });
   return data.access_token;
 }
 

@@ -1,7 +1,14 @@
 import { useState } from "react";
 
+// toISOString() converts to UTC first — with a local timezone ahead of
+// UTC (e.g. Serbia), local midnight on the 1st becomes the previous day,
+// shifting every preset's boundary back by a day. Build the string from
+// local date parts instead.
 function isoDate(d) {
-  return d.toISOString().slice(0, 10);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 function daysAgo(n) {
