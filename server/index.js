@@ -15,6 +15,7 @@ const metaRouter = require("./routes/meta");
 const workersRouter = require("./routes/workers");
 const inboxRouter = require("./routes/inbox");
 const dashboardRouter = require("./routes/dashboard");
+const calendarRouter = require("./routes/calendar");
 
 dotenv.config();
 
@@ -45,6 +46,7 @@ app.use("/api", metaRouter);
 app.use("/api", workersRouter);
 app.use("/api", inboxRouter);
 app.use("/api", dashboardRouter);
+app.use("/api", calendarRouter);
 
 // Premium integrations (e.g. Eurocom International) live outside this
 // open-source repo — each one is a self-contained router at

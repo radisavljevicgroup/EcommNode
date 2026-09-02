@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import Header, { NAV_ITEMS } from "./components/Header";
 import Dashboard from "./pages/Dashboard";
 import Orders from "./pages/Orders";
+import Calendar from "./pages/Calendar";
 import Analytics from "./pages/Analytics";
 import Settings from "./pages/Settings";
 import Login from "./pages/Login";
@@ -134,6 +135,8 @@ export default function App() {
         />
       ) : route === "porudzbine" ? (
         <Orders />
+      ) : route === "kalendar" ? (
+        <Calendar />
       ) : route === "analitika" ? (
         <Analytics />
       ) : (

@@ -1,12 +1,22 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   fetchWooOrders,
   fetchWooStatus,
   fetchStaleOrderCount,
   fetchUnfiscalizedCount,
+  adjustOrderCallCount,
 } from "../api/woocommerce";
 import { fetchShopifyStatus } from "../api/shopify";
-import { EyeIcon, OrdersIcon, ChatIcon } from "../icons";
+import {
+  EyeIcon,
+  OrdersIcon,
+  ChatIcon,
+  TruckIcon,
+  StorePickupIcon,
+  PhoneIcon,
+  PlusIcon,
+  MinusIcon,
+} from "../icons";
 import { siteLabel } from "../utils/site";
 import woocommerceLogo from "../assets/woocommerce.png";
 import shopifyLogo from "../assets/shopify.png";
@@ -23,6 +33,18 @@ const ORDERS_RAIL_ITEMS = [
 ];
 
 const PER_PAGE_OPTIONS = [10, 20, 30, 50];
+
+const FULFILLMENT_OPTIONS = [
+  { value: "all", label: "Sve" },
+  { value: "shipping", label: "Dostava" },
+  { value: "pickup", label: "Lično preuzimanje" },
+];
+
+const FISCAL_OPTIONS = [
+  { value: "all", label: "Sve" },
+  { value: "yes", label: "Fiskalizovano" },
+  { value: "no", label: "Nefiskalizovano" },
+];
 
 const STATUS_META = {
   pending: { label: "Na čekanju", className: "pending" },
@@ -43,6 +65,81 @@ function PlatformLogo({ platform }) {
   const logo = PLATFORM_LOGOS[platform];
   if (!logo) return null;
   return <img className="order-source-logo" src={logo} alt="" />;
+}
+
+// Small hover-only label bubble, fixed-positioned from the trigger's real
+// screen coords so it escapes .order-card's overflow:hidden clip (same
+// technique as NoteTooltip, minus the click-to-pin behavior — this one is
+// pure hover, no need to stay open on click).
+function HoverLabel({ text, children }) {
+  const [open, setOpen] = useState(false);
+  const [coords, setCoords] = useState(null);
+  const triggerRef = useRef(null);
+
+  const show = () => {
+    const rect = triggerRef.current.getBoundingClientRect();
+    setCoords({ top: rect.top, left: rect.left + rect.width / 2 });
+    setOpen(true);
+  };
+
+  return (
+    <span
+      className="hover-label"
+      ref={triggerRef}
+      onMouseEnter={show}
+      onMouseLeave={() => setOpen(false)}
+    >
+      {children}
+      {open && coords && (
+        <span className="hover-label-bubble" style={{ top: coords.top, left: coords.left }}>
+          {text}
+        </span>
+      )}
+    </span>
+  );
+}
+
+function FulfillmentIcon({ order }) {
+  const pickup = order.isPickup;
+  return (
+    <HoverLabel text={pickup ? "Lično preuzimanje" : "Dostava"}>
+      <span className={"order-fulfillment-icon" + (pickup ? " pickup" : " shipping")}>
+        {pickup ? <StorePickupIcon /> : <TruckIcon />}
+      </span>
+    </HoverLabel>
+  );
+}
+
+function CallCounter({ order, onCountChange }) {
+  const [busy, setBusy] = useState(false);
+  const count = order.callCount || 0;
+
+  const adjust = (delta) => (e) => {
+    e.stopPropagation();
+    if (busy || (delta < 0 && count === 0)) return;
+    setBusy(true);
+    adjustOrderCallCount(order.connectionId, order.id, delta)
+      .then((data) => onCountChange(data.count))
+      .catch(() => {})
+      .finally(() => setBusy(false));
+  };
+
+  return (
+    <div
+      className="order-call-counter"
+      title="Koliko puta smo pozvali kupca"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <PhoneIcon />
+      <button type="button" onClick={adjust(-1)} disabled={busy || count === 0} aria-label="Umanji broj poziva">
+        <MinusIcon />
+      </button>
+      <span>{count}</span>
+      <button type="button" onClick={adjust(1)} disabled={busy} aria-label="Uvećaj broj poziva">
+        <PlusIcon />
+      </button>
+    </div>
+  );
 }
 
 function StatusBadge({ status }) {
@@ -95,7 +192,7 @@ function sameAddress(a, b) {
   );
 }
 
-function OrderCard({ order, expanded, onToggle }) {
+function OrderCard({ order, expanded, onToggle, onCallCountChange }) {
   const billingLine = formatAddress(order.billing);
   const shippingLine = formatAddress(order.shipping);
   const shippingDiffers =
@@ -124,11 +221,15 @@ function OrderCard({ order, expanded, onToggle }) {
                 {siteLabel(order.sourceSiteUrl)}
               </span>
             )}
+            <FulfillmentIcon order={order} />
             {order.customerNote && <NoteTooltip text={order.customerNote} />}
           </p>
           <p className="order-card-date">{formatDateTime(order.dateCreated)}</p>
         </div>
         <div className="order-card-meta">
+          {order.isPickup && (
+            <CallCounter order={order} onCountChange={(count) => onCallCountChange(order.id, count)} />
+          )}
           <StatusBadge status={order.status} />
           {order.platform !== "shopify" && <FiscalBadge fiscalized={order.fiscalized} />}
           <div className="order-card-total">
@@ -265,6 +366,8 @@ function OrdersOverview() {
   const [selectedStatuses, setSelectedStatuses] = useState(
     ORDER_STATUS_OPTIONS.map((s) => s.id)
   );
+  const [fulfillmentFilter, setFulfillmentFilter] = useState("all");
+  const [fiscalFilter, setFiscalFilter] = useState("all");
   // Never activated automatically — only the explicit button click below
   // (or the "Ukloni filter" button to undo it) changes these.
   const [staleOnly, setStaleOnly] = useState(false);
@@ -315,17 +418,21 @@ function OrdersOverview() {
     setLoadingOrders(true);
     setError("");
 
+    // The stale/unfiscalized banner views have their own fixed status/fiscal
+    // semantics — don't cross them with these filters.
+    const otherFiltersActive = staleOnly || unfiscalizedOnly;
     fetchWooOrders(selectedId === "all" ? undefined : selectedId, {
       page,
       perPage,
       search,
       stale: staleOnly,
       unfiscalized: unfiscalizedOnly,
-      // The stale/unfiscalized views have their own fixed status semantics —
-      // don't cross them with this filter.
-      status: staleOnly || unfiscalizedOnly || selectedStatuses.length === ORDER_STATUS_OPTIONS.length
-        ? undefined
-        : selectedStatuses,
+      status:
+        otherFiltersActive || selectedStatuses.length === ORDER_STATUS_OPTIONS.length
+          ? undefined
+          : selectedStatuses,
+      fulfillment: otherFiltersActive || fulfillmentFilter === "all" ? undefined : fulfillmentFilter,
+      fiscal: otherFiltersActive || fiscalFilter === "all" ? undefined : fiscalFilter,
     })
       .then((data) => {
         if (cancelled) return;
@@ -343,7 +450,18 @@ function OrdersOverview() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [connections, selectedId, page, perPage, search, staleOnly, unfiscalizedOnly, statusesKey]);
+  }, [
+    connections,
+    selectedId,
+    page,
+    perPage,
+    search,
+    staleOnly,
+    unfiscalizedOnly,
+    statusesKey,
+    fulfillmentFilter,
+    fiscalFilter,
+  ]);
 
   const handlePerPageChange = (e) => {
     setPerPage(Number(e.target.value));
@@ -357,6 +475,16 @@ function OrdersOverview() {
 
   const handleStatusChange = (ids) => {
     setSelectedStatuses(ids);
+    setPage(1);
+  };
+
+  const handleFulfillmentChange = (e) => {
+    setFulfillmentFilter(e.target.value);
+    setPage(1);
+  };
+
+  const handleFiscalChange = (e) => {
+    setFiscalFilter(e.target.value);
     setPage(1);
   };
 
@@ -482,6 +610,28 @@ function OrdersOverview() {
         />
 
         <label className="per-page-select">
+          Isporuka:
+          <select value={fulfillmentFilter} onChange={handleFulfillmentChange}>
+            {FULFILLMENT_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="per-page-select">
+          Fiskalizacija:
+          <select value={fiscalFilter} onChange={handleFiscalChange}>
+            {FISCAL_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="per-page-select">
           Po stranici:
           <select value={perPage} onChange={handlePerPageChange}>
             {PER_PAGE_OPTIONS.map((n) => (
@@ -515,6 +665,11 @@ function OrdersOverview() {
                 expanded={expandedId === order.id}
                 onToggle={() =>
                   setExpandedId((cur) => (cur === order.id ? null : order.id))
+                }
+                onCallCountChange={(orderId, count) =>
+                  setOrders((cur) =>
+                    cur.map((o) => (o.id === orderId ? { ...o, callCount: count } : o))
+                  )
                 }
               />
             ))}

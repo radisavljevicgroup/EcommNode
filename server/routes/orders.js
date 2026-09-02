@@ -6,6 +6,7 @@ const {
   isStaleTrackingEnabled,
   isUnfiscalizedTrackingEnabled,
 } = require("../lib/settingsStore");
+const { adjustCallCount } = require("../lib/orderCallsStore");
 
 const router = Router();
 
@@ -25,7 +26,7 @@ router.get("/orders", async (req, res) => {
     return res.status(401).json({ error: "Nisi povezan ni sa jednom prodavnicom." });
   }
 
-  const { connectionId, search, stale, unfiscalized } = req.query;
+  const { connectionId, search, stale, unfiscalized, fulfillment, fiscal } = req.query;
   const page = Math.max(1, parseInt(req.query.page, 10) || 1);
   const perPage = ALLOWED_PER_PAGE.includes(Number(req.query.perPage))
     ? Number(req.query.perPage)
@@ -78,7 +79,7 @@ router.get("/orders", async (req, res) => {
   // is kept warm by the same background sync the stale/unfiscalized/
   // analytics views already rely on.
   try {
-    const result = getOrdersPage(targets, { page, perPage, search, status });
+    const result = getOrdersPage(targets, { page, perPage, search, status, fulfillment, fiscal });
     res.json(result);
   } catch {
     res.status(400).json({ error: "Ne mogu da učitam porudžbine." });
@@ -105,6 +106,18 @@ router.get("/orders/unfiscalized-count", async (req, res) => {
   } catch {
     res.status(400).json({ error: "Ne mogu da izračunam broj nefiskalizovanih porudžbina." });
   }
+});
+
+// Manually logged call count for personal-pickup orders — a plus/minus click
+// in the UI sends a delta rather than an absolute value, so concurrent clicks
+// can't clobber each other.
+router.post("/orders/calls", (req, res) => {
+  const { connectionId, orderId, delta } = req.body || {};
+  if (!connectionId || !orderId || (delta !== 1 && delta !== -1)) {
+    return res.status(400).json({ error: "connectionId, orderId i delta (1 ili -1) su obavezni." });
+  }
+  const count = adjustCallCount(connectionId, String(orderId), delta);
+  res.json({ count });
 });
 
 module.exports = router;

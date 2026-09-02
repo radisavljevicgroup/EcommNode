@@ -277,3 +277,53 @@ export const PlusIcon = () => (
     <path d="M12 5v14M5 12h14" />
   </svg>
 );
+
+export const MinusIcon = () => (
+  <svg {...iconProps}>
+    <path d="M5 12h14" />
+  </svg>
+);
+
+export const CalendarIcon = () => (
+  <svg {...iconProps}>
+    <rect x="3" y="4" width="18" height="18" rx="2" />
+    <path d="M16 2v4M8 2v4M3 10h18" />
+  </svg>
+);
+
+export const ChevronLeftIcon = () => (
+  <svg {...iconProps}>
+    <path d="m15 18-6-6 6-6" />
+  </svg>
+);
+
+export const ChevronRightIcon = () => (
+  <svg {...iconProps}>
+    <path d="m9 18 6-6-6-6" />
+  </svg>
+);
+
+export const PencilIcon = () => (
+  <svg {...iconProps}>
+    <path d="M12 20h9" />
+    <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+  </svg>
+);
+
+export const TruckIcon = () => (
+  <svg {...iconProps}>
+    <path d="M1 3h13v13H1z" />
+    <path d="M14 8h4l3 3v5h-7V8Z" />
+    <circle cx="5.5" cy="18.5" r="2.5" />
+    <circle cx="17.5" cy="18.5" r="2.5" />
+  </svg>
+);
+
+export const StorePickupIcon = () => (
+  <svg {...iconProps}>
+    <path d="M3 9 4 4h16l1 5" />
+    <path d="M3 9a2.5 2.5 0 0 0 5 0 2.5 2.5 0 0 0 5 0 2.5 2.5 0 0 0 5 0 2.5 2.5 0 0 0 5 0" />
+    <path d="M4 9v11h16V9" />
+    <path d="M9.5 20v-6h5v6" />
+  </svg>
+);

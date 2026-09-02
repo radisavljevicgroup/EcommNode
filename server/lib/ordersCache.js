@@ -4,6 +4,7 @@ const { mapOrder } = require("./mapOrder");
 const { mapShopifyOrder } = require("./mapShopifyOrder");
 const { fetchAllShopifyOrdersRaw } = require("./shopify");
 const { getStaleOrderThresholdDays } = require("./settingsStore");
+const { getCallCount } = require("./orderCallsStore");
 
 const file = createJsonFile("orders-cache.json", {});
 let cache = file.read();
@@ -88,13 +89,27 @@ function readCache(connection) {
   return entry || { syncedAt: null, orders: [] };
 }
 
+// Neither WooCommerce nor Shopify has a dedicated "pickup vs shipped" field —
+// it's inferred from the shipping method's title, which is exactly what
+// store owners set when they configure a "Lično preuzimanje" / "Local
+// pickup" shipping option.
+const PICKUP_KEYWORDS = ["lično", "licno", "preuzimanje", "pickup", "poslovnic"];
+
+function isPickupOrder(order) {
+  const method = (order.shippingMethod || "").toLowerCase();
+  return PICKUP_KEYWORDS.some((kw) => method.includes(kw));
+}
+
 function getOrdersForConnections(connections) {
   const tagSource = connections.length > 1;
   const entries = connections.map((c) => readCache(c));
   return entries.flatMap((entry, i) =>
     entry.orders.map((o) => ({
       ...o,
+      connectionId: connections[i].id,
       sourceSiteUrl: tagSource ? connections[i].siteUrl : null,
+      callCount: getCallCount(connections[i].id, o.id),
+      isPickup: isPickupOrder(o),
     }))
   );
 }
@@ -107,7 +122,13 @@ function getOrdersForConnections(connections) {
 function getOrdersForConnectionsTagged(connections) {
   const entries = connections.map((c) => readCache(c));
   return entries.flatMap((entry, i) =>
-    entry.orders.map((o) => ({ ...o, sourceSiteUrl: connections[i].siteUrl }))
+    entry.orders.map((o) => ({
+      ...o,
+      connectionId: connections[i].id,
+      sourceSiteUrl: connections[i].siteUrl,
+      callCount: getCallCount(connections[i].id, o.id),
+      isPickup: isPickupOrder(o),
+    }))
   );
 }
 
@@ -180,13 +201,23 @@ function matchesSearch(order, needle) {
 // once) — this instead pages over the same local cache the stale/
 // unfiscalized/analytics views already use, so navigating pages is instant
 // and only touches the network in the background sync.
-function getOrdersPage(connections, { page, perPage, search, status }) {
+function getOrdersPage(connections, { page, perPage, search, status, fulfillment, fiscal }) {
   let orders = getOrdersForConnections(connections).sort(
     (a, b) => new Date(b.dateCreated) - new Date(a.dateCreated)
   );
 
   if (status) {
     orders = orders.filter((o) => status.includes(o.status));
+  }
+  if (fulfillment === "pickup") {
+    orders = orders.filter((o) => o.isPickup);
+  } else if (fulfillment === "shipping") {
+    orders = orders.filter((o) => !o.isPickup);
+  }
+  if (fiscal === "yes") {
+    orders = orders.filter((o) => o.fiscalized);
+  } else if (fiscal === "no") {
+    orders = orders.filter((o) => !o.fiscalized);
   }
   if (search) {
     const needle = search.trim().toLowerCase();

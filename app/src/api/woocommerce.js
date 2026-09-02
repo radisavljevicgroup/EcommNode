@@ -32,7 +32,16 @@ export function disconnectWoo(id) {
 
 export function fetchWooOrders(
   connectionId,
-  { page = 1, perPage = 10, search = "", stale = false, unfiscalized = false, status } = {}
+  {
+    page = 1,
+    perPage = 10,
+    search = "",
+    stale = false,
+    unfiscalized = false,
+    status,
+    fulfillment,
+    fiscal,
+  } = {}
 ) {
   const params = new URLSearchParams();
   if (connectionId) params.set("connectionId", connectionId);
@@ -44,6 +53,8 @@ export function fetchWooOrders(
   // Sent even when empty — an empty (but present) list means "every status
   // deselected", which must match nothing rather than falling back to "all".
   if (status !== undefined) params.set("status", status.join(","));
+  if (fulfillment) params.set("fulfillment", fulfillment);
+  if (fiscal) params.set("fiscal", fiscal);
   return request(`/orders?${params.toString()}`);
 }
 
@@ -53,4 +64,11 @@ export function fetchStaleOrderCount() {
 
 export function fetchUnfiscalizedCount() {
   return request("/orders/unfiscalized-count");
+}
+
+export function adjustOrderCallCount(connectionId, orderId, delta) {
+  return request("/orders/calls", {
+    method: "POST",
+    body: JSON.stringify({ connectionId, orderId, delta }),
+  });
 }

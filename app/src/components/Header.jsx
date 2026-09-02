@@ -1,11 +1,21 @@
 import { useEffect, useRef, useState } from "react";
 import Logo from "./Logo";
-import { HomeIcon, GearIcon, OrdersIcon, ChartIcon, PersonIcon, CreditCardIcon, LogOutIcon } from "../icons";
+import {
+  HomeIcon,
+  GearIcon,
+  OrdersIcon,
+  ChartIcon,
+  PersonIcon,
+  CreditCardIcon,
+  LogOutIcon,
+  CalendarIcon,
+} from "../icons";
 import { supabase } from "../lib/supabaseClient";
 
 export const NAV_ITEMS = [
   { route: "home", label: "Početna", icon: HomeIcon },
   { route: "porudzbine", label: "Porudžbine", icon: OrdersIcon },
+  { route: "kalendar", label: "Kalendar", icon: CalendarIcon },
   { route: "analitika", label: "Analitika", icon: ChartIcon },
   { route: "podesavanja", label: "Podešavanja", icon: GearIcon },
 ];
