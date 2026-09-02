@@ -10,7 +10,7 @@ import {
   ClockIcon,
 } from "../icons";
 
-const GITHUB_URL = "https://github.com/radisavljevicgroup/Shopstack";
+const GITHUB_URL = "https://github.com/radisavljevicgroup/EcommNode";
 
 function GithubIcon() {
   return (
