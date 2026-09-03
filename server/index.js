@@ -16,6 +16,7 @@ const workersRouter = require("./routes/workers");
 const inboxRouter = require("./routes/inbox");
 const dashboardRouter = require("./routes/dashboard");
 const calendarRouter = require("./routes/calendar");
+const { requireAuth } = require("./lib/auth");
 
 dotenv.config();
 
@@ -35,18 +36,24 @@ app.use(cors({ origin: CLIENT_ORIGIN }));
 // guaranteed to byte-match what Meta actually signed.
 app.use(express.json({ limit: "10mb", verify: (req, res, buf) => { req.rawBody = buf; } }));
 
-app.use("/api", connectRouter);
-app.use("/api", shopifyRouter);
-app.use("/api", ordersRouter);
-app.use("/api", analyticsRouter);
-app.use("/api", settingsRouter);
-app.use("/api", ga4Router);
-app.use("/api", gscRouter);
-app.use("/api", metaRouter);
+// requireAuth verifies the caller's Supabase session and attaches
+// req.company/req.userId — every route below reads/writes data scoped to
+// that company (see lib/auth.js). Two routers are deliberately excluded:
+// workersRouter does its own, stricter check (requireManager, role-gated);
+// inboxRouter mixes public webhook receivers with merchant-facing
+// endpoints in one file, so it applies requireAuth itself per-route.
+app.use("/api", requireAuth, connectRouter);
+app.use("/api", requireAuth, shopifyRouter);
+app.use("/api", requireAuth, ordersRouter);
+app.use("/api", requireAuth, analyticsRouter);
+app.use("/api", requireAuth, settingsRouter);
+app.use("/api", requireAuth, ga4Router);
+app.use("/api", requireAuth, gscRouter);
+app.use("/api", requireAuth, metaRouter);
 app.use("/api", workersRouter);
 app.use("/api", inboxRouter);
-app.use("/api", dashboardRouter);
-app.use("/api", calendarRouter);
+app.use("/api", requireAuth, dashboardRouter);
+app.use("/api", requireAuth, calendarRouter);
 
 // Premium integrations (e.g. Eurocom International) live outside this
 // open-source repo — each one is a self-contained router at
@@ -57,7 +64,7 @@ if (fs.existsSync(premiumDir)) {
   fs.readdirSync(premiumDir).forEach((name) => {
     const entry = path.join(premiumDir, name, "index.js");
     if (fs.existsSync(entry)) {
-      app.use("/api", require(entry));
+      app.use("/api", requireAuth, require(entry));
     }
   });
 }

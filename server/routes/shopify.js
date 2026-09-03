@@ -19,7 +19,7 @@ router.post("/shopify/connect", async (req, res) => {
     return res.status(400).json({ error: "Domen prodavnice nije validan." });
   }
 
-  if (getConnections().some((c) => c.shopDomain === normalizedDomain)) {
+  if (getConnections(req.company).some((c) => c.shopDomain === normalizedDomain)) {
     return res.status(400).json({ error: "Ova prodavnica je već povezana." });
   }
 
@@ -47,6 +47,7 @@ router.post("/shopify/connect", async (req, res) => {
     shopName: shop?.name || normalizedDomain,
     accessToken,
     platform: "shopify",
+    company: req.company,
   };
 
   addConnection(connection);
@@ -59,12 +60,12 @@ router.post("/shopify/connect", async (req, res) => {
 
 router.post("/shopify/disconnect", (req, res) => {
   const { id } = req.body || {};
-  const connections = removeConnection(id);
+  const connections = removeConnection(id, req.company);
   res.json({ connections: connections.map(toPublic) });
 });
 
 router.get("/shopify/status", (req, res) => {
-  res.json({ connections: getConnections().map(toPublic) });
+  res.json({ connections: getConnections(req.company).map(toPublic) });
 });
 
 function toPublic(connection) {

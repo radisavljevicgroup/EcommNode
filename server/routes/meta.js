@@ -17,8 +17,8 @@ const router = Router();
 // accessToken never leaves this function — the frontend only ever sees
 // adAccountId/accountName, the same way GA4's serviceAccountJson is
 // stripped before a connection is sent back to the client.
-function toPublic(connection) {
-  const allWoo = getWooConnections();
+function toPublic(connection, company) {
+  const allWoo = getWooConnections(company);
   // Older connections saved before multi-store support only have a single
   // targetConnectionId — read either shape so existing saved connections
   // keep working without a migration step.
@@ -55,7 +55,7 @@ router.post("/meta/connect", async (req, res) => {
     });
   }
 
-  const wooIds = new Set(getWooConnections().map((c) => c.id));
+  const wooIds = new Set(getWooConnections(req.company).map((c) => c.id));
   if (!targetConnectionIds.every((id) => wooIds.has(id))) {
     return res.status(400).json({ error: "Neka od izabranih ciljnih prodavnica ne postoji." });
   }
@@ -75,42 +75,43 @@ router.post("/meta/connect", async (req, res) => {
     accountName,
     currency,
     targetConnectionIds,
+    company: req.company,
   };
 
   addConnection(connection);
-  res.json({ connected: true, connection: toPublic(connection) });
+  res.json({ connected: true, connection: toPublic(connection, req.company) });
 });
 
 router.post("/meta/update-stores", (req, res) => {
   const { id, targetConnectionIds } = req.body || {};
-  const connection = getConnection(id);
+  const connection = getConnection(id, req.company);
   if (!connection) return res.status(404).json({ error: "Integracija nije pronađena." });
 
   if (!Array.isArray(targetConnectionIds) || !targetConnectionIds.length) {
     return res.status(400).json({ error: "Izaberi bar jednu prodavnicu." });
   }
-  const wooIds = new Set(getWooConnections().map((c) => c.id));
+  const wooIds = new Set(getWooConnections(req.company).map((c) => c.id));
   if (!targetConnectionIds.every((wid) => wooIds.has(wid))) {
     return res.status(400).json({ error: "Neka od izabranih ciljnih prodavnica ne postoji." });
   }
 
-  const updated = updateConnection(id, { targetConnectionIds });
-  res.json({ connection: toPublic(updated) });
+  const updated = updateConnection(id, req.company, { targetConnectionIds });
+  res.json({ connection: toPublic(updated, req.company) });
 });
 
 router.post("/meta/disconnect", (req, res) => {
   const { id } = req.body || {};
-  const connections = removeConnection(id);
-  res.json({ connections: connections.map(toPublic) });
+  const connections = removeConnection(id, req.company);
+  res.json({ connections: connections.map((c) => toPublic(c, req.company)) });
 });
 
 router.get("/meta/status", (req, res) => {
-  res.json({ connections: getMetaConnections().map(toPublic) });
+  res.json({ connections: getMetaConnections(req.company).map((c) => toPublic(c, req.company)) });
 });
 
 router.get("/meta/performance", async (req, res) => {
   const { id, from, to } = req.query;
-  let connection = getConnection(id);
+  let connection = getConnection(id, req.company);
   if (!connection) return res.status(404).json({ error: "Integracija nije pronađena." });
 
   try {
@@ -121,7 +122,7 @@ router.get("/meta/performance", async (req, res) => {
         accessToken: connection.accessToken,
         adAccountId: connection.adAccountId,
       });
-      if (currency) connection = updateConnection(id, { currency });
+      if (currency) connection = updateConnection(id, req.company, { currency });
     }
     const data = await meta.getPerformance(connection, { from, to });
 
@@ -129,7 +130,7 @@ router.get("/meta/performance", async (req, res) => {
     // scoped to just the stores it targets, same date range as the spend
     // query above.
     const wooIds = new Set(connection.targetConnectionIds || []);
-    const targetWoo = getWooConnections().filter((c) => wooIds.has(c.id));
+    const targetWoo = getWooConnections(req.company).filter((c) => wooIds.has(c.id));
     let revenueCurrency = null;
     if (targetWoo.length) {
       const orders = await getOrdersForConnections(targetWoo);

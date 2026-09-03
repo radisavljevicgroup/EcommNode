@@ -29,7 +29,7 @@ import Messages from "./Messages";
 
 const ORDERS_RAIL_ITEMS = [
   { key: "porudzbine", icon: OrdersIcon, label: "Porudžbine" },
-  { key: "poruke", icon: ChatIcon, label: "Poruke" },
+  // { key: "poruke", icon: ChatIcon, label: "Poruke" },
 ];
 
 const PER_PAGE_OPTIONS = [10, 20, 30, 50];

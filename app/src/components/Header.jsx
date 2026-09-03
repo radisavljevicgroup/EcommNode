@@ -9,6 +9,7 @@ import {
   CreditCardIcon,
   LogOutIcon,
   CalendarIcon,
+  ServerIcon,
 } from "../icons";
 import { supabase } from "../lib/supabaseClient";
 
@@ -17,6 +18,7 @@ export const NAV_ITEMS = [
   { route: "porudzbine", label: "Porudžbine", icon: OrdersIcon },
   { route: "analitika", label: "Analitika", icon: ChartIcon },
   { route: "kalendar", label: "Kalendar", icon: CalendarIcon },
+  { route: "it-infrastruktura", label: "IT Infrastruktura", icon: ServerIcon },
   { route: "podesavanja", label: "Podešavanja", icon: GearIcon },
 ];
 

@@ -1,7 +1,9 @@
+import { authHeaders } from "../lib/authHeaders";
+
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000/api";
 
 async function request(path) {
-  const res = await fetch(`${API_BASE}${path}`);
+  const res = await fetch(`${API_BASE}${path}`, { headers: await authHeaders() });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     throw new Error(data.error || "Došlo je do greške.");

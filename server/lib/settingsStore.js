@@ -10,29 +10,32 @@ const DEFAULT_SETTINGS = {
   enabledPremiumTools: [],
 };
 
-const file = createJsonFile("settings.json", DEFAULT_SETTINGS);
-let settings = { ...DEFAULT_SETTINGS, ...file.read() };
+// Keyed by company (see lib/auth.js) — each company gets its own settings
+// instead of one shared global object every account read/wrote.
+const file = createJsonFile("settings.json", {});
+let byCompany = file.read();
 
-function getSettings() {
-  return settings;
+function getSettings(company) {
+  return { ...DEFAULT_SETTINGS, ...(byCompany[company] || {}) };
 }
 
-function updateSettings(patch) {
-  settings = { ...settings, ...patch };
-  file.write(settings);
-  return settings;
+function updateSettings(company, patch) {
+  const next = { ...getSettings(company), ...patch };
+  byCompany = { ...byCompany, [company]: next };
+  file.write(byCompany);
+  return next;
 }
 
-function getStaleOrderThresholdDays() {
-  return settings.staleOrderThresholdDays;
+function getStaleOrderThresholdDays(company) {
+  return getSettings(company).staleOrderThresholdDays;
 }
 
-function isStaleTrackingEnabled() {
-  return settings.staleTrackingEnabled !== false;
+function isStaleTrackingEnabled(company) {
+  return getSettings(company).staleTrackingEnabled !== false;
 }
 
-function isUnfiscalizedTrackingEnabled() {
-  return settings.unfiscalizedTrackingEnabled !== false;
+function isUnfiscalizedTrackingEnabled(company) {
+  return getSettings(company).unfiscalizedTrackingEnabled !== false;
 }
 
 module.exports = {

@@ -4,6 +4,7 @@ const meta = require("../lib/metaMessaging");
 const viber = require("../lib/viberMessaging");
 const store = require("../lib/inboxStore");
 const connectionsStore = require("../lib/inboxConnectionsStore");
+const { requireAuth } = require("../lib/auth");
 
 const router = Router();
 
@@ -231,19 +232,39 @@ router.post("/inbox/webhook/viber/:connectionId", async (req, res) => {
 });
 
 // --- Frontend API --------------------------------------------------------
-router.get("/inbox/conversations", async (req, res) => {
+// inbox_conversations/inbox_messages (Supabase tables) have no company
+// column of their own — a conversation is scoped by matching its page_id
+// against one of the caller's OWN inbox connections (already company-
+// scoped, see inboxConnectionsStore.js), same idea as every JSON-file
+// store elsewhere in the app.
+function companyPageIds(company) {
+  return new Set(connectionsStore.getConnections(company).map((c) => c.pageId || c.id));
+}
+
+function belongsToCompany(conversation, company) {
+  return companyPageIds(company).has(conversation.page_id);
+}
+
+router.get("/inbox/conversations", requireAuth, async (req, res) => {
   try {
     const conversations = await store.listConversations();
-    res.json({ conversations: conversations.map(toPublicConversation) });
+    const pageIds = companyPageIds(req.company);
+    res.json({
+      conversations: conversations
+        .filter((c) => pageIds.has(c.page_id))
+        .map(toPublicConversation),
+    });
   } catch (err) {
     res.status(500).json({ error: err.message || "Ne mogu da učitam konverzacije." });
   }
 });
 
-router.get("/inbox/conversations/:id/messages", async (req, res) => {
+router.get("/inbox/conversations/:id/messages", requireAuth, async (req, res) => {
   try {
     const conversation = await store.getConversation(req.params.id);
-    if (!conversation) return res.status(404).json({ error: "Konverzacija nije pronađena." });
+    if (!conversation || !belongsToCompany(conversation, req.company)) {
+      return res.status(404).json({ error: "Konverzacija nije pronađena." });
+    }
 
     const messages = await store.listMessages(req.params.id);
     res.json({ conversation: toPublicConversation(conversation), messages: messages.map(toPublicMessage) });
@@ -252,8 +273,12 @@ router.get("/inbox/conversations/:id/messages", async (req, res) => {
   }
 });
 
-router.post("/inbox/conversations/:id/read", async (req, res) => {
+router.post("/inbox/conversations/:id/read", requireAuth, async (req, res) => {
   try {
+    const conversation = await store.getConversation(req.params.id);
+    if (!conversation || !belongsToCompany(conversation, req.company)) {
+      return res.status(404).json({ error: "Konverzacija nije pronađena." });
+    }
     await store.markConversationRead(req.params.id);
     res.json({ ok: true });
   } catch (err) {
@@ -268,7 +293,7 @@ function sendErrorMessage(err) {
   return err.message || "Slanje poruke nije uspelo.";
 }
 
-router.post("/inbox/conversations/:id/messages", async (req, res) => {
+router.post("/inbox/conversations/:id/messages", requireAuth, async (req, res) => {
   const { text } = req.body || {};
   if (!text || !text.trim()) {
     return res.status(400).json({ error: "Poruka ne može biti prazna." });
@@ -276,7 +301,9 @@ router.post("/inbox/conversations/:id/messages", async (req, res) => {
 
   try {
     const conversation = await store.getConversation(req.params.id);
-    if (!conversation) return res.status(404).json({ error: "Konverzacija nije pronađena." });
+    if (!conversation || !belongsToCompany(conversation, req.company)) {
+      return res.status(404).json({ error: "Konverzacija nije pronađena." });
+    }
 
     let messageId;
     let outboundSenderId;
@@ -326,11 +353,11 @@ router.post("/inbox/conversations/:id/messages", async (req, res) => {
 // channel with a direct POST (see server/scripts/README or the API docs).
 // The shape matches what a future "Meta Inbox" integration card would
 // submit, so that UI can be added later without changing this contract.
-router.get("/inbox/connections", (req, res) => {
-  res.json({ connections: connectionsStore.getConnections().map(toPublicConnection) });
+router.get("/inbox/connections", requireAuth, (req, res) => {
+  res.json({ connections: connectionsStore.getConnections(req.company).map(toPublicConnection) });
 });
 
-router.post("/inbox/connections", async (req, res) => {
+router.post("/inbox/connections", requireAuth, async (req, res) => {
   const { label, platform, pageId, phoneNumberId, accessToken } = req.body || {};
 
   if (!label || !platform || !accessToken) {
@@ -353,6 +380,7 @@ router.post("/inbox/connections", async (req, res) => {
     pageId: pageId || null,
     phoneNumberId: phoneNumberId || null,
     accessToken,
+    company: req.company,
   };
 
   let webhookWarning = null;
@@ -375,8 +403,10 @@ router.post("/inbox/connections", async (req, res) => {
   res.json({ connection: toPublicConnection(connection), webhookWarning });
 });
 
-router.post("/inbox/connections/:id/update", (req, res) => {
-  const existing = connectionsStore.getConnection(req.params.id);
+router.post("/inbox/connections/:id/update", requireAuth, (req, res) => {
+  const existing = connectionsStore
+    .getConnections(req.company)
+    .find((c) => c.id === req.params.id);
   if (!existing) return res.status(404).json({ error: "Konekcija nije pronađena." });
 
   const { label, pageId, phoneNumberId, accessToken } = req.body || {};
@@ -386,12 +416,12 @@ router.post("/inbox/connections/:id/update", (req, res) => {
   if (phoneNumberId !== undefined) patch.phoneNumberId = phoneNumberId;
   if (accessToken !== undefined) patch.accessToken = accessToken;
 
-  const updated = connectionsStore.updateConnection(req.params.id, patch);
+  const updated = connectionsStore.updateConnection(req.params.id, req.company, patch);
   res.json({ connection: toPublicConnection(updated) });
 });
 
-router.post("/inbox/connections/:id/delete", (req, res) => {
-  const connections = connectionsStore.removeConnection(req.params.id);
+router.post("/inbox/connections/:id/delete", requireAuth, (req, res) => {
+  const connections = connectionsStore.removeConnection(req.params.id, req.company);
   res.json({ connections: connections.map(toPublicConnection) });
 });
 

@@ -36,8 +36,8 @@ const FAILED_PAYMENTS_CRITICAL_COUNT = 10;
 // currently-selected store(s), or every connected store when none is
 // selected — so a GA4/Meta connection targeting a *different* brand's store
 // never surfaces an anomaly while looking at this one.
-async function detectConversionDrops({ from, to, prevFrom, prevTo, storeConnections }) {
-  const ga4Connections = getGa4Connections();
+async function detectConversionDrops({ from, to, prevFrom, prevTo, storeConnections, company }) {
+  const ga4Connections = getGa4Connections(company);
   const anomalies = [];
 
   await Promise.all(
@@ -88,14 +88,14 @@ async function detectConversionDrops({ from, to, prevFrom, prevTo, storeConnecti
   return anomalies;
 }
 
-function linkedMetaConnections(storeConnections) {
-  return getMetaConnections().filter((m) =>
+function linkedMetaConnections(storeConnections, company) {
+  return getMetaConnections(company).filter((m) =>
     (m.targetConnectionIds || []).some((id) => storeConnections.some((c) => c.id === id))
   );
 }
 
-async function detectCpaSpikes({ from, to, prevFrom, prevTo, storeConnections }) {
-  const metaConnections = linkedMetaConnections(storeConnections);
+async function detectCpaSpikes({ from, to, prevFrom, prevTo, storeConnections, company }) {
+  const metaConnections = linkedMetaConnections(storeConnections, company);
   const anomalies = [];
 
   await Promise.all(
@@ -186,15 +186,15 @@ async function detectFailedPayments({ from, to, storeConnections }) {
   return anomalies;
 }
 
-async function detectAnomalies({ from, to, prevFrom, prevTo, connectionId }) {
-  const allStoreConnections = [...getWooConnections(), ...getShopifyConnections()];
+async function detectAnomalies({ from, to, prevFrom, prevTo, connectionId, company }) {
+  const allStoreConnections = [...getWooConnections(company), ...getShopifyConnections(company)];
   const storeConnections = connectionId
     ? allStoreConnections.filter((c) => c.id === connectionId)
     : allStoreConnections;
 
   const [crDrops, cpaSpikes, failedPayments] = await Promise.all([
-    detectConversionDrops({ from, to, prevFrom, prevTo, storeConnections }),
-    detectCpaSpikes({ from, to, prevFrom, prevTo, storeConnections }),
+    detectConversionDrops({ from, to, prevFrom, prevTo, storeConnections, company }),
+    detectCpaSpikes({ from, to, prevFrom, prevTo, storeConnections, company }),
     detectFailedPayments({ from, to, storeConnections }),
   ]);
 

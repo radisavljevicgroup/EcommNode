@@ -17,7 +17,7 @@ const { linkedGa4Connections, computeConversionRate } = require("../lib/conversi
 const router = Router();
 
 function resolveConnections(req) {
-  const all = [...getConnections(), ...getShopifyConnections()];
+  const all = [...getConnections(req.company), ...getShopifyConnections(req.company)];
   const { connectionIds } = req.query;
   if (!connectionIds) return all;
   const ids = connectionIds.split(",").filter(Boolean);
@@ -79,14 +79,14 @@ async function computeCrTrend(connections, { from, to }) {
 // Meta connection can target several stores at once (one ad account
 // running the whole portfolio), so "linked" means at least one overlap,
 // not an exact match.
-function linkedMetaConnections(connections) {
-  return getMetaConnections().filter((m) =>
+function linkedMetaConnections(connections, company) {
+  return getMetaConnections(company).filter((m) =>
     (m.targetConnectionIds || []).some((id) => connections.some((c) => c.id === id))
   );
 }
 
-async function computeCac(connections, allOrders, { from, to }) {
-  const metaConnections = linkedMetaConnections(connections);
+async function computeCac(connections, allOrders, { from, to, company }) {
+  const metaConnections = linkedMetaConnections(connections, company);
   if (!metaConnections.length) return null;
 
   let totalSpend = 0;
@@ -112,8 +112,8 @@ async function computeCac(connections, allOrders, { from, to }) {
   return { value: totalSpend / newCustomers, currency: currency || "RSD" };
 }
 
-async function computeCacTrend(connections, allOrders, { from, to }) {
-  const metaConnections = linkedMetaConnections(connections);
+async function computeCacTrend(connections, allOrders, { from, to, company }) {
+  const metaConnections = linkedMetaConnections(connections, company);
   if (!metaConnections.length) return { unit: "day", series: [], currency: "RSD" };
 
   const spanDays = Math.max((new Date(to) - new Date(from)) / (1000 * 60 * 60 * 24), 1);
@@ -186,7 +186,7 @@ router.get("/analytics/summary", async (req, res) => {
     const { from, to } = req.query;
     const summary = analytics.computeSummary(orders, { from, to });
     summary.cr = await computeConversionRate(connections, { from, to });
-    const cacResult = await computeCac(connections, orders, { from, to });
+    const cacResult = await computeCac(connections, orders, { from, to, company: req.company });
     summary.cac = cacResult?.value ?? null;
     summary.cacCurrency = cacResult?.currency ?? null;
     res.json(summary);
@@ -269,7 +269,7 @@ router.get("/analytics/metric-trend", async (req, res) => {
     }
     const orders = await getOrdersForConnections(connections);
     if (metric === "cac") {
-      return res.json(await computeCacTrend(connections, orders, { from, to }));
+      return res.json(await computeCacTrend(connections, orders, { from, to, company: req.company }));
     }
     res.json(analytics.computeMetricTrend(orders, { from, to }, metric));
   } catch {

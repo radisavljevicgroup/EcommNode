@@ -3,8 +3,8 @@ const { createJsonFile } = require("./jsonFile");
 const file = createJsonFile("shopify-connections.json", []);
 let connections = file.read();
 
-function getConnections() {
-  return connections;
+function getConnections(company) {
+  return connections.filter((c) => c.company === company);
 }
 
 function addConnection(connection) {
@@ -13,10 +13,10 @@ function addConnection(connection) {
   return connections;
 }
 
-function removeConnection(id) {
-  connections = connections.filter((c) => c.id !== id);
+function removeConnection(id, company) {
+  connections = connections.filter((c) => !(c.id === id && c.company === company));
   file.write(connections);
-  return connections;
+  return getConnections(company);
 }
 
 module.exports = { getConnections, addConnection, removeConnection };

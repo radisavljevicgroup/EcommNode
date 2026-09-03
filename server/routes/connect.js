@@ -21,7 +21,7 @@ router.post("/connect", async (req, res) => {
     return res.status(400).json({ error: "URL sajta nije validan." });
   }
 
-  if (getConnections().some((c) => c.siteUrl === normalizedUrl)) {
+  if (getConnections(req.company).some((c) => c.siteUrl === normalizedUrl)) {
     return res.status(400).json({ error: "Ova prodavnica je već povezana." });
   }
 
@@ -52,6 +52,7 @@ router.post("/connect", async (req, res) => {
     siteUrl: normalizedUrl,
     consumerKey,
     consumerSecret,
+    company: req.company,
   };
 
   addConnection(connection);
@@ -64,12 +65,12 @@ router.post("/connect", async (req, res) => {
 
 router.post("/disconnect", (req, res) => {
   const { id } = req.body || {};
-  const connections = removeConnection(id);
+  const connections = removeConnection(id, req.company);
   res.json({ connections: connections.map(toPublic) });
 });
 
 router.get("/status", (req, res) => {
-  res.json({ connections: getConnections().map(toPublic) });
+  res.json({ connections: getConnections(req.company).map(toPublic) });
 });
 
 function toPublic(connection) {

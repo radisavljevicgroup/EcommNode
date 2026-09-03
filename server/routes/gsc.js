@@ -11,8 +11,8 @@ const { getConnections: getWooConnections } = require("../lib/store");
 
 const router = Router();
 
-function toPublic(connection) {
-  const target = getWooConnections().find((c) => c.id === connection.targetConnectionId);
+function toPublic(connection, company) {
+  const target = getWooConnections(company).find((c) => c.id === connection.targetConnectionId);
   return {
     id: connection.id,
     label: connection.label,
@@ -48,7 +48,7 @@ router.post("/gsc/connect", async (req, res) => {
     });
   }
 
-  if (!getWooConnections().some((c) => c.id === targetConnectionId)) {
+  if (!getWooConnections(req.company).some((c) => c.id === targetConnectionId)) {
     return res.status(400).json({ error: "Izabrana ciljna prodavnica ne postoji." });
   }
 
@@ -66,25 +66,26 @@ router.post("/gsc/connect", async (req, res) => {
     serviceAccountJson,
     serviceAccountEmail,
     targetConnectionId,
+    company: req.company,
   };
 
   addConnection(connection);
-  res.json({ connected: true, connection: toPublic(connection) });
+  res.json({ connected: true, connection: toPublic(connection, req.company) });
 });
 
 router.post("/gsc/disconnect", (req, res) => {
   const { id } = req.body || {};
-  const connections = removeConnection(id);
-  res.json({ connections: connections.map(toPublic) });
+  const connections = removeConnection(id, req.company);
+  res.json({ connections: connections.map((c) => toPublic(c, req.company)) });
 });
 
 router.get("/gsc/status", (req, res) => {
-  res.json({ connections: getGscConnections().map(toPublic) });
+  res.json({ connections: getGscConnections(req.company).map((c) => toPublic(c, req.company)) });
 });
 
 router.get("/gsc/performance", async (req, res) => {
   const { id, from, to } = req.query;
-  const connection = getConnection(id);
+  const connection = getConnection(id, req.company);
   if (!connection) return res.status(404).json({ error: "Integracija nije pronađena." });
 
   try {

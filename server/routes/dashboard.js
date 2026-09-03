@@ -45,14 +45,14 @@ function periodRevenueOrders(allOrders, from, to) {
 // Only Meta connections actually targeting one of the brand-filtered
 // stores contribute — a brand's dashboard must never blend in another
 // brand's ad spend just because both happen to be connected.
-function linkedMetaConnections(storeConnections) {
-  return getMetaConnections().filter((m) =>
+function linkedMetaConnections(storeConnections, company) {
+  return getMetaConnections(company).filter((m) =>
     (m.targetConnectionIds || []).some((id) => storeConnections.some((c) => c.id === id))
   );
 }
 
-function resolveStoreConnections(connectionId) {
-  const all = [...getWooConnections(), ...getShopifyConnections()];
+function resolveStoreConnections(connectionId, company) {
+  const all = [...getWooConnections(company), ...getShopifyConnections(company)];
   return connectionId ? all.filter((c) => c.id === connectionId) : all;
 }
 
@@ -62,14 +62,14 @@ router.get("/dashboard/summary", async (req, res) => {
   const { connectionId } = req.query;
 
   try {
-    const storeConnections = resolveStoreConnections(connectionId);
+    const storeConnections = resolveStoreConnections(connectionId, req.company);
     const allOrders = storeConnections.length ? await getOrdersForConnections(storeConnections) : [];
     const currency = allOrders[0]?.currency || "RSD";
 
     const curr = periodRevenueOrders(allOrders, from, to);
     const prev = periodRevenueOrders(allOrders, prevFrom, prevTo);
 
-    const metaConnections = linkedMetaConnections(storeConnections);
+    const metaConnections = linkedMetaConnections(storeConnections, req.company);
     let spendCurr = 0;
     let spendPrev = 0;
     // Pixel-tracked purchase value attributed to the ads themselves
@@ -146,7 +146,7 @@ router.get("/dashboard/anomalies", async (req, res) => {
   const { connectionId } = req.query;
 
   try {
-    const anomalies = await detectAnomalies({ from, to, prevFrom, prevTo, connectionId });
+    const anomalies = await detectAnomalies({ from, to, prevFrom, prevTo, connectionId, company: req.company });
     res.json({ anomalies });
   } catch (err) {
     res.status(400).json({ error: "Ne mogu da izračunam anomalije." });

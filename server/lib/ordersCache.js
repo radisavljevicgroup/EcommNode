@@ -136,8 +136,8 @@ function getOrdersForConnectionsTagged(connections) {
 // are already resolved (just not successfully), and completed ones are done.
 const STALE_STATUSES = ["pending", "processing"];
 
-function getStaleOrders(connections, { page, perPage }) {
-  const thresholdDays = getStaleOrderThresholdDays();
+function getStaleOrders(connections, { page, perPage, company }) {
+  const thresholdDays = getStaleOrderThresholdDays(company);
   const cutoff = Date.now() - thresholdDays * 24 * 60 * 60 * 1000;
 
   const all = getOrdersForConnections(connections);

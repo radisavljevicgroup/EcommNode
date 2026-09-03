@@ -1,23 +1,26 @@
 // Tracks which of our Facebook Pages / Instagram business accounts /
-// WhatsApp numbers belongs to which brand (Parker, Papagaj, Maped, ...) —
-// same shape as store.js (WooCommerce) and metaStore.js (Meta Ads): a flat
-// JSON file, one row per connected channel.
+// WhatsApp numbers / Viber bots belongs to which brand — same shape as
+// store.js (WooCommerce) and metaStore.js (Meta Ads): a flat JSON file,
+// one row per connected channel.
 const { createJsonFile } = require("./jsonFile");
 
 const file = createJsonFile("inbox-connections.json", []);
 let connections = file.read();
 
-function getConnections() {
-  return connections;
+// Company-scoped — the merchant-facing list/add/remove/update routes.
+function getConnections(company) {
+  return connections.filter((c) => c.company === company);
 }
 
+// The next four lookups are deliberately NOT company-scoped: an inbound
+// webhook (see routes/inbox.js) has no logged-in caller to scope by — it
+// only has a platform id (Page id / phone_number_id / Viber connection id)
+// and has to resolve which brand/company that belongs to *from* the
+// connection itself, before a company is even known.
 function getConnection(id) {
   return connections.find((c) => c.id === id) || null;
 }
 
-// A Facebook Page and its linked Instagram business account normally
-// share one Page Access Token but have two different ids — so lookups are
-// always platform-scoped, never just "by pageId" alone.
 function findByPageId(platform, pageId) {
   return connections.find((c) => c.platform === platform && c.pageId === pageId) || null;
 }
@@ -32,16 +35,18 @@ function addConnection(connection) {
   return connections;
 }
 
-function removeConnection(id) {
-  connections = connections.filter((c) => c.id !== id);
+function removeConnection(id, company) {
+  connections = connections.filter((c) => !(c.id === id && c.company === company));
   file.write(connections);
-  return connections;
+  return getConnections(company);
 }
 
-function updateConnection(id, patch) {
-  connections = connections.map((c) => (c.id === id ? { ...c, ...patch } : c));
+function updateConnection(id, company, patch) {
+  connections = connections.map((c) =>
+    c.id === id && c.company === company ? { ...c, ...patch } : c
+  );
   file.write(connections);
-  return getConnection(id);
+  return connections.find((c) => c.id === id && c.company === company) || null;
 }
 
 module.exports = {

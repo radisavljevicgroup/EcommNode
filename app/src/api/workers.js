@@ -1,16 +1,6 @@
-import { supabase } from "../lib/supabaseClient";
+import { authHeaders } from "../lib/authHeaders";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000/api";
-
-async function authHeaders() {
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  return {
-    "Content-Type": "application/json",
-    Authorization: `Bearer ${session?.access_token || ""}`,
-  };
-}
 
 export async function fetchWorkers() {
   const res = await fetch(`${API_BASE}/workers`, { headers: await authHeaders() });

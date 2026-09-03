@@ -31,7 +31,7 @@ function validateEventInput(body, categories) {
 }
 
 router.get("/calendar/categories", (req, res) => {
-  res.json({ categories: getCategories() });
+  res.json({ categories: getCategories(req.company) });
 });
 
 router.post("/calendar/categories", (req, res) => {
@@ -42,12 +42,12 @@ router.post("/calendar/categories", (req, res) => {
   if (!color || typeof color !== "string") {
     return res.status(400).json({ error: "Boja kalendara je obavezna." });
   }
-  const category = addCategory({ name: name.trim(), color });
+  const category = addCategory(req.company, { name: name.trim(), color });
   res.json({ category });
 });
 
 router.patch("/calendar/categories/:id", (req, res) => {
-  const categories = getCategories();
+  const categories = getCategories(req.company);
   if (!categories.some((c) => c.id === req.params.id)) {
     return res.status(404).json({ error: "Kalendar nije pronađen." });
   }
@@ -55,16 +55,16 @@ router.patch("/calendar/categories/:id", (req, res) => {
   const patch = {};
   if (name !== undefined) patch.name = String(name).trim();
   if (color !== undefined) patch.color = color;
-  const category = updateCategory(req.params.id, patch);
+  const category = updateCategory(req.company, req.params.id, patch);
   res.json({ category });
 });
 
 router.delete("/calendar/categories/:id", (req, res) => {
-  const categories = getCategories();
+  const categories = getCategories(req.company);
   if (!categories.some((c) => c.id === req.params.id)) {
     return res.status(404).json({ error: "Kalendar nije pronađen." });
   }
-  const { error } = deleteCategory(req.params.id);
+  const { error } = deleteCategory(req.company, req.params.id);
   if (error === "has-events") {
     return res
       .status(400)
@@ -78,16 +78,16 @@ router.get("/calendar/events", (req, res) => {
   if (!DATE_RE.test(from || "") || !DATE_RE.test(to || "")) {
     return res.status(400).json({ error: "from i to su obavezni, u formatu GGGG-MM-DD." });
   }
-  res.json({ events: getEventsInRange(from, to) });
+  res.json({ events: getEventsInRange(req.company, from, to) });
 });
 
 router.post("/calendar/events", (req, res) => {
-  const categories = getCategories();
+  const categories = getCategories(req.company);
   const error = validateEventInput(req.body, categories);
   if (error) return res.status(400).json({ error });
 
   const { title, date, allDay, startTime, endTime, categoryId, notes } = req.body;
-  const event = addEvent({
+  const event = addEvent(req.company, {
     title: title.trim(),
     date,
     allDay: Boolean(allDay),
@@ -100,13 +100,13 @@ router.post("/calendar/events", (req, res) => {
 });
 
 router.patch("/calendar/events/:id", (req, res) => {
-  const categories = getCategories();
+  const categories = getCategories(req.company);
   const merged = { ...req.body };
   const error = validateEventInput(merged, categories);
   if (error) return res.status(400).json({ error });
 
   const { title, date, allDay, startTime, endTime, categoryId, notes } = merged;
-  const event = updateEvent(req.params.id, {
+  const event = updateEvent(req.company, req.params.id, {
     title: title.trim(),
     date,
     allDay: Boolean(allDay),
@@ -120,7 +120,7 @@ router.patch("/calendar/events/:id", (req, res) => {
 });
 
 router.delete("/calendar/events/:id", (req, res) => {
-  deleteEvent(req.params.id);
+  deleteEvent(req.company, req.params.id);
   res.json({ ok: true });
 });
 

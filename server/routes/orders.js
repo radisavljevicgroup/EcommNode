@@ -21,7 +21,7 @@ function parseStatus(req) {
 }
 
 router.get("/orders", async (req, res) => {
-  const connections = [...getConnections(), ...getShopifyConnections()];
+  const connections = [...getConnections(req.company), ...getShopifyConnections(req.company)];
   if (connections.length === 0) {
     return res.status(401).json({ error: "Nisi povezan ni sa jednom prodavnicom." });
   }
@@ -54,7 +54,7 @@ router.get("/orders", async (req, res) => {
   // live WooCommerce API.
   if (stale === "true" || stale === "1") {
     try {
-      const result = await getStaleOrders(targets, { page, perPage });
+      const result = await getStaleOrders(targets, { page, perPage, company: req.company });
       return res.json(result);
     } catch {
       return res.status(400).json({ error: "Ne mogu da učitam zastarele porudžbine." });
@@ -87,10 +87,10 @@ router.get("/orders", async (req, res) => {
 });
 
 router.get("/orders/stale-count", async (req, res) => {
-  if (!isStaleTrackingEnabled()) return res.json({ count: 0 });
-  const connections = [...getConnections(), ...getShopifyConnections()];
+  if (!isStaleTrackingEnabled(req.company)) return res.json({ count: 0 });
+  const connections = [...getConnections(req.company), ...getShopifyConnections(req.company)];
   try {
-    const result = await getStaleOrders(connections, { page: 1, perPage: 1 });
+    const result = await getStaleOrders(connections, { page: 1, perPage: 1, company: req.company });
     res.json({ count: result.pagination.total });
   } catch {
     res.status(400).json({ error: "Ne mogu da izračunam broj zastarelih porudžbina." });
@@ -98,8 +98,8 @@ router.get("/orders/stale-count", async (req, res) => {
 });
 
 router.get("/orders/unfiscalized-count", async (req, res) => {
-  if (!isUnfiscalizedTrackingEnabled()) return res.json({ count: 0 });
-  const connections = [...getConnections(), ...getShopifyConnections()];
+  if (!isUnfiscalizedTrackingEnabled(req.company)) return res.json({ count: 0 });
+  const connections = [...getConnections(req.company), ...getShopifyConnections(req.company)];
   try {
     const result = await getUnfiscalizedOrders(connections, { page: 1, perPage: 1 });
     res.json({ count: result.pagination.total });

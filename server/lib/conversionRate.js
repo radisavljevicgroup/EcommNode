@@ -12,7 +12,9 @@ const analytics = require("./analytics");
 // them contribute; stores with no GA4 link are silently excluded rather
 // than pulling the blended rate toward zero.
 function linkedGa4Connections(connections) {
-  return getGa4Connections().filter((g) => connections.some((c) => c.id === g.targetConnectionId));
+  return getGa4Connections(connections[0]?.company).filter((g) =>
+    connections.some((c) => c.id === g.targetConnectionId)
+  );
 }
 
 async function computeConversionRate(connections, { from, to }) {

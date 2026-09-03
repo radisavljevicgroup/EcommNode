@@ -4,6 +4,7 @@ import Dashboard from "./pages/Dashboard";
 import Orders from "./pages/Orders";
 import Calendar from "./pages/Calendar";
 import Analytics from "./pages/Analytics";
+import ItInfrastruktura from "./pages/ItInfrastruktura";
 import Settings from "./pages/Settings";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
@@ -139,6 +140,8 @@ export default function App() {
         <Calendar />
       ) : route === "analitika" ? (
         <Analytics />
+      ) : route === "it-infrastruktura" ? (
+        <ItInfrastruktura />
       ) : (
         <Dashboard />
       )}

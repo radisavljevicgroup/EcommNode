@@ -4,7 +4,7 @@ const { getSettings, updateSettings } = require("../lib/settingsStore");
 const router = Router();
 
 router.get("/settings", (req, res) => {
-  res.json(getSettings());
+  res.json(getSettings(req.company));
 });
 
 router.put("/settings", (req, res) => {
@@ -39,7 +39,7 @@ router.put("/settings", (req, res) => {
     patch.enabledPremiumTools = enabledPremiumTools;
   }
 
-  res.json(updateSettings(patch));
+  res.json(updateSettings(req.company, patch));
 });
 
 module.exports = router;
