@@ -10,11 +10,16 @@
 * {
   box-sizing: border-box;
 }
+html {
+  overflow-x: hidden;
+}
 body {
   margin: 0;
   font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   background: #f5f5f5;
   color: var(--text-dark);
+  overflow-x: hidden;
+  max-width: 100vw;
 }
 
 .topbar {
@@ -652,10 +657,20 @@ body {
     display: none;
   }
 
+  /* Right-anchored to the triggering icon instead of centered under it —
+     premium tools with a submenu are always appended last in the rail
+     (see Analytics.jsx), so they land toward the row's right/wrapped
+     edge, and a centered popover of this width would run past the
+     viewport's right edge there (widening the whole page horizontally,
+     since nothing clips unpositioned absolute overflow). Anchoring the
+     submenu's own right edge to the icon's keeps it growing leftward,
+     within bounds. */
   .icon-rail-submenu {
-    left: 50%;
+    left: auto;
+    right: 0;
     top: 100%;
-    transform: translate(-50%, 4px);
+    max-width: calc(100vw - 32px);
+    transform: translateY(4px);
   }
 
   .icon-rail-item:hover .icon-rail-submenu,
@@ -663,7 +678,7 @@ body {
     opacity: 1;
     visibility: visible;
     pointer-events: auto;
-    transform: translate(-50%, 10px);
+    transform: translateY(10px);
   }
 }
 
@@ -2285,6 +2300,9 @@ body {
   }
 
   .filter-tabs {
+    display: flex;
+    width: 100%;
+    min-width: 0;
     max-width: 100%;
     overflow-x: auto;
     flex-wrap: nowrap;
