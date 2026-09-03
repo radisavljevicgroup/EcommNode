@@ -182,6 +182,101 @@ body {
   border-radius: 8px;
 }
 
+.mobile-nav-toggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text-dark);
+  cursor: pointer;
+}
+
+.mobile-nav-toggle svg {
+  width: 20px;
+  height: 20px;
+  stroke: currentColor;
+}
+
+.mobile-nav-backdrop {
+  position: fixed;
+  inset: 0;
+  border: none;
+  padding: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 45;
+  cursor: default;
+}
+
+.mobile-nav-sheet {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: min(78vw, 300px);
+  background: #ffffff;
+  box-shadow: 2px 0 20px rgba(0, 0, 0, 0.18);
+  z-index: 46;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 70px 12px 20px;
+  overflow-y: auto;
+}
+
+.mobile-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: none;
+  background: none;
+  color: var(--text-dark);
+  font-size: 15px;
+  font-weight: 500;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.mobile-nav-item svg {
+  width: 19px;
+  height: 19px;
+  stroke: currentColor;
+  flex-shrink: 0;
+}
+
+.mobile-nav-item.active {
+  background: var(--purple-light);
+  color: var(--purple);
+  font-weight: 600;
+}
+
+@media (max-width: 900px) {
+  .topbar {
+    padding: 12px 16px;
+  }
+
+  .nav-pill {
+    display: none;
+  }
+
+  .mobile-nav-toggle {
+    display: flex;
+  }
+}
+
+@media (max-width: 380px) {
+  .logo-word {
+    display: none;
+  }
+}
+
 /* page body just for context */
 .page-body {
   max-width: 1100px;
@@ -221,6 +316,15 @@ body {
   border-radius: 12px;
   margin-bottom: 20px;
   overflow: hidden;
+}
+
+@media (max-width: 640px) {
+  .page-body,
+  .settings-wrap {
+    margin-top: 20px;
+    margin-bottom: 40px;
+    padding: 0 16px;
+  }
 }
 
 .settings-card-title {
@@ -270,6 +374,18 @@ body {
 .settings-input:focus {
   outline: none;
   border-color: var(--purple);
+}
+
+@media (max-width: 480px) {
+  .settings-row {
+    flex-wrap: wrap;
+    row-gap: 10px;
+  }
+
+  .settings-input {
+    min-width: 0;
+    flex: 1 1 100%;
+  }
 }
 
 .toggle {
@@ -508,6 +624,57 @@ body {
   height: 16px;
   stroke: currentColor;
   flex-shrink: 0;
+}
+
+/* Below 900px the rail moves from a sticky left column above the page
+   content to a horizontal bar above it, and submenus (Analitika's premium
+   tool tabs) additionally reveal for the active item — not just on
+   :hover, which touch screens can't rely on. */
+@media (max-width: 900px) {
+  .settings-layout,
+  .orders-layout {
+    flex-direction: column;
+  }
+
+  .icon-rail {
+    position: static;
+    flex-direction: row;
+    flex-wrap: wrap;
+    width: 100%;
+    justify-content: center;
+  }
+
+  .icon-rail-item:hover .icon-rail-btn {
+    transform: none;
+  }
+
+  .icon-rail-tooltip {
+    display: none;
+  }
+
+  .icon-rail-submenu {
+    left: 50%;
+    top: 100%;
+    transform: translate(-50%, 4px);
+  }
+
+  .icon-rail-item:hover .icon-rail-submenu,
+  .icon-rail-item.active .icon-rail-submenu {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transform: translate(-50%, 10px);
+  }
+}
+
+@media (max-width: 640px) {
+  .settings-layout,
+  .orders-layout {
+    margin-top: 20px;
+    margin-bottom: 40px;
+    padding: 0 16px;
+    gap: 14px;
+  }
 }
 
 /* account menu card */
@@ -2103,6 +2270,51 @@ body {
   margin-top: 16px;
 }
 
+@media (max-width: 560px) {
+  .orders-page-header {
+    align-items: stretch;
+  }
+
+  .orders-search,
+  .orders-search input {
+    width: 100%;
+  }
+
+  .orders-search input {
+    min-width: 0;
+  }
+
+  .filter-tabs {
+    max-width: 100%;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+  }
+
+  .filter-tab {
+    flex-shrink: 0;
+  }
+
+  .orders-toolbar-secondary {
+    justify-content: flex-start;
+  }
+
+  .order-card-header {
+    flex-wrap: wrap;
+    row-gap: 10px;
+  }
+
+  .order-card-id {
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+
+  .order-card-meta {
+    flex-basis: 100%;
+    justify-content: space-between;
+    padding-left: 34px;
+  }
+}
+
 .orders-items-table-wrap {
   overflow-x: auto;
   margin-top: 18px;
@@ -2563,6 +2775,15 @@ body {
   grid-template-columns: repeat(3, 1fr);
   gap: 16px;
   margin-bottom: 24px;
+}
+
+@media (max-width: 1024px) {
+  .quadrant-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .quadrant-card-wide {
+    grid-column: span 2;
+  }
 }
 
 @media (max-width: 720px) {
@@ -3408,6 +3629,17 @@ body {
   }
 }
 
+@media (max-width: 560px) {
+  .home-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .home-kpi-combo {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+}
+
 .home-kpi-card {
   background: #ffffff;
   border: 1px solid var(--border);
@@ -3620,6 +3852,31 @@ body {
 @media (max-width: 780px) {
   .landing-nav-links {
     display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .landing-topbar {
+    padding: 14px 16px;
+    gap: 10px;
+  }
+
+  .landing-topbar-cta {
+    gap: 8px;
+  }
+
+  .landing-topbar-cta .landing-btn-primary,
+  .landing-topbar-cta .landing-btn-ghost {
+    padding: 9px 12px;
+    font-size: 12.5px;
+  }
+}
+
+@media (max-width: 360px) {
+  .landing-topbar {
+    flex-wrap: wrap;
+    justify-content: center;
+    row-gap: 10px;
   }
 }
 
@@ -4817,6 +5074,49 @@ body {
   grid-template-columns: 56px repeat(7, 1fr);
   max-height: 640px;
   overflow-y: auto;
+}
+
+@media (max-width: 900px) {
+  .cal-page {
+    flex-direction: column;
+    padding: 0 16px;
+    margin: 20px auto 40px;
+  }
+
+  .cal-sidebar {
+    width: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  /* The week/day grid's columns can't shrink below a usable width, so it
+     scrolls horizontally as one unit instead — header, all-day row and
+     hour body share this scroll position because they're all direct
+     children of the same .cal-week box. */
+  .cal-week {
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .cal-week-header,
+  .cal-week-allday,
+  .cal-week-body {
+    min-width: 620px;
+  }
+
+  .cal-month-grid {
+    grid-auto-rows: 84px;
+  }
+
+  .cal-month-cell {
+    padding: 3px;
+  }
+
+  .cal-month-day-num {
+    width: 18px;
+    height: 18px;
+    font-size: 11px;
+  }
 }
 
 .cal-week-hours {

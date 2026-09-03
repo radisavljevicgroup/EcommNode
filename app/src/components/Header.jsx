@@ -10,6 +10,8 @@ import {
   LogOutIcon,
   CalendarIcon,
   ServerIcon,
+  MenuIcon,
+  CloseIcon,
 } from "../icons";
 import { supabase } from "../lib/supabaseClient";
 
@@ -24,6 +26,7 @@ export const NAV_ITEMS = [
 
 export default function Header({ route, onNavigate, photo, fullName, onOpenSettingsSection }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const menuRef = useRef(null);
 
   useEffect(() => {
@@ -34,6 +37,13 @@ export default function Header({ route, onNavigate, photo, fullName, onOpenSetti
     document.addEventListener("mousedown", onClickOutside);
     return () => document.removeEventListener("mousedown", onClickOutside);
   }, [menuOpen]);
+
+  // Closing on route change covers both a nav tap and the browser back/
+  // forward buttons — anywhere the visible page changes out from under an
+  // open mobile drawer.
+  useEffect(() => {
+    setMobileNavOpen(false);
+  }, [route]);
 
   const goToSettings = (section) => {
     setMenuOpen(false);
@@ -48,6 +58,16 @@ export default function Header({ route, onNavigate, photo, fullName, onOpenSetti
 
   return (
     <header className="topbar">
+      <button
+        type="button"
+        className="mobile-nav-toggle"
+        aria-label={mobileNavOpen ? "Zatvori meni" : "Otvori meni"}
+        aria-expanded={mobileNavOpen}
+        onClick={() => setMobileNavOpen((v) => !v)}
+      >
+        {mobileNavOpen ? <CloseIcon /> : <MenuIcon />}
+      </button>
+
       <Logo />
 
       <nav className="nav-pill">
@@ -95,6 +115,29 @@ export default function Header({ route, onNavigate, photo, fullName, onOpenSetti
           </div>
         )}
       </div>
+
+      {mobileNavOpen && (
+        <>
+          <button
+            type="button"
+            className="mobile-nav-backdrop"
+            aria-label="Zatvori meni"
+            onClick={() => setMobileNavOpen(false)}
+          />
+          <nav className="mobile-nav-sheet">
+            {NAV_ITEMS.map(({ route: r, label, icon: Icon }) => (
+              <button
+                key={r}
+                className={"mobile-nav-item" + (route === r ? " active" : "")}
+                onClick={() => onNavigate(r)}
+              >
+                <Icon />
+                {label}
+              </button>
+            ))}
+          </nav>
+        </>
+      )}
     </header>
   );
 }
