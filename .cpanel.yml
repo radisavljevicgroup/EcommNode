@@ -1,0 +1,6 @@
+---
+deployment:
+  tasks:
+    - export DEPLOYPATH=/home/radisavl/api.ecommnode.com/
+    - /bin/cp -R /home/radisavl/repos/ecommnode/server/* $DEPLOYPATH
+    - /opt/alt/alt-nodejs24/root/bin/npm install --prefix $DEPLOYPATH
