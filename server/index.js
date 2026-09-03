@@ -24,12 +24,26 @@ const app = express();
 const PORT = process.env.PORT || 4000;
 
 // Vite dev server can pick a different port if the default one is busy
-// (5173, 5174, ...), so allow any localhost origin in dev instead of a
-// single fixed port. Set CLIENT_ORIGIN in .env to lock this down.
+// (5173, 5174, ...), so any localhost origin is always allowed regardless
+// of CLIENT_ORIGIN — otherwise setting CLIENT_ORIGIN to lock production
+// down to the real domain would also lock out every future local dev
+// session against this same (production) API.
 const LOCALHOST_ORIGIN = /^http:\/\/localhost:\d+$/;
-const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || LOCALHOST_ORIGIN;
+const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN;
 
-app.use(cors({ origin: CLIENT_ORIGIN }));
+app.use(
+  cors({
+    origin(origin, callback) {
+      // No Origin header (curl, server-to-server, same-origin) — nothing
+      // for CORS to enforce.
+      if (!origin) return callback(null, true);
+      if (LOCALHOST_ORIGIN.test(origin)) return callback(null, true);
+      if (CLIENT_ORIGIN && origin === CLIENT_ORIGIN) return callback(null, true);
+      if (!CLIENT_ORIGIN) return callback(null, true);
+      callback(new Error("Not allowed by CORS"));
+    },
+  })
+);
 // Captures the exact request bytes alongside the parsed body — the Meta
 // inbox webhook (routes/inbox.js) needs the raw payload to verify
 // X-Hub-Signature-256, since re-serializing the parsed JSON isn't
