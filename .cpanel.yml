@@ -4,8 +4,5 @@ deployment:
     - export DEPLOYPATH=/home/radisavl/api.ecommnode.com/
     - /bin/cp -R /home/radisavl/repos/ecommnode/server/* $DEPLOYPATH
     - /opt/alt/alt-nodejs24/root/bin/npm install --prefix $DEPLOYPATH
-    - export NPM=/opt/alt/alt-nodejs24/root/bin/npm
-    - cd /home/radisavl/repos/ecommnode/app && $NPM install
-    - cd /home/radisavl/repos/ecommnode/app && VITE_API_BASE_URL=https://api.ecommnode.com/api $NPM run build
     - export DEPLOYPATH2=/home/radisavl/ecommnode.com/
     - /bin/cp -R /home/radisavl/repos/ecommnode/app/dist/* $DEPLOYPATH2
