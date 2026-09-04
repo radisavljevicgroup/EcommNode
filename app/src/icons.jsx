@@ -13,6 +13,14 @@ export const HomeIcon = () => (
   </svg>
 );
 
+export const MenuIcon = () => (
+  <svg {...iconProps}>
+    <path d="M4 7h16" />
+    <path d="M4 12h16" />
+    <path d="M4 17h16" />
+  </svg>
+);
+
 export const ChartIcon = () => (
   <svg {...iconProps}>
     <path d="M3 3v18h18" />

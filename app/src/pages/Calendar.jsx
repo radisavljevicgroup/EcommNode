@@ -255,6 +255,8 @@ export default function Calendar() {
           </div>
         </div>
 
+        {loading && <div className="cal-loading-hint">Učitavanje…</div>}
+
         {error && <div className="woo-error">{error}</div>}
 
         {view === "week" ? (
@@ -279,7 +281,6 @@ export default function Calendar() {
           />
         )}
 
-        {loading && <div className="cal-loading-hint">Učitavanje…</div>}
       </div>
 
       {modalState && (
