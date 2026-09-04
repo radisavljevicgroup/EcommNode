@@ -5,4 +5,5 @@ deployment:
     - /bin/cp -R /home/radisavl/repositories/ecommnode/server/* $DEPLOYPATH
     - /opt/alt/alt-nodejs24/root/bin/npm install --prefix $DEPLOYPATH
     - export DEPLOYPATH2=/home/radisavl/ecommnode.com/
+    - /bin/mkdir -p $DEPLOYPATH2
     - /bin/cp -R /home/radisavl/repositories/ecommnode/app/dist/* $DEPLOYPATH2
