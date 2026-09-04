@@ -20,7 +20,6 @@ export default function Settings({ onPhotoChange, initialSection, onSectionConsu
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [pib, setPib] = useState("");
-  const [company, setCompany] = useState("");
   const [photo, setPhoto] = useState("");
   const [roleName, setRoleName] = useState("");
   const [saving, setSaving] = useState(false);
@@ -68,7 +67,7 @@ export default function Settings({ onPhotoChange, initialSection, onSectionConsu
       setEmail(user.email || "");
       supabase
         .from("users")
-        .select("full_name, phone, pib, company, photo, roles(name)")
+        .select("full_name, phone, pib, photo, roles(name)")
         .eq("id", user.id)
         .single()
         .then(({ data: profile, error }) => {
@@ -76,7 +75,6 @@ export default function Settings({ onPhotoChange, initialSection, onSectionConsu
           setFullName(profile.full_name || "");
           setPhone(profile.phone || "");
           setPib(profile.pib || "");
-          setCompany(profile.company || "");
           setPhoto(profile.photo || "");
           setRoleName(profile.roles?.name || "");
         })
@@ -133,9 +131,19 @@ export default function Settings({ onPhotoChange, initialSection, onSectionConsu
     try {
       const { error } = await supabase
         .from("users")
-        .update({ full_name: fullName, phone, pib: pib.trim(), company, photo })
+        .update({ full_name: fullName, phone, pib: pib.trim(), photo })
         .eq("id", authUser.id);
-      if (error) throw error;
+      if (error) {
+        // Postgres unique_violation — pib already belongs to another
+        // registration. token (not editable here) is what actually scopes
+        // data, but pib itself must stay one-per-real-company.
+        if (error.code === "23505") {
+          throw new Error(
+            "Ovaj PIB je već registrovan na drugom nalogu. Ako si deo te firme, zamoli vlasnika naloga da te doda kao radnika umesto da se registruješ posebno."
+          );
+        }
+        throw error;
+      }
 
       const emailChanged = email.trim() && email.trim() !== authUser.email;
       if (emailChanged) {
@@ -359,15 +367,9 @@ export default function Settings({ onPhotoChange, initialSection, onSectionConsu
                       />
                       <InputRow
                         label="PIB"
-                        desc="Poreski identifikacioni broj, 8 ili 9 cifara"
+                        desc="Poreski identifikacioni broj, 8 ili 9 cifara — jedinstven po firmi"
                         value={pib}
                         onChange={(v) => setPib(v.replace(/[^\d]/g, ""))}
-                      />
-                      <InputRow
-                        label="Kompanija"
-                        desc="Naziv firme, prikazuje se na fakturama"
-                        value={company}
-                        onChange={setCompany}
                       />
                       <div className="settings-row">
                         <div>
@@ -476,9 +478,9 @@ export default function Settings({ onPhotoChange, initialSection, onSectionConsu
                         </div>
                         <div className="settings-row">
                           <div>
-                            <p className="settings-row-label">Firma i PIB</p>
+                            <p className="settings-row-label">Firma</p>
                             <p className="settings-row-desc">
-                              Preuzima se automatski sa matičnog naloga{company ? ` (${company})` : ""}
+                              Radnik automatski pripada istoj firmi kao nalog koji ga je dodao.
                             </p>
                           </div>
                         </div>

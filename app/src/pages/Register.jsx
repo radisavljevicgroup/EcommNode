@@ -68,9 +68,19 @@ export default function Register({ onNavigate }) {
       });
 
       if (signUpError) {
+        // pib is unique per real company (see supabase-pib-unique-
+        // migration.sql) — the signup trigger's insert fails if it's
+        // already taken, which Supabase Auth surfaces as a generic
+        // "Database error saving new user" rather than the actual
+        // Postgres constraint name.
+        const isDuplicatePib =
+          /database error saving new user/i.test(signUpError.message) ||
+          /users_pib_key|duplicate key value/i.test(signUpError.message);
         setError(
           signUpError.message === "User already registered"
             ? "Nalog sa ovim mejlom već postoji."
+            : isDuplicatePib
+            ? "Ovaj PIB je već registrovan na drugom nalogu. Ako si deo te firme, zamoli vlasnika naloga da te doda kao radnika umesto da se registruješ posebno."
             : signUpError.message
         );
         return;

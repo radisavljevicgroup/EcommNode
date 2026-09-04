@@ -4,6 +4,17 @@
 // accounts (fixed 2026-09-03: a second real account could see the first
 // company's WooCommerce/Eurocom/orders data). Mirrors the check
 // routes/workers.js already did for its own endpoints.
+//
+// Scoped by the random per-user `token` column, not the old free-text
+// `company` column (fixed 2026-09-04: that column was a plain
+// user-editable Settings field, so anyone could type in another
+// company's name and see their entire dataset — see
+// supabase-pib-unique-migration.sql). token is deliberately NOT the
+// account's pib — pib is public information (invoices, APR registry), so
+// even locked down from direct writes it's a weaker thing to build
+// isolation on than an opaque random value. It can only be set by the
+// column default (fresh signup) or the admin-privileged worker-invite
+// flow, never by the account holder directly.
 const { getSupabaseAdmin } = require("./supabaseAdmin");
 
 async function requireAuth(req, res, next) {
@@ -24,7 +35,7 @@ async function requireAuth(req, res, next) {
 
   const { data: profile, error: profileError } = await supabaseAdmin
     .from("users")
-    .select("company")
+    .select("token")
     .eq("id", callerData.user.id)
     .single();
   if (profileError || !profile) {
@@ -32,12 +43,7 @@ async function requireAuth(req, res, next) {
   }
 
   req.userId = callerData.user.id;
-  // Kept as whatever's on the profile (including null/"") rather than
-  // defaulted to something shared — an account with no company set gets
-  // its own empty, isolated data space instead of ever seeing someone
-  // else's, and instead of ever being silently merged with another
-  // uncofigured account.
-  req.company = profile.company;
+  req.company = profile.token;
   next();
 }
 
