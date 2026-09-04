@@ -17,6 +17,7 @@
     "@woocommerce/woocommerce-rest-api": "^1.0.2",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
+    "exceljs": "^4.4.0",
     "express": "^5.2.1"
   }
 }

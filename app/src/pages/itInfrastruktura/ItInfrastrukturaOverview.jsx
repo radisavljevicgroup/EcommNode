@@ -18,7 +18,7 @@ export default function ItInfrastrukturaOverview({ tabs = [], onNavigate }) {
           {tabs.map((tab) => (
             <div className="integration-grid-card" key={tab.key}>
               <span className="integration-badge">
-                <tab.icon />
+                {tab.logo ? <img src={tab.logo} alt={tab.label} /> : <tab.icon />}
               </span>
               <p className="integration-grid-name">{tab.label}</p>
               <button
