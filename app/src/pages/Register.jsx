@@ -30,6 +30,7 @@ export default function Register({ onNavigate }) {
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
+  const [companyName, setCompanyName] = useState("");
   const [pib, setPib] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -44,6 +45,10 @@ export default function Register({ onNavigate }) {
     setError("");
     setNotice("");
 
+    if (!companyName.trim()) {
+      setError("Naziv firme je obavezan.");
+      return;
+    }
     if (!/^\d{8,9}$/.test(pib.trim())) {
       setError("PIB mora imati 8 ili 9 cifara.");
       return;
@@ -63,19 +68,24 @@ export default function Register({ onNavigate }) {
         email,
         password,
         options: {
-          data: { full_name: fullName, phone, pib: pib.trim() },
+          data: {
+            full_name: fullName,
+            phone,
+            pib: pib.trim(),
+            company_name: companyName.trim(),
+          },
         },
       });
 
       if (signUpError) {
-        // pib is unique per real company (see supabase-pib-unique-
-        // migration.sql) — the signup trigger's insert fails if it's
-        // already taken, which Supabase Auth surfaces as a generic
-        // "Database error saving new user" rather than the actual
-        // Postgres constraint name.
+        // pib is unique per real company — enforced on firme.pib (see
+        // supabase-firme-refactor-migration.sql), so the signup trigger's
+        // insert fails if it's already taken. Supabase Auth surfaces that
+        // as a generic "Database error saving new user" rather than the
+        // actual Postgres constraint name.
         const isDuplicatePib =
           /database error saving new user/i.test(signUpError.message) ||
-          /users_pib_key|duplicate key value/i.test(signUpError.message);
+          /firme_pib_key|duplicate key value/i.test(signUpError.message);
         setError(
           signUpError.message === "User already registered"
             ? "Nalog sa ovim mejlom već postoji."
@@ -137,6 +147,16 @@ export default function Register({ onNavigate }) {
             placeholder="petar@gmail.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            required
+          />
+        </AuthField>
+
+        <AuthField label="Naziv firme" icon={BuildingIcon}>
+          <input
+            type="text"
+            placeholder="Petrović d.o.o."
+            value={companyName}
+            onChange={(e) => setCompanyName(e.target.value)}
             required
           />
         </AuthField>

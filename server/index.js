@@ -16,7 +16,8 @@ const workersRouter = require("./routes/workers");
 const inboxRouter = require("./routes/inbox");
 const dashboardRouter = require("./routes/dashboard");
 const calendarRouter = require("./routes/calendar");
-const { requireAuth } = require("./lib/auth");
+const firmaRouter = require("./routes/firma");
+const { requireAuth, requirePremiumModule } = require("./lib/auth");
 
 dotenv.config();
 
@@ -68,6 +69,7 @@ app.use("/api", workersRouter);
 app.use("/api", inboxRouter);
 app.use("/api", requireAuth, dashboardRouter);
 app.use("/api", requireAuth, calendarRouter);
+app.use("/api", requireAuth, firmaRouter);
 
 // Premium integrations (e.g. Eurocom International) live outside this
 // open-source repo — each one is a self-contained router at
@@ -78,7 +80,7 @@ if (fs.existsSync(premiumDir)) {
   fs.readdirSync(premiumDir).forEach((name) => {
     const entry = path.join(premiumDir, name, "index.js");
     if (fs.existsSync(entry)) {
-      app.use("/api", requireAuth, require(entry));
+      app.use("/api", requireAuth, requirePremiumModule(name), require(entry));
     }
   });
 }

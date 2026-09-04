@@ -1,0 +1,16 @@
+-- Run this once in Supabase → SQL Editor. Follow-up fix to
+-- supabase-firme-refactor-migration.sql.
+--
+-- Bug: that migration's step 5 set users.firma_id NOT NULL. But
+-- server/routes/workers.js creates a new worker in two steps — first
+-- admin.createUser() (no pib in metadata, so the signup trigger leaves
+-- firma_id null on purpose), then a follow-up UPDATE that sets firma_id
+-- to the inviting manager's — same two-step pattern the old `token`
+-- column used. token got away with this because it had
+-- `default gen_random_uuid()`, so it was never actually null in that
+-- window. firma_id has no safe equivalent default (it's a real FK — it
+-- must point at an existing firme row or be null, never a fake random
+-- value), so the NOT NULL constraint made that first insert fail outright
+-- before the update step ever runs. That's the "Database error creating
+-- new user" seen when adding a worker.
+alter table public.users alter column firma_id drop not null;

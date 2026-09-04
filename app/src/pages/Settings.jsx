@@ -2,11 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import IconRail from "../components/IconRail";
 import { AccordionRow, InputRow, ToggleRow } from "../components/FormRows";
 import Toast from "../components/Toast";
-import { PersonIcon, BellIcon, CreditCardIcon, LogOutIcon, UsersIcon } from "../icons";
+import { PersonIcon, BellIcon, CreditCardIcon, LogOutIcon, UsersIcon, BuildingIcon } from "../icons";
 import IntegrationsSection from "./integracije/IntegrationsSection";
 import AlatiSection from "./alati/AlatiSection";
 import { supabase } from "../lib/supabaseClient";
 import { addWorker, fetchWorkers, updateWorker } from "../api/workers";
+import { fetchFirma, updateFirma } from "../api/firma";
 
 const CAN_ADD_WORKERS = new Set(["E-commerce Manager", "E-commerce Operations Manager", "CEO"]);
 
@@ -19,7 +20,6 @@ export default function Settings({ onPhotoChange, initialSection, onSectionConsu
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
-  const [pib, setPib] = useState("");
   const [photo, setPhoto] = useState("");
   const [roleName, setRoleName] = useState("");
   const [saving, setSaving] = useState(false);
@@ -27,6 +27,11 @@ export default function Settings({ onPhotoChange, initialSection, onSectionConsu
   const [toast, setToast] = useState(null);
   const toastTimer = useRef(null);
   const [sendingReset, setSendingReset] = useState(false);
+
+  const [firmaPib, setFirmaPib] = useState("");
+  const [firmaNaziv, setFirmaNaziv] = useState("");
+  const [loadingFirma, setLoadingFirma] = useState(false);
+  const [savingFirma, setSavingFirma] = useState(false);
 
   const [roles, setRoles] = useState([]);
   const [workerFullName, setWorkerFullName] = useState("");
@@ -67,14 +72,13 @@ export default function Settings({ onPhotoChange, initialSection, onSectionConsu
       setEmail(user.email || "");
       supabase
         .from("users")
-        .select("full_name, phone, pib, photo, roles(name)")
+        .select("full_name, phone, photo, roles(name)")
         .eq("id", user.id)
         .single()
         .then(({ data: profile, error }) => {
           if (cancelled || error || !profile) return;
           setFullName(profile.full_name || "");
           setPhone(profile.phone || "");
-          setPib(profile.pib || "");
           setPhoto(profile.photo || "");
           setRoleName(profile.roles?.name || "");
         })
@@ -106,6 +110,34 @@ export default function Settings({ onPhotoChange, initialSection, onSectionConsu
       .then(({ data }) => setRoles(data || []));
   }, [authUser]);
 
+  useEffect(() => {
+    if (!authUser) return;
+    setLoadingFirma(true);
+    fetchFirma()
+      .then(({ firma }) => {
+        setFirmaPib(firma.pib || "");
+        setFirmaNaziv(firma.naziv || "");
+      })
+      .catch(() => {})
+      .finally(() => setLoadingFirma(false));
+  }, [authUser]);
+
+  const handleSaveFirma = async () => {
+    if (!firmaNaziv.trim()) {
+      showToast("error", "Naziv firme je obavezan.");
+      return;
+    }
+    setSavingFirma(true);
+    try {
+      await updateFirma({ naziv: firmaNaziv.trim() });
+      showToast("success", "Naziv firme je sačuvan.");
+    } catch (err) {
+      showToast("error", err.message || "Nije moguće sačuvati naziv firme.");
+    } finally {
+      setSavingFirma(false);
+    }
+  };
+
   const loadWorkers = () => {
     if (!CAN_ADD_WORKERS.has(roleName)) return;
     setLoadingWorkers(true);
@@ -123,27 +155,15 @@ export default function Settings({ onPhotoChange, initialSection, onSectionConsu
 
   const handleSave = async () => {
     if (!authUser) return;
-    if (!/^\d{8,9}$/.test(pib.trim())) {
-      showToast("error", "PIB mora imati 8 ili 9 cifara.");
-      return;
-    }
     setSaving(true);
     try {
+      // pib/naziv are firma-level now (see handleSaveFirma) — this only
+      // ever touches this account's own personal profile fields.
       const { error } = await supabase
         .from("users")
-        .update({ full_name: fullName, phone, pib: pib.trim(), photo })
+        .update({ full_name: fullName, phone, photo })
         .eq("id", authUser.id);
-      if (error) {
-        // Postgres unique_violation — pib already belongs to another
-        // registration. token (not editable here) is what actually scopes
-        // data, but pib itself must stay one-per-real-company.
-        if (error.code === "23505") {
-          throw new Error(
-            "Ovaj PIB je već registrovan na drugom nalogu. Ako si deo te firme, zamoli vlasnika naloga da te doda kao radnika umesto da se registruješ posebno."
-          );
-        }
-        throw error;
-      }
+      if (error) throw error;
 
       const emailChanged = email.trim() && email.trim() !== authUser.email;
       if (emailChanged) {
@@ -365,12 +385,6 @@ export default function Settings({ onPhotoChange, initialSection, onSectionConsu
                         value={phone}
                         onChange={setPhone}
                       />
-                      <InputRow
-                        label="PIB"
-                        desc="Poreski identifikacioni broj, 8 ili 9 cifara — jedinstven po firmi"
-                        value={pib}
-                        onChange={(v) => setPib(v.replace(/[^\d]/g, ""))}
-                      />
                       <div className="settings-row">
                         <div>
                           <p className="settings-row-label">Slika profila</p>
@@ -407,6 +421,53 @@ export default function Settings({ onPhotoChange, initialSection, onSectionConsu
                           {sendingReset ? "Slanje…" : "Pošalji link za reset"}
                         </button>
                       </div>
+                    </AccordionRow>
+
+                    <AccordionRow
+                      id="firma"
+                      icon={BuildingIcon}
+                      label="Firma"
+                      open={open === "firma"}
+                      onToggle={toggle}
+                    >
+                      <InputRow
+                        label="PIB"
+                        desc="Poreski identifikacioni broj — jedinstven po firmi, ne može se menjati ovde"
+                        value={loadingFirma ? "Učitavanje…" : firmaPib}
+                        readOnly
+                      />
+                      {CAN_ADD_WORKERS.has(roleName) ? (
+                        <div className="settings-row">
+                          <div>
+                            <p className="settings-row-label">Naziv firme</p>
+                            <p className="settings-row-desc">Vidljivo svim radnicima firme</p>
+                          </div>
+                          <input
+                            className="account-name-input"
+                            type="text"
+                            placeholder="Naziv firme"
+                            value={firmaNaziv}
+                            onChange={(e) => setFirmaNaziv(e.target.value)}
+                          />
+                        </div>
+                      ) : (
+                        <InputRow
+                          label="Naziv firme"
+                          desc="Menja ga vlasnik ili menadžer firme"
+                          value={loadingFirma ? "Učitavanje…" : firmaNaziv}
+                          readOnly
+                        />
+                      )}
+                      {CAN_ADD_WORKERS.has(roleName) && (
+                        <button
+                          className="btn-save"
+                          type="button"
+                          onClick={handleSaveFirma}
+                          disabled={savingFirma || loadingFirma}
+                        >
+                          {savingFirma ? "Čuvanje…" : "Sačuvaj naziv firme"}
+                        </button>
+                      )}
                     </AccordionRow>
 
                     {CAN_ADD_WORKERS.has(roleName) && (

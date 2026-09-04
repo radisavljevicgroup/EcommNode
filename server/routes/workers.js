@@ -57,7 +57,7 @@ async function requireManager(req, res) {
 
   const { data: profile, error: profileError } = await supabaseAdmin
     .from("users")
-    .select("token, pib, roles(name)")
+    .select("firma_id, roles(name)")
     .eq("id", callerData.user.id)
     .single();
 
@@ -82,7 +82,7 @@ router.get("/workers", async (req, res) => {
   const { data, error } = await supabaseAdmin
     .from("users")
     .select("id, full_name, phone, photo, roles(name)")
-    .eq("token", callerProfile.token)
+    .eq("firma_id", callerProfile.firma_id)
     .neq("id", callerProfile.id)
     .order("full_name");
 
@@ -125,12 +125,11 @@ router.post("/workers", async (req, res) => {
     user_metadata: {
       full_name: fullName.trim(),
       phone: phone?.trim() || "",
-      // No pib here on purpose — that column is unique per real
-      // registration, and a worker doesn't register their own company.
-      // The signup trigger gives this new row its own random `token`
-      // column default; the update below overwrites it with the
-      // inviting owner's token instead, which is what actually scopes
-      // them to that company's data.
+      // No pib here on purpose — pib now lives only on firme, and a
+      // worker doesn't register their own company. The signup trigger
+      // leaves this new row's firma_id null (no pib in metadata); the
+      // update below sets it to the inviting manager's firma_id instead,
+      // which is what actually scopes them to that company's data.
     },
   });
 
@@ -147,7 +146,7 @@ router.post("/workers", async (req, res) => {
 
   const { error: updateError } = await supabaseAdmin
     .from("users")
-    .update({ role_id: roleId, token: callerProfile.token, photo: photoUrl })
+    .update({ role_id: roleId, firma_id: callerProfile.firma_id, photo: photoUrl })
     .eq("id", newUserId);
 
   if (updateError) {
@@ -179,11 +178,11 @@ router.put("/workers/:id", async (req, res) => {
 
   const { data: target, error: targetError } = await supabaseAdmin
     .from("users")
-    .select("id, token")
+    .select("id, firma_id")
     .eq("id", id)
     .single();
 
-  if (targetError || !target || target.token !== callerProfile.token) {
+  if (targetError || !target || target.firma_id !== callerProfile.firma_id) {
     return res.status(404).json({ error: "Radnik nije pronađen." });
   }
 
