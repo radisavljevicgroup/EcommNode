@@ -10,6 +10,7 @@ import { fetchGscStatus } from "../api/gsc";
 import { fetchGa4Status } from "../api/ga4";
 import { fetchMetaStatus } from "../api/meta";
 import { fetchSettings } from "../api/settings";
+import { filterEntitledModules, useEnabledPremiumModules } from "../lib/premiumModules";
 
 const BASE_RAIL_ITEMS = [
   { key: "pocetna", icon: HomeIcon, label: "Početna" },
@@ -20,11 +21,12 @@ const BASE_RAIL_ITEMS = [
 // this open-source checkout — each one lives in the private
 // ecommnode-premium repo and is only vendored locally into
 // app/src/premium/<name>/analyticsTab.jsx (gitignored). If none are
-// present, the glob matches nothing and no premium tabs render.
+// present, the glob matches nothing and no premium tabs render. Which of
+// the present ones render for this company is further gated by
+// firme.enabled_premium_modules (see lib/premiumModules).
 const premiumAnalyticsModules = import.meta.glob("../premium/*/analyticsTab.jsx", {
   eager: true,
 });
-const PREMIUM_MODULES = Object.values(premiumAnalyticsModules);
 
 export default function Analytics() {
   const [section, setSection] = useState("pocetna");
@@ -32,6 +34,10 @@ export default function Analytics() {
   const [hasGa4, setHasGa4] = useState(false);
   const [hasMeta, setHasMeta] = useState(false);
   const [enabledPremiumTools, setEnabledPremiumTools] = useState([]);
+  const { enabledPremiumModules: entitledModuleKeys } = useEnabledPremiumModules();
+  const PREMIUM_MODULES = filterEntitledModules(premiumAnalyticsModules, entitledModuleKeys).map(
+    ([, mod]) => mod
+  );
 
   useEffect(() => {
     fetchGscStatus()

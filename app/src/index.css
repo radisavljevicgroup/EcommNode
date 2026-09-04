@@ -903,6 +903,7 @@ body {
   display: flex;
   align-items: center;
   gap: 14px;
+  margin-bottom: 20px;
 }
 
 .integration-badge {
@@ -1012,6 +1013,7 @@ body {
   text-align: center;
   border: 1px dashed var(--border);
   border-radius: 16px;
+  margin-bottom: 20px;
 }
 
 /* integrations filter + catalog grid */

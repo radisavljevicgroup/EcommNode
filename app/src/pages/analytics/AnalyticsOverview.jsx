@@ -17,6 +17,7 @@ import { fetchGscStatus, fetchGscPerformance } from "../../api/gsc";
 import { fetchMetaStatus, fetchMetaPerformance } from "../../api/meta";
 import { fetchSettings } from "../../api/settings";
 import QuadrantCard from "../../components/QuadrantCard";
+import { filterEntitledModules, useEnabledPremiumModules } from "../../lib/premiumModules";
 
 function isoDate(d) {
   return d.toISOString().slice(0, 10);
@@ -28,13 +29,11 @@ function isoDate(d) {
 // app/src/premium/<name>/analyticsTab.jsx (gitignored). A module can
 // export an `overview` ({ key, title, navigateKey, Component }) to get a
 // summary card here, shown only while the tool is switched on in
-// Settings → Svi alati.
+// Settings → Svi alati. Which of the present ones are even eligible is
+// further gated by firme.enabled_premium_modules (see lib/premiumModules).
 const premiumAnalyticsModules = import.meta.glob("../../premium/*/analyticsTab.jsx", {
   eager: true,
 });
-const PREMIUM_OVERVIEWS = Object.values(premiumAnalyticsModules)
-  .map((mod) => mod.overview)
-  .filter(Boolean);
 
 const GA4_METRICS = [
   { key: "sessions", label: "Sesije", format: "integer", definition: "Ukupan broj sesija (poseta) na sajtu u periodu." },
@@ -112,6 +111,10 @@ export default function AnalyticsOverview({ onNavigate }) {
   const [metaLoading, setMetaLoading] = useState(true);
 
   const [enabledPremiumTools, setEnabledPremiumTools] = useState([]);
+  const { enabledPremiumModules } = useEnabledPremiumModules();
+  const PREMIUM_OVERVIEWS = filterEntitledModules(premiumAnalyticsModules, enabledPremiumModules)
+    .map(([, mod]) => mod.overview)
+    .filter(Boolean);
 
   useEffect(() => {
     Promise.all([fetchWooStatus(), fetchShopifyStatus()])

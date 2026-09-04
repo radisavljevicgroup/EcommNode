@@ -25,17 +25,17 @@ import { fetchGscStatus } from "../../api/gsc";
 import { fetchMetaStatus } from "../../api/meta";
 import { fetchInboxConnections } from "../../api/inboxConnections";
 import { INTEGRATION_CATALOG } from "./catalog";
+import { filterEntitledModules, useEnabledPremiumModules } from "../../lib/premiumModules";
 
 // Premium integrations (e.g. Eurocom International) aren't part of this
 // open-source checkout — their source lives in the private
 // ecommnode-premium repo and is only vendored locally into
 // app/src/premium/<name>/index.jsx (gitignored). If that folder is absent,
-// the glob simply matches nothing and no premium cards render.
+// the glob simply matches nothing and no premium cards render. Which of
+// the present ones actually render for this company is further gated by
+// firme.enabled_premium_modules (see lib/premiumModules) — e.g. Eurocom's
+// integration should only show up for the Eurocom account, not everyone.
 const premiumModules = import.meta.glob("../../premium/*/index.jsx", { eager: true });
-const PREMIUM_INTEGRATIONS = Object.entries(premiumModules).map(([key, mod]) => ({
-  key,
-  Component: mod.default,
-}));
 
 function IntegrationBadge({ platform }) {
   if (platform.custom) return null;
@@ -49,29 +49,34 @@ function IntegrationBadge({ platform }) {
 export default function IntegrationsSection() {
   const [filter, setFilter] = useState("moje");
   const [connectedKeys, setConnectedKeys] = useState([]);
+  const { enabledPremiumModules, loading: premiumLoading } = useEnabledPremiumModules();
+  const PREMIUM_INTEGRATIONS = filterEntitledModules(premiumModules, enabledPremiumModules).map(
+    ([key, mod]) => ({ key, Component: mod.default })
+  );
 
   const [wooConnections, setWooConnections] = useState([]);
-  const [wooChecking, setWooChecking] = useState(true);
   const [showWooModal, setShowWooModal] = useState(false);
   const [shopifyConnections, setShopifyConnections] = useState([]);
-  const [shopifyChecking, setShopifyChecking] = useState(true);
   const [showShopifyModal, setShowShopifyModal] = useState(false);
   const [premiumCounts, setPremiumCounts] = useState({});
   const [ga4Connections, setGa4Connections] = useState([]);
-  const [ga4Checking, setGa4Checking] = useState(true);
   const [showGa4Modal, setShowGa4Modal] = useState(false);
   const [gscConnections, setGscConnections] = useState([]);
-  const [gscChecking, setGscChecking] = useState(true);
   const [showGscModal, setShowGscModal] = useState(false);
   const [metaConnections, setMetaConnections] = useState([]);
-  const [metaChecking, setMetaChecking] = useState(true);
   const [showMetaModal, setShowMetaModal] = useState(false);
   const [inboxConnections, setInboxConnections] = useState([]);
-  const [inboxChecking, setInboxChecking] = useState(true);
   const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
   const [showViberModal, setShowViberModal] = useState(false);
   const [toast, setToast] = useState(null);
   const toastTimer = useRef(null);
+  // All six connection statuses load together under one gate — a card
+  // (Eurocom included, via premiumLoading) used to pop into the grid
+  // whenever ITS OWN fetch happened to finish, reflowing everything
+  // already on screen. Promise.all means nothing renders until every
+  // status is known, so the grid paints once, fully formed.
+  const [connectionsLoading, setConnectionsLoading] = useState(true);
+  const pageLoading = connectionsLoading || premiumLoading;
 
   const showToast = (type, message) => {
     setToast({ type, message });
@@ -80,45 +85,28 @@ export default function IntegrationsSection() {
   };
 
   useEffect(() => {
-    fetchWooStatus()
-      .then((data) => setWooConnections(data.connections || []))
-      .catch(() => {})
-      .finally(() => setWooChecking(false));
-  }, []);
-
-  useEffect(() => {
-    fetchShopifyStatus()
-      .then((data) => setShopifyConnections(data.connections || []))
-      .catch(() => {})
-      .finally(() => setShopifyChecking(false));
-  }, []);
-
-  useEffect(() => {
-    fetchGa4Status()
-      .then((data) => setGa4Connections(data.connections || []))
-      .catch(() => {})
-      .finally(() => setGa4Checking(false));
-  }, []);
-
-  useEffect(() => {
-    fetchGscStatus()
-      .then((data) => setGscConnections(data.connections || []))
-      .catch(() => {})
-      .finally(() => setGscChecking(false));
-  }, []);
-
-  useEffect(() => {
-    fetchMetaStatus()
-      .then((data) => setMetaConnections(data.connections || []))
-      .catch(() => {})
-      .finally(() => setMetaChecking(false));
-  }, []);
-
-  useEffect(() => {
-    fetchInboxConnections()
-      .then((data) => setInboxConnections(data.connections || []))
-      .catch(() => {})
-      .finally(() => setInboxChecking(false));
+    let cancelled = false;
+    const empty = { connections: [] };
+    Promise.all([
+      fetchWooStatus().catch(() => empty),
+      fetchShopifyStatus().catch(() => empty),
+      fetchGa4Status().catch(() => empty),
+      fetchGscStatus().catch(() => empty),
+      fetchMetaStatus().catch(() => empty),
+      fetchInboxConnections().catch(() => empty),
+    ]).then(([woo, shopify, ga4, gsc, meta, inbox]) => {
+      if (cancelled) return;
+      setWooConnections(woo.connections || []);
+      setShopifyConnections(shopify.connections || []);
+      setGa4Connections(ga4.connections || []);
+      setGscConnections(gsc.connections || []);
+      setMetaConnections(meta.connections || []);
+      setInboxConnections(inbox.connections || []);
+      setConnectionsLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const handleWooConnected = (connection) => {
@@ -225,7 +213,17 @@ export default function IntegrationsSection() {
         </button>
       </div>
 
-      {filter === "moje" ? (
+      {pageLoading ? (
+        <div className="integration-grid">
+          {[0, 1, 2].map((i) => (
+            <div className="integration-grid-card order-skeleton" key={i}>
+              <div className="skeleton-line" style={{ width: "40%" }} />
+              <div className="skeleton-line" style={{ width: "80%" }} />
+              <div className="skeleton-line" style={{ width: "50%" }} />
+            </div>
+          ))}
+        </div>
+      ) : filter === "moje" ? (
         <>
           {wooConnections.length > 0 && (
             <WooCommerceIntegration
@@ -355,7 +353,6 @@ export default function IntegrationsSection() {
             <button
               type="button"
               className="integration-grid-action"
-              disabled={wooChecking}
               onClick={() => setShowWooModal(true)}
             >
               {wooConnections.length > 0 ? "+ Poveži još jednu" : "Poveži"}
@@ -378,7 +375,6 @@ export default function IntegrationsSection() {
             <button
               type="button"
               className="integration-grid-action"
-              disabled={shopifyChecking}
               onClick={() => setShowShopifyModal(true)}
             >
               {shopifyConnections.length > 0 ? "+ Poveži još jednu" : "Poveži"}
@@ -409,7 +405,7 @@ export default function IntegrationsSection() {
             <button
               type="button"
               className="integration-grid-action"
-              disabled={ga4Checking || wooConnections.length === 0}
+              disabled={wooConnections.length === 0}
               onClick={() => setShowGa4Modal(true)}
             >
               {ga4Connections.length > 0 ? "+ Poveži još jednu" : "Poveži"}
@@ -433,7 +429,7 @@ export default function IntegrationsSection() {
             <button
               type="button"
               className="integration-grid-action"
-              disabled={gscChecking || wooConnections.length === 0}
+              disabled={wooConnections.length === 0}
               onClick={() => setShowGscModal(true)}
             >
               {gscConnections.length > 0 ? "+ Poveži još jednu" : "Poveži"}
@@ -457,7 +453,7 @@ export default function IntegrationsSection() {
             <button
               type="button"
               className="integration-grid-action"
-              disabled={metaChecking || wooConnections.length === 0}
+              disabled={wooConnections.length === 0}
               onClick={() => setShowMetaModal(true)}
             >
               {metaConnections.length > 0 ? "+ Poveži još jednu" : "Poveži"}
@@ -481,7 +477,6 @@ export default function IntegrationsSection() {
             <button
               type="button"
               className="integration-grid-action"
-              disabled={inboxChecking}
               onClick={() => setShowWhatsAppModal(true)}
             >
               {whatsappConnections.length > 0 ? "+ Poveži još jedan brend" : "Poveži"}
@@ -502,7 +497,6 @@ export default function IntegrationsSection() {
             <button
               type="button"
               className="integration-grid-action"
-              disabled={inboxChecking}
               onClick={() => setShowViberModal(true)}
             >
               {viberConnections.length > 0 ? "+ Poveži još jedan brend" : "Poveži"}

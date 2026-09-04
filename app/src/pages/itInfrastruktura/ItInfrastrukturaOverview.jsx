@@ -1,4 +1,4 @@
-export default function ItInfrastrukturaOverview({ tabs = [], onNavigate }) {
+export default function ItInfrastrukturaOverview({ tabs = [], loading, onNavigate }) {
   return (
     <>
       <div className="settings-header">
@@ -9,7 +9,9 @@ export default function ItInfrastrukturaOverview({ tabs = [], onNavigate }) {
         </p>
       </div>
 
-      {tabs.length === 0 ? (
+      {loading ? (
+        <div className="empty-hint">Učitavanje…</div>
+      ) : tabs.length === 0 ? (
         <div className="empty-hint">
           Trenutno nema dostupnih IT infrastrukturnih integracija.
         </div>

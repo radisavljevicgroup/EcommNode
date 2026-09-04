@@ -2,6 +2,7 @@ import { useState } from "react";
 import IconRail from "../components/IconRail";
 import { HomeIcon } from "../icons";
 import ItInfrastrukturaOverview from "./itInfrastruktura/ItInfrastrukturaOverview";
+import { filterEntitledModules, useEnabledPremiumModules } from "../lib/premiumModules";
 
 const BASE_RAIL_ITEMS = [{ key: "pregled", icon: HomeIcon, label: "Pregled" }];
 
@@ -10,15 +11,20 @@ const BASE_RAIL_ITEMS = [{ key: "pregled", icon: HomeIcon, label: "Pregled" }];
 // one lives in the private ecommnode-premium repo and is only vendored
 // locally into app/src/premium/<name>/itInfraTab.jsx (gitignored). If none
 // are present, the glob matches nothing and the rail only shows "Pregled".
+// Which of the present ones render for this company is further gated by
+// firme.enabled_premium_modules (see lib/premiumModules) — Eurocom's tab
+// should only show up for the Eurocom account, not every company.
 const premiumItInfraModules = import.meta.glob("../premium/*/itInfraTab.jsx", {
   eager: true,
 });
-const PREMIUM_MODULES = Object.values(premiumItInfraModules);
 
 export default function ItInfrastruktura() {
   const [section, setSection] = useState("pregled");
+  const { enabledPremiumModules, loading } = useEnabledPremiumModules();
 
-  const premiumTabs = PREMIUM_MODULES.flatMap((mod) => mod.tabs || []);
+  const premiumTabs = filterEntitledModules(premiumItInfraModules, enabledPremiumModules).flatMap(
+    ([, mod]) => mod.tabs || []
+  );
 
   const railItems = [
     ...BASE_RAIL_ITEMS,
@@ -36,7 +42,7 @@ export default function ItInfrastruktura() {
           {activeTab ? (
             <activeTab.Component />
           ) : (
-            <ItInfrastrukturaOverview tabs={premiumTabs} onNavigate={setSection} />
+            <ItInfrastrukturaOverview tabs={premiumTabs} loading={loading} onNavigate={setSection} />
           )}
         </div>
       </div>

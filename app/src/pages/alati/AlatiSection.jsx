@@ -1,18 +1,25 @@
 import { useEffect, useState } from "react";
 import { fetchSettings, updateSettings } from "../../api/settings";
 import { TOOLS } from "./catalog";
+import { filterEntitledModules, useEnabledPremiumModules } from "../../lib/premiumModules";
+import { retryable } from "../../lib/fetchWithRetry";
+
+// A transient failure here (dev server mid-restart, a dropped connection)
+// used to be swallowed silently, permanently leaving stale/unfiscalized
+// tracking stuck at their optimistic useState(true) default for that page
+// view regardless of what's actually saved — see lib/fetchWithRetry.
+const fetchSettingsWithRetry = retryable(fetchSettings);
 
 // Premium tools (e.g. Napredna analiza prodaje) aren't part of this
 // open-source checkout — each one lives in the private ecommnode-premium
 // repo and is only vendored locally into app/src/premium/<name>/
 // analyticsTab.jsx (gitignored). If none are present, the glob matches
-// nothing and no premium cards render.
+// nothing and no premium cards render. Which of the present ones render
+// for this company is further gated by firme.enabled_premium_modules
+// (see lib/premiumModules).
 const premiumAnalyticsModules = import.meta.glob("../../premium/*/analyticsTab.jsx", {
   eager: true,
 });
-const PREMIUM_TOOLS = Object.values(premiumAnalyticsModules)
-  .filter((mod) => mod.toolCard)
-  .map((mod) => mod.toolCard);
 
 function ToolStatus({ enabled }) {
   return (
@@ -22,25 +29,61 @@ function ToolStatus({ enabled }) {
   );
 }
 
+function ToolsSkeleton() {
+  return (
+    <>
+      {[0, 1].map((i) => (
+        <div className="integration-card order-skeleton" key={i}>
+          <div className="skeleton-line" style={{ width: "40%" }} />
+          <div className="skeleton-line" style={{ width: "70%" }} />
+        </div>
+      ))}
+    </>
+  );
+}
+
 export default function AlatiSection() {
   const [filter, setFilter] = useState("moje");
-  const [staleEnabled, setStaleEnabled] = useState(true);
+  // Neutral/unknown until the real fetch resolves — the "Moje alatke" list
+  // below only ever renders once `loading` is false, but these defaults
+  // matter too: with the old optimistic `true`, a component that reads
+  // enabledMap before that render gate settles (e.g. a fast re-render
+  // triggered by a sibling state update) would still see wrong data.
+  const [staleEnabled, setStaleEnabled] = useState(false);
   const [staleThreshold, setStaleThreshold] = useState("");
   const [staleSaved, setStaleSaved] = useState(false);
-  const [unfiscalizedEnabled, setUnfiscalizedEnabled] = useState(true);
+  const [unfiscalizedEnabled, setUnfiscalizedEnabled] = useState(false);
   const [enabledPremiumTools, setEnabledPremiumTools] = useState([]);
   const [loading, setLoading] = useState(true);
+  const { enabledPremiumModules, loading: premiumLoading } = useEnabledPremiumModules();
+  // Both the built-in tools (settings.json) and the premium tool list
+  // (firme.enabled_premium_modules) have to be known before "Moje alatke"
+  // can say anything true — showing one before the other resolves is
+  // exactly the "Eurocom-style" late pop-in bug, just for tools instead of
+  // integrations.
+  const pageLoading = loading || premiumLoading;
+  const PREMIUM_TOOLS = filterEntitledModules(premiumAnalyticsModules, enabledPremiumModules)
+    .map(([, mod]) => mod)
+    .filter((mod) => mod.toolCard)
+    .map((mod) => mod.toolCard);
 
   useEffect(() => {
-    fetchSettings()
+    let cancelled = false;
+    fetchSettingsWithRetry()
       .then((data) => {
+        if (cancelled) return;
         setStaleEnabled(data.staleTrackingEnabled !== false);
         setStaleThreshold(String(data.staleOrderThresholdDays ?? 30));
         setUnfiscalizedEnabled(data.unfiscalizedTrackingEnabled !== false);
         setEnabledPremiumTools(data.enabledPremiumTools || []);
       })
       .catch(() => {})
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const enabledMap = { stale: staleEnabled, unfiscalized: unfiscalizedEnabled };
@@ -106,7 +149,9 @@ export default function AlatiSection() {
         </button>
       </div>
 
-      {filter === "moje" ? (
+      {pageLoading ? (
+        <ToolsSkeleton />
+      ) : filter === "moje" ? (
         myTools.length === 0 && myPremiumTools.length === 0 ? (
           <div className="empty-hint">Još uvek nemaš aktivnih alatki.</div>
         ) : (
