@@ -7,7 +7,6 @@ import {
   PlusIcon,
   TrendIcon,
   LayersIcon,
-  ClockIcon,
 } from "../icons";
 
 const GITHUB_URL = "https://github.com/radisavljevicgroup/EcommNode";
@@ -23,15 +22,11 @@ function GithubIcon() {
 const PAIN_POINTS = [
   {
     title: "Rasut pregled poslovanja",
-    desc: "Pet različitih naloga, pet različitih lozinki, pet različitih izveštaja koje treba ručno sastaviti da bi znao kako ti zapravo ide prodavnica ovog meseca.",
-  },
-  {
-    title: "Skupe gotove alternative",
-    desc: "Postojeći BI i dashboard alati naplaćuju mesečnu pretplatu u evrima ili dolarima, često po prodavnici — cena koja se brzo množi ako vodiš više brendova.",
+    desc: "Pet različitih naloga, pet različitih lozinki, pet različitih izveštaja ili analiza koje treba ručno sastaviti da bi znao kako ti zapravo ide prodavnica ovog meseca.",
   },
   {
     title: "Ne razumeju naše tržište",
-    desc: "Većina rešenja je pravljena za zapadno tržište i ne zna šta je fiskalni račun, RSD kurs ili kupac koji pita za porudžbinu preko Vibera, ne mejla.",
+    desc: "Većina rešenja je pravljena za zapadno tržište i ne mogu da prate potrebe i uslove za razvijanje našeg poslovanja.",
   },
   {
     title: "Problemi se primete prekasno",
@@ -43,17 +38,12 @@ const BENEFITS = [
   {
     icon: TrendIcon,
     title: "Brzina",
-    desc: "Jedan login, jedan ekran. Ono za šta ti je trebalo pet otvorenih tabova i pola sata sastavljanja izveštaja, sada je jedan pogled na početnu stranicu.",
+    desc: "Jedan login, jedan ekran. Ono za šta ti je trebalo pet otvorenih tabova i pola sata sastavljanja izveštaja ili analiza, sada je jedan pogled na početnu stranicu.",
   },
   {
     icon: LayersIcon,
     title: "Fleksibilnost",
-    desc: "Kod je tvoj. Hostuj EcommNode na sopstvenom serveru, prilagodi ga svom procesu i zadrži punu kontrolu nad podacima kupaca.",
-  },
-  {
-    icon: ClockIcon,
-    title: "Ušteda resursa",
-    desc: "Nema mesečne pretplate, nema cene po prodavnici, nema iznenađenja na fakturi. Otvoren kod znači da rešenje ostaje besplatno zauvek.",
+    desc: "Kod je tvoj. EcommNode je rešenje koje možeš da razvijaš prema potrebama svog poslovanja u saradnji sa nama.",
   },
   {
     icon: ChartIcon,
@@ -66,7 +56,7 @@ const ROADMAP_DONE = [
   "WooCommerce i Shopify — sinhronizacija porudžbina i kataloga",
   "Google Analytics 4 i Search Console na jednom mestu",
   "Meta Ads — potrošnja, ROAS i CAC po kampanji",
-  "Objedinjen inbox — WhatsApp, Viber, Messenger i Instagram",
+  "Objedinjen inbox — Messenger i Instagram",
   "Dashboard koji sam prijavljuje pad konverzije i neuspela plaćanja",
   "Podrška za više brendova, strogo odvojenih po podacima",
 ];
@@ -116,12 +106,11 @@ export default function Landing({ onNavigate }) {
       <section className="landing-hero">
         <div className="landing-hero-copy">
           <span className="landing-eyebrow">Open-source</span>
-          <h1>Jedan dashboard umesto deset otvorenih tabova.</h1>
+          <h1>Celo poslovanje u jednom tabu.</h1>
           <p className="landing-lede">
-            EcommNode spaja WooCommerce i Shopify porudžbine, Google i Meta analitiku i
-            poruke kupaca sa svih kanala u jedan pregledan alat. Napravljen za vlasnike
-            prodavnica i agencije koje vode više brendova — bez zaključavanja podataka,
-            otvorenog koda.
+            EcommNode spaja WooCommerce i Shopify porudžbine, Google i Meta analitiku,
+            Analizu prodaje i poruke kupaca sa svih kanala u jedan pregledan alat. Napravljen
+            za vlasnike e-commerca, njihove zaposlene i saradnike.
           </p>
           <div className="landing-hero-ctas">
             <button type="button" className="landing-btn-primary lg" onClick={() => onNavigate("register")}>
@@ -172,8 +161,9 @@ export default function Landing({ onNavigate }) {
           <h2>Vođenje prodavnice danas znači žongliranje sa deset alata.</h2>
           <p>
             WooCommerce ili Shopify admin za porudžbine. Google Analytics za saobraćaj. Meta
-            Ads Manager za oglase. Posebna aplikacija za WhatsApp poruke. Dok sastaviš celu
-            sliku, pola radnog dana je već prošlo.
+            Ads Manager za oglase. Posebna aplikacija za Instagram ili FB poruke. Dok
+            sastaviš celu sliku, pola radnog dana je već prošlo. Koliko ti se samo puta
+            desilo da nisi video neku poruku od kupca?
           </p>
         </div>
 
@@ -196,10 +186,10 @@ export default function Landing({ onNavigate }) {
       <section className="landing-section" id="resenje">
         <div className="landing-section-head">
           <span className="landing-eyebrow">Rešenje</span>
-          <h2>EcommNode spaja sve u jedan miran, jasan pregled.</h2>
+          <h2>EcommNode spaja sve u jedan pregled.</h2>
           <p>
             Poveži svoje prodavnice i naloge jednom — EcommNode dalje sam povlači
-            porudžbine, analitiku i poruke i slaže ih u dashboard koji stvarno ima smisla.
+            porudžbine, analitiku i poruke i slaže ih u dashboard koji ima smisla.
           </p>
         </div>
 
