@@ -7,6 +7,7 @@ import {
   PlusIcon,
   TrendIcon,
   LayersIcon,
+  UsersIcon,
 } from "../icons";
 
 const GITHUB_URL = "https://github.com/radisavljevicgroup/EcommNode";
@@ -32,6 +33,10 @@ const PAIN_POINTS = [
     title: "Problemi se primete prekasno",
     desc: "Pad konverzije, neuspela plaćanja, poskupljenje oglasa — bez nekoga ko svakog jutra otvara pet dashboarda, ovakve stvari prođu neprimećene danima.",
   },
+  {
+    title: "Nemaš kontrolu nad timom",
+    desc: "Svi radite preko jednog istog naloga — nemaš nikakvu kontrolu ko je šta radio ili video.",
+  },
 ];
 
 const BENEFITS = [
@@ -49,6 +54,11 @@ const BENEFITS = [
     icon: ChartIcon,
     title: "Modularnost",
     desc: "WooCommerce, Shopify, Google Analytics, Search Console, Meta Ads, WhatsApp, Viber — svaka integracija je zaseban modul. Poveži samo ono što stvarno koristiš.",
+  },
+  {
+    icon: UsersIcon,
+    title: "Saradnja",
+    desc: "Dodaj zaposlene i saradnike sa sopstvenim nalogom i ulogom — svako vidi tačno ono što mu je potrebno.",
   },
 ];
 
