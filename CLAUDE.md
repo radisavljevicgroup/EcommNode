@@ -70,12 +70,17 @@ vodi taj server proces, i uputi na jednu od dve opcije ispod (3. sekcija).
 - **Eurocom automatski sync je implementiran u kodu**, ne kao eksterni
   cPanel Cron Job (ranija pretpostavka u ovom fajlu je bila pogrešna — do
   te tačke `/eurocom/sync` uopšte nije pisao u WooCommerce, vraćao je 501).
-  `server/premium/eurocom/scheduler.js` koristi `node-cron`: zalihe na sat
-  (`0 * * * *`), cene jednom dnevno u 03:00 (`0 3 * * *`), za svaku
-  konekciju kod koje je odgovarajuća opcija (`stock`/`price`) uključena.
-  Stvarno pisanje u WooCommerce (mapiranje Eurocom `barCode` ↔ Woo `sku`,
-  `my_price.with_vat` → `regular_price`, `stock` → `stock_quantity`) je u
-  `server/premium/eurocom/sync.js`.
+  `server/premium/eurocom/scheduler.js` koristi obično `setInterval`
+  (bez biblioteke — nema `node-cron` zavisnosti): zalihe na svakih sat
+  vremena, cene na svakih 24h **od trenutka kad server proces krene**
+  (nije fiksno vreme kao "03:00", nego 24h od boot-a), za svaku konekciju
+  kod koje je odgovarajuća opcija (`stock`/`price`) uključena. Stvarno
+  pisanje u WooCommerce (mapiranje Eurocom `ID` ↔ Woo `sku`, uz opciju
+  price-multiplier po brendu, `price.with_vat × multiplier` →
+  `regular_price`, `stock` → `stock_quantity`, piše samo kad se vrednost
+  stvarno promenila) je u `server/premium/eurocom/sync.js`. Isti fajl ima
+  i `runDiff` (koristi ga `GET /eurocom/diff`) za poređenje Eurocom
+  kataloga vs. stanja na sajtu bez pisanja.
 - **Scheduler je ugašen po default-u** — pokreće se samo ako je
   `EUROCOM_AUTOSYNC=true` u `.env` (vidi `server/.env.example`). Ovo mora
   biti postavljeno na produkciji da bi automatski sync uopšte radio, i
@@ -90,12 +95,13 @@ vodi taj server proces, i uputi na jednu od dve opcije ispod (3. sekcija).
   prave prodavnice dok scheduler paralelno radi na produkciji, oba pišu u
   isti spoljni sistem bez koordinacije — moguće duplirane/konfliktne
   izmene cena i zaliha.
-- **Poznato ograničenje:** mapiranje po `programs` (`level_1a`/`level_1b`)
-  koristi placeholder kodove iz `app/src/premium/eurocom/catalog.js` koji
-  nisu potvrđeni protiv stvarnog Eurocom API-ja (nema još poziva na
-  `GET /api/programs` da se potvrde pravi kodovi). Filter po `brands`
-  (`brand_code`) jeste potvrđen i pouzdan. Dok se programi ne potvrde,
-  filtriranje po programu može vratiti prazan/pogrešan rezultat.
+- **Poznato ograničenje:** `syncOptions.programs` se čuva (podešava se u
+  UI-ju) ali `fetchEurocomCatalog` u `sync.js` trenutno filtrira **samo**
+  po `brands` — izbor programa (Škola, Kancelarija...) se ne primenjuje
+  nigde u sync/diff logici, sync ide preko celog kataloga (ili filtriranog
+  po brendu ako je brend izabran). Ako se ovo doda kasnije, kodovi u
+  `app/src/premium/eurocom/catalog.js`'s `EUROCOM_PROGRAMS` su placeholderi
+  — nisu potvrđeni protiv `level_1a`/`level_1b` iz stvarnog API-ja.
 - Za lokalni razvoj koristi **test/sandbox WooCommerce prodavnicu** (ili
   test GA4/GSC property), nikad pravi klijentski nalog.
 - Kad je feature gotov i kod je na produkciji: integracija se **ponovo,
