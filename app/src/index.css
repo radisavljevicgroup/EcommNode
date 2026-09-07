@@ -1327,6 +1327,171 @@ body {
   font-size: 12.5px;
 }
 
+.eurocom-price-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
+  font-size: 13.5px;
+  color: var(--text-dark);
+}
+
+.eurocom-price-input {
+  width: 72px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--text-dark);
+  text-align: right;
+}
+
+.eurocom-brand-overrides {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-left: 4px;
+  border-left: 2px solid var(--border);
+}
+
+.eurocom-price-remove {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+}
+
+.eurocom-price-remove:hover {
+  color: #c0392b;
+}
+
+.eurocom-price-remove svg {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+}
+
+.eurocom-price-add select {
+  flex: 1;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--text-dark);
+  background: #ffffff;
+}
+
+.eurocom-sync-result {
+  background: #eafaf1;
+  color: #1e8449;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 10px 12px;
+  border-radius: 8px;
+  margin: 0 20px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.eurocom-sync-result-time {
+  font-weight: 400;
+  opacity: 0.75;
+  flex-shrink: 0;
+}
+
+.eurocom-diff-section {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.eurocom-diff-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.eurocom-diff-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.eurocom-diff-table-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.eurocom-diff-table-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.eurocom-diff-table-head h4 {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-dark);
+  margin: 0;
+}
+
+.eurocom-collapse-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 0;
+  font-family: inherit;
+  color: inherit;
+}
+
+.eurocom-collapse-toggle svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: var(--text-muted);
+  stroke: currentColor;
+  transition: transform 0.15s ease;
+}
+
+.eurocom-collapse-toggle.collapsed svg {
+  transform: rotate(-90deg);
+}
+
+.eurocom-integration-actions .eurocom-collapse-toggle {
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.eurocom-diff-search {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--text-dark);
+  width: 220px;
+  max-width: 100%;
+}
+
 .eurocom-sync-row button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
