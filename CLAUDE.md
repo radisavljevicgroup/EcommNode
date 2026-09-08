@@ -37,6 +37,35 @@ Proveri da `git diff --stat <prethodni-commit> <novi-commit>` pokazuje
 promene i u `app/src/` i u `app/dist/` kad god je frontend menjan — ako
 menja samo jedno od to dvoje, nešto nedostaje.
 
+### Posle SVAKOG deploy-a koji dira `server/*` (uključujući `server/premium/`
+### preko posebnog `ecommnode-premium` deploy-a): ubij Node proces ručno
+
+Otkriveno 2026-09-08 dok je debugovan Eurocom autosync koji "nije radio"
+uprkos ispravnom kodu i env-u: cPanel-ovo dugme **Restart** u Setup Node.js
+App NE ubija pouzdano stari worker proces (CloudLinux `lsnode`/Node
+Selector). Posle deploy-a, stari proces često nastavlja da radi sa starim
+kodom u memoriji — novi fajlovi su na disku, ali se ne koriste dok se
+proces ne ubije i LSAPI ne spawn-uje nov worker na sledeći zahtev.
+
+Nakon svakog deploy-a koji menja bilo šta u `server/` (ne samo
+`premium/`), preko SSH:
+```bash
+ps aux | grep -i node
+kill <pid od lsnode:/home/radisavl/api.ecommnode.com/>
+curl -s -o /dev/null -w "%{http_code}\n" https://api.ecommnode.com/
+```
+Poslednja komanda budi LSAPI da odmah spawn-uje svež proces (umesto da
+čeka prvi pravi korisnički zahtev). Bez ovog koraka, deploy izgleda uspešan
+(fajlovi, git log, "Last Deployed" sve pokazuju novo stanje) ali live
+ponašanje ostaje staro — lako zavara i korisnika i sesiju koja debaguje na
+osnovu onoga što misli da je "sigurno već live".
+
+`node`/`npm` nisu u PATH-u u SSH sesiji po default-u (CloudLinux Node
+Selector) — za ručno testiranje (`node -e "require(...)"` i sl.):
+```bash
+source ~/nodevenv/api.ecommnode.com/<verzija>/bin/activate   # verzija: ls ~/nodevenv/api.ecommnode.com/
+```
+
 ## 2. Integracije (WooCommerce, GA4, GSC, Eurocom, Meta inbox, kalendar...)
 
 **Ovo nikad neće stići preko git-a — i ne treba da stigne.**
@@ -81,11 +110,37 @@ vodi taj server proces, i uputi na jednu od dve opcije ispod (3. sekcija).
   stvarno promenila) je u `server/premium/eurocom/sync.js`. Isti fajl ima
   i `runDiff` (koristi ga `GET /eurocom/diff`) za poređenje Eurocom
   kataloga vs. stanja na sajtu bez pisanja.
+- **`server/premium/` NIJE ad-hoc vendorovan fajl-po-fajl — to je poseban
+  git repo, [ecommnode-premium](https://github.com/radisavljevicgroup/ecommnode-premium),
+  klonirán odvojeno i simlinkovan/kopiran u `server/premium` (na ovom
+  računaru: `C:\Users\MarkoJ\ecommnode-premium`, simlink na
+  `EcommNode/server/premium`). Zato ga glavni `EcommNode` repo ignoriše
+  (`.gitignore: premium/`) — izmene u `server/premium/**` se commituju i
+  pushuju u **`ecommnode-premium`**, ne u `EcommNode`. Na produkciji
+  korisnik ima svoj checkout tog repo-a i ažurira ga sa `git pull` —
+  proveri UVEK da li je taj checkout na serveru ažuran pre nego što
+  pretpostaviš da live kod odgovara onome što vidiš lokalno.
 - **Scheduler je ugašen po default-u** — pokreće se samo ako je
   `EUROCOM_AUTOSYNC=true` u `.env` (vidi `server/.env.example`). Ovo mora
   biti postavljeno na produkciji da bi automatski sync uopšte radio, i
   NIKAD ne sme biti postavljeno na lokalnoj/dev mašini koja je povezana na
-  pravu WooCommerce prodavnicu.
+  pravu WooCommerce prodavnicu. Provera stvarno postoji u kodu, na početku
+  `startScheduler()` u `ecommnode-premium/server/premium/eurocom/scheduler.js`
+  (`if (process.env.EUROCOM_AUTOSYNC !== "true") return;`, dodato
+  2026-09-07 commit-om `c763345`) — nemoj ponovo "otkrivati" ovaj bag bez
+  da prvo pull-uješ `ecommnode-premium` na najnoviji `origin/main`, jer je
+  lokalni checkout lako zaostati za onim što je zapravo na GitHub-u.
+  Logovanje po tick-u/konekciji (`[eurocom-sync] ...`) dodato istog dana
+  commit-om `58b8909` — ako korisnik javi da automatski sync i dalje ne
+  radi uprkos `EUROCOM_AUTOSYNC=true`, prva stvar je da proveri te logove
+  na produkciji (potvrđuje da li scheduler uopšte tik-uje i šta sync javlja
+  po konekciji), druga da proveri da li je produkcioni checkout
+  `ecommnode-premium` ažuran.
+  Takođe: `setInterval` ne pokreće prvi sync odmah — prvi stock tick tek
+  posle punog sata, prvi price tick posle punih 24h *neprekidnog* rada tog
+  Node procesa od poslednjeg starta. Ako platforma (npr. cPanel/Passenger)
+  restartuje proces zbog neaktivnosti pre nego što taj interval prođe,
+  automatski sync nikad ne stigne da opali.
 - **Nikad ne povezuj pravu/produkcionu WooCommerce prodavnicu (ili pravi
   GA4/GSC/Eurocom nalog klijenta) sa lokalnog dev servera**, i nikad ne
   postavljaj `EUROCOM_AUTOSYNC=true` lokalno dok je takva konekcija
