@@ -7,3 +7,12 @@ deployment:
     - export DEPLOYPATH2=/home/radisavl/ecommnode.com/
     - /bin/mkdir -p $DEPLOYPATH2
     - /bin/cp -R /home/radisavl/repositories/ecommnode/app/dist/* $DEPLOYPATH2
+    # cPanel's own "Restart" in Setup Node.js App doesn't reliably kill the
+    # running CloudLinux lsnode worker (found 2026-09-08 debugging Eurocom
+    # autosync: files updated on disk, process kept serving old in-memory
+    # code indefinitely). Kill it here so deploy always ends with a fresh
+    # worker picking up this copy — `|| true` because pkill exits non-zero
+    # (and would otherwise abort the deploy) when no matching process is
+    # running yet.
+    - pkill -f "lsnode:/home/radisavl/api.ecommnode.com/" || true
+    - curl -s -o /dev/null -w "" https://api.ecommnode.com/ || true
