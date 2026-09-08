@@ -2584,6 +2584,42 @@ body {
   color: #c0392b;
 }
 
+.eurocom-bulk-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.eurocom-bulk-actions select {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--text-dark);
+}
+
+.eurocom-bulk-errors {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  font-size: 12.5px;
+  opacity: 0.85;
+}
+
+.eurocom-test-product-raw {
+  max-height: 400px;
+  overflow: auto;
+  background: var(--surface-muted, #f6f7f9);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .gsc-key-cell {
   max-width: 360px;
   overflow: hidden;
@@ -2952,6 +2988,35 @@ body {
 
 .multiselect-option:hover {
   background: var(--pill-bg);
+}
+
+.eurocom-category-picker-menu {
+  min-width: 260px;
+  max-height: 320px;
+}
+
+.eurocom-category-picker-search {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 12.5px;
+  font-family: inherit;
+  margin-bottom: 6px;
+}
+
+.eurocom-category-picker-option {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.eurocom-category-picker-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 220px;
 }
 
 /* date range picker */
