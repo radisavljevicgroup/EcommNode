@@ -9,7 +9,8 @@ import { supabase } from "../lib/supabaseClient";
 import { addWorker, fetchWorkers, updateWorker } from "../api/workers";
 import { fetchFirma, updateFirma } from "../api/firma";
 
-const CAN_ADD_WORKERS = new Set(["E-commerce Manager", "E-commerce Operations Manager", "CEO"]);
+const CAN_EDIT_FIRMA_NAME = new Set(["E-commerce Manager", "E-commerce Operations Manager", "CEO"]);
+const CAN_MANAGE_WORKERS = new Set(["E-commerce Manager"]);
 const UNASSIGNABLE_ROLES = new Set(["Owner", "CEO", "E-commerce Data Analyst"]);
 
 export default function Settings({ onPhotoChange, initialSection, onSectionConsumed }) {
@@ -140,7 +141,7 @@ export default function Settings({ onPhotoChange, initialSection, onSectionConsu
   };
 
   const loadWorkers = () => {
-    if (!CAN_ADD_WORKERS.has(roleName)) return;
+    if (!CAN_MANAGE_WORKERS.has(roleName)) return;
     setLoadingWorkers(true);
     fetchWorkers()
       .then(({ workers: list }) => setWorkers(list || []))
@@ -435,7 +436,7 @@ export default function Settings({ onPhotoChange, initialSection, onSectionConsu
                         value={loadingFirma ? "Učitavanje…" : firmaPib}
                         readOnly
                       />
-                      {CAN_ADD_WORKERS.has(roleName) ? (
+                      {CAN_EDIT_FIRMA_NAME.has(roleName) ? (
                         <div className="settings-row">
                           <div>
                             <p className="settings-row-label">Naziv firme</p>
@@ -457,7 +458,7 @@ export default function Settings({ onPhotoChange, initialSection, onSectionConsu
                           readOnly
                         />
                       )}
-                      {CAN_ADD_WORKERS.has(roleName) && (
+                      {CAN_EDIT_FIRMA_NAME.has(roleName) && (
                         <button
                           className="btn-save"
                           type="button"
@@ -469,7 +470,7 @@ export default function Settings({ onPhotoChange, initialSection, onSectionConsu
                       )}
                     </AccordionRow>
 
-                    {CAN_ADD_WORKERS.has(roleName) && (
+                    {CAN_MANAGE_WORKERS.has(roleName) && (
                       <AccordionRow
                         id="radnici"
                         icon={UsersIcon}

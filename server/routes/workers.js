@@ -2,7 +2,7 @@ const { Router } = require("express");
 const { getSupabaseAdmin } = require("../lib/supabaseAdmin");
 
 const router = Router();
-const ALLOWED_ROLES = new Set(["E-commerce Manager", "E-commerce Operations Manager", "CEO"]);
+const ALLOWED_ROLES = new Set(["E-commerce Manager"]);
 const UNASSIGNABLE_ROLES = new Set(["Owner", "CEO", "E-commerce Data Analyst"]);
 
 function extToContentType(ext) {
