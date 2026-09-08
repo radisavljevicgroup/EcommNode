@@ -11,7 +11,9 @@ import Register from "./pages/Register";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 import Landing from "./pages/Landing";
+import EmptyHome from "./pages/EmptyHome";
 import { supabase } from "./lib/supabaseClient";
+import { isRouteAllowed, EMPTY_HOME_ROLES } from "./lib/roles";
 
 const AUTH_ROUTES = new Set(["login", "register", "zaboravljena-lozinka", "nova-lozinka"]);
 // Reachable without a session — the marketing landing page plus the auth
@@ -38,6 +40,7 @@ export default function App() {
   const [route, setRoute] = useState(routeFromHash());
   const [photo, setPhoto] = useState("");
   const [fullName, setFullName] = useState("");
+  const [roleName, setRoleName] = useState("");
   const [settingsSection, setSettingsSection] = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -52,11 +55,12 @@ export default function App() {
     const loadProfile = async (userId) => {
       const { data } = await supabase
         .from("users")
-        .select("photo, full_name")
+        .select("photo, full_name, roles(name)")
         .eq("id", userId)
         .single();
       setPhoto(data?.photo || "");
       setFullName(data?.full_name || "");
+      setRoleName(data?.roles?.name || "");
     };
 
     supabase.auth.getUser().then(({ data }) => {
@@ -73,6 +77,7 @@ export default function App() {
       } else {
         setPhoto("");
         setFullName("");
+        setRoleName("");
       }
     });
     return () => listener?.subscription?.unsubscribe();
@@ -119,29 +124,36 @@ export default function App() {
   if (!authChecked) return null;
   if (!isAuthenticated) return <Login onNavigate={navigate} />;
 
+  // Direct hash navigation to a route hidden from this role's nav collapses
+  // to the (empty) home page, same as the hidden nav items.
+  const effectiveRoute = isRouteAllowed(roleName, route) ? route : "home";
+
   return (
     <>
       <Header
-        route={route}
+        route={effectiveRoute}
         onNavigate={navigate}
         photo={photo}
         fullName={fullName}
         onOpenSettingsSection={openSettingsSection}
+        roleName={roleName}
       />
-      {route === "podesavanja" ? (
+      {effectiveRoute === "podesavanja" ? (
         <Settings
           onPhotoChange={setPhoto}
           initialSection={settingsSection}
           onSectionConsumed={() => setSettingsSection(null)}
         />
-      ) : route === "porudzbine" ? (
+      ) : effectiveRoute === "porudzbine" ? (
         <Orders />
-      ) : route === "kalendar" ? (
+      ) : effectiveRoute === "kalendar" ? (
         <Calendar />
-      ) : route === "analitika" ? (
+      ) : effectiveRoute === "analitika" ? (
         <Analytics />
-      ) : route === "it-infrastruktura" ? (
+      ) : effectiveRoute === "it-infrastruktura" ? (
         <ItInfrastruktura />
+      ) : EMPTY_HOME_ROLES.has(roleName) ? (
+        <EmptyHome />
       ) : (
         <Dashboard />
       )}

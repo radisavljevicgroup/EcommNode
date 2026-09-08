@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import IconRail from "../components/IconRail";
-import { AccordionRow, InputRow, ToggleRow } from "../components/FormRows";
+import { AccordionRow, InputRow } from "../components/FormRows";
 import Toast from "../components/Toast";
-import { PersonIcon, BellIcon, CreditCardIcon, LogOutIcon, UsersIcon, BuildingIcon } from "../icons";
+import { PersonIcon, LogOutIcon, UsersIcon, BuildingIcon } from "../icons";
 import IntegrationsSection from "./integracije/IntegrationsSection";
 import AlatiSection from "./alati/AlatiSection";
 import { supabase } from "../lib/supabaseClient";
@@ -10,6 +10,7 @@ import { addWorker, fetchWorkers, updateWorker } from "../api/workers";
 import { fetchFirma, updateFirma } from "../api/firma";
 
 const CAN_ADD_WORKERS = new Set(["E-commerce Manager", "E-commerce Operations Manager", "CEO"]);
+const UNASSIGNABLE_ROLES = new Set(["Owner", "CEO", "E-commerce Data Analyst"]);
 
 export default function Settings({ onPhotoChange, initialSection, onSectionConsumed }) {
   const [open, setOpen] = useState("nalog");
@@ -151,7 +152,7 @@ export default function Settings({ onPhotoChange, initialSection, onSectionConsu
     loadWorkers();
   }, [roleName]);
 
-  const assignableRoles = roles.filter((r) => r.name !== "Owner");
+  const assignableRoles = roles.filter((r) => !UNASSIGNABLE_ROLES.has(r.name));
 
   const handleSave = async () => {
     if (!authUser) return;
@@ -327,9 +328,7 @@ export default function Settings({ onPhotoChange, initialSection, onSectionConsu
             <>
               <div className="settings-header">
                 <h1 className="settings-title">Podešavanja</h1>
-                <p className="settings-subtitle">
-                  Upravljajte nalogom, obaveštenjima i plaćanjima.
-                </p>
+                <p className="settings-subtitle">Upravljajte nalogom.</p>
               </div>
 
               {checkingAuth ? (
@@ -654,50 +653,6 @@ export default function Settings({ onPhotoChange, initialSection, onSectionConsu
                         )}
                       </AccordionRow>
                     )}
-
-                    <AccordionRow
-                      id="obavestenja"
-                      icon={BellIcon}
-                      label="Obaveštenja"
-                      open={open === "obavestenja"}
-                      onToggle={toggle}
-                    >
-                      <ToggleRow
-                        label="Email obaveštenja"
-                        desc="Statusi pošiljki i dnevni izveštaji"
-                        soon
-                      />
-                      <ToggleRow
-                        label="SMS obaveštenja"
-                        desc="Obaveštenje kada je paket preuzet"
-                        soon
-                      />
-                      <ToggleRow
-                        label="Nedeljni izveštaj"
-                        desc="Sumarni pregled poslatih i obrisanih pošiljki"
-                        soon
-                      />
-                    </AccordionRow>
-
-                    <AccordionRow
-                      id="placanja"
-                      icon={CreditCardIcon}
-                      label="Plaćanja"
-                      open={open === "placanja"}
-                      onToggle={toggle}
-                    >
-                      <div className="settings-row">
-                        <div>
-                          <p className="settings-row-label">Nema sačuvanih kartica</p>
-                          <p className="settings-row-desc">
-                            Dodajte način plaćanja za automatsku naplatu
-                          </p>
-                        </div>
-                        <button className="btn-save" type="button">
-                          Dodaj karticu
-                        </button>
-                      </div>
-                    </AccordionRow>
 
                     <AccordionRow
                       id="odjava"

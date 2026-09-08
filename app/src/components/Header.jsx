@@ -6,7 +6,6 @@ import {
   OrdersIcon,
   ChartIcon,
   PersonIcon,
-  CreditCardIcon,
   LogOutIcon,
   CalendarIcon,
   ServerIcon,
@@ -14,6 +13,7 @@ import {
   CloseIcon,
 } from "../icons";
 import { supabase } from "../lib/supabaseClient";
+import { RESTRICTED_ROLES, RESTRICTED_NAV_ROUTES, ROLE_HIDDEN_ROUTES } from "../lib/roles";
 
 export const NAV_ITEMS = [
   { route: "home", label: "Početna", icon: HomeIcon },
@@ -24,10 +24,14 @@ export const NAV_ITEMS = [
   { route: "podesavanja", label: "Podešavanja", icon: GearIcon },
 ];
 
-export default function Header({ route, onNavigate, photo, fullName, onOpenSettingsSection }) {
+export default function Header({ route, onNavigate, photo, fullName, onOpenSettingsSection, roleName }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const menuRef = useRef(null);
+
+  const visibleNavItems = RESTRICTED_ROLES.has(roleName)
+    ? NAV_ITEMS.filter((item) => RESTRICTED_NAV_ROUTES.has(item.route))
+    : NAV_ITEMS.filter((item) => !ROLE_HIDDEN_ROUTES[roleName]?.has(item.route));
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -71,7 +75,7 @@ export default function Header({ route, onNavigate, photo, fullName, onOpenSetti
       <Logo />
 
       <nav className="nav-pill">
-        {NAV_ITEMS.map(({ route: r, label, icon: Icon }) => (
+        {visibleNavItems.map(({ route: r, label, icon: Icon }) => (
           <button
             key={r}
             className={"nav-item" + (route === r ? " active" : "")}
@@ -104,10 +108,6 @@ export default function Header({ route, onNavigate, photo, fullName, onOpenSetti
               <PersonIcon />
               <span>Uredi nalog</span>
             </button>
-            <button type="button" className="menu-row" onClick={() => goToSettings("placanja")}>
-              <CreditCardIcon />
-              <span>Plaćanja</span>
-            </button>
             <button type="button" className="menu-row danger" onClick={handleLogout}>
               <LogOutIcon />
               <span>Odjavi se</span>
@@ -125,7 +125,7 @@ export default function Header({ route, onNavigate, photo, fullName, onOpenSetti
             onClick={() => setMobileNavOpen(false)}
           />
           <nav className="mobile-nav-sheet">
-            {NAV_ITEMS.map(({ route: r, label, icon: Icon }) => (
+            {visibleNavItems.map(({ route: r, label, icon: Icon }) => (
               <button
                 key={r}
                 className={"mobile-nav-item" + (route === r ? " active" : "")}
