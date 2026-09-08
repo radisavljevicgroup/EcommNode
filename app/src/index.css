@@ -1406,6 +1406,35 @@ body {
   flex-shrink: 0;
 }
 
+.eurocom-auto-sync-info {
+  background: #f4f6f8;
+  color: var(--text-dark);
+  font-size: 12.5px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  margin: 0 20px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.eurocom-auto-sync-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.eurocom-auto-sync-row span:first-child {
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.eurocom-auto-sync-row span:last-child {
+  opacity: 0.75;
+  text-align: right;
+}
+
 .eurocom-diff-section {
   margin-top: 16px;
   padding-top: 16px;
