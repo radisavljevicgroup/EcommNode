@@ -2575,6 +2575,15 @@ body {
   border-bottom: none;
 }
 
+.eurocom-diff-table-markable tbody tr {
+  cursor: pointer;
+  user-select: none;
+}
+
+.eurocom-diff-table-markable tbody tr.eurocom-diff-row-red td {
+  color: #c0392b;
+}
+
 .gsc-key-cell {
   max-width: 360px;
   overflow: hidden;
