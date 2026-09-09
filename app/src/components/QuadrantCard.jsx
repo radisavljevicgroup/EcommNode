@@ -60,23 +60,14 @@ export default function QuadrantCard({
   };
 
   if (wide) {
+    // Unlike the 2-metric quadrants below, this row's metrics (LTV, RPR,
+    // TBO, CLV, CAC) are peers, not a headline + supporting stats — giving
+    // the first one (LTV, just by array order in kpiDefinitions.js) the
+    // large "primary" treatment made it visually dominate the other four
+    // for no real reason. All five render at the same (sub) size instead.
     const row = (
       <div className="quadrant-wide-row">
-        <div className="quadrant-wide-stat quadrant-wide-primary">
-          <div className="quadrant-primary-head">
-            <span className="quadrant-primary-label">{primary.label}</span>
-            <span className="quadrant-head-icons">
-              <InfoTooltip text={primary.definition} />
-              <ChartButton metric={primary} onMetricClick={onMetricClick} />
-            </span>
-          </div>
-          <div className="quadrant-primary-value">
-            {renderValue(primary)}
-            {renderChange(primary)}
-          </div>
-        </div>
-
-        {subs.map((metric) => (
+        {metrics.map((metric) => (
           <div className="quadrant-wide-stat" key={metric.key}>
             <div className="quadrant-sub-head">
               <span className="quadrant-sub-label">{metric.label}</span>

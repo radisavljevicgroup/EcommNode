@@ -329,7 +329,15 @@ function computeTrends(allOrders, { from, to }) {
   const previous = monthlyRevenueMap(allOrders, lastYearFrom, lastYearTo);
 
   const months = [...current.keys()].sort();
-  const series = months.map((m) => ({ month: m, revenue: current.get(m) || 0 }));
+  // Plain string arithmetic on the "YYYY-MM" key, not another shiftYears()
+  // — that parses through a Date/ISO round-trip, and month keys elsewhere
+  // in this file are already read via local-time getMonth(), so mixing the
+  // two risked an off-by-one for a server timezone behind UTC.
+  const series = months.map((m) => {
+    const [y, mm] = m.split("-");
+    const previousMonthKey = `${Number(y) - 1}-${mm}`;
+    return { month: m, revenue: current.get(m) || 0, previousRevenue: previous.get(previousMonthKey) || 0 };
+  });
 
   const currentTotal = [...current.values()].reduce((a, b) => a + b, 0);
   const previousTotal = [...previous.values()].reduce((a, b) => a + b, 0);
