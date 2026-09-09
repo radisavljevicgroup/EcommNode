@@ -917,6 +917,7 @@ body {
   background: #ffffff;
   border: 1px solid var(--border);
   overflow: hidden;
+  color: var(--purple);
 }
 
 .integration-badge img {
@@ -925,6 +926,17 @@ body {
   object-fit: contain;
   padding: 6px;
   box-sizing: border-box;
+}
+
+/* Modules without their own logo image (ItInfrastrukturaOverview falls
+   back to `tab.icon` — see icons.jsx) render an <svg> here instead of an
+   <img> — without an explicit size/stroke it's invisible, since these
+   icon components carry no stroke color of their own (see .tool-badge
+   svg for the same pattern used elsewhere). */
+.integration-badge svg {
+  width: 22px;
+  height: 22px;
+  stroke: currentColor;
 }
 
 .integration-info {

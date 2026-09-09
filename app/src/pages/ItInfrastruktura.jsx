@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import IconRail from "../components/IconRail";
 import { HomeIcon } from "../icons";
 import ItInfrastrukturaOverview from "./itInfrastruktura/ItInfrastrukturaOverview";
 import { filterEntitledModules, useEnabledPremiumModules } from "../lib/premiumModules";
+import { fetchSettings } from "../api/settings";
 
 const BASE_RAIL_ITEMS = [{ key: "pregled", icon: HomeIcon, label: "Pregled" }];
 
@@ -20,11 +21,27 @@ const premiumItInfraModules = import.meta.glob("../premium/*/itInfraTab.jsx", {
 
 export default function ItInfrastruktura() {
   const [section, setSection] = useState("pregled");
+  const [enabledPremiumTools, setEnabledPremiumTools] = useState([]);
   const { enabledPremiumModules, loading } = useEnabledPremiumModules();
 
-  const premiumTabs = filterEntitledModules(premiumItInfraModules, enabledPremiumModules).flatMap(
-    ([, mod]) => mod.tabs || []
-  );
+  useEffect(() => {
+    fetchSettings()
+      .then((data) => setEnabledPremiumTools(data.enabledPremiumTools || []))
+      .catch(() => {});
+  }, []);
+
+  // A module with no toolCard (e.g. Eurocom) has no on/off switch in
+  // "Alati" at all — it stays gated purely by entitlement, same as
+  // before this filter existed. A module that DOES export a toolCard
+  // (self-service premium tools, see AlatiSection.jsx) only shows its
+  // IT-infra tab once the company has actually turned it on there —
+  // otherwise every entitled company would see the tab appear on its
+  // own, without ever having "activated" it. Mirrors the identical
+  // check in Analytics.jsx for the analogous Analitika-page tabs.
+  const premiumTabs = filterEntitledModules(premiumItInfraModules, enabledPremiumModules)
+    .map(([, mod]) => mod)
+    .filter((mod) => !mod.toolCard?.key || enabledPremiumTools.includes(mod.toolCard.key))
+    .flatMap((mod) => mod.tabs || []);
 
   const railItems = [
     ...BASE_RAIL_ITEMS,

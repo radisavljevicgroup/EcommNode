@@ -99,10 +99,35 @@ async function fetchAllShopifyProductsRaw(connection) {
   return fetchAllPages(connection, "products", { limit: PAGE_LIMIT }, "products");
 }
 
+// The only Shopify write path in this codebase so far (everything else is
+// read-only fetches) — kept here rather than in a premium module since any
+// future tool that needs to push a product change back to Shopify should
+// reuse this instead of re-deriving the auth/timeout headers.
+async function updateShopifyProduct(connection, productId, patch) {
+  const url = baseUrl(connection, `products/${productId}`);
+  const res = await fetch(url, {
+    method: "PUT",
+    headers: {
+      "X-Shopify-Access-Token": connection.accessToken,
+      "Content-Type": "application/json",
+    },
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    body: JSON.stringify({ product: { id: productId, ...patch } }),
+  });
+  if (!res.ok) {
+    const err = new Error(`Shopify API returned ${res.status}`);
+    err.status = res.status;
+    throw err;
+  }
+  const data = await res.json();
+  return data.product;
+}
+
 module.exports = {
   SHOPIFY_API_VERSION,
   normalizeShopDomain,
   testShopifyConnection,
   fetchAllShopifyOrdersRaw,
   fetchAllShopifyProductsRaw,
+  updateShopifyProduct,
 };

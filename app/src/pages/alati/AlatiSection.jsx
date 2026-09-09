@@ -21,6 +21,16 @@ const premiumAnalyticsModules = import.meta.glob("../../premium/*/analyticsTab.j
   eager: true,
 });
 
+// A second flavor of premium tool (e.g. Kontrola zaliha) surfaces here
+// too, but opens into IT Infrastruktura instead of Analitika once turned
+// on — same toolCard shape, different home page. Tagged with `origin` so
+// the "Otvori u ..." button below knows where to send the user; a module
+// can supply a toolCard on EITHER file (or neither, like Eurocom, which
+// has no card here at all) but not both, so there's no de-dup concern.
+const premiumItInfraModules = import.meta.glob("../../premium/*/itInfraTab.jsx", {
+  eager: true,
+});
+
 function ToolStatus({ enabled }) {
   return (
     <span className={"tool-status" + (enabled ? " on" : "")}>
@@ -62,10 +72,16 @@ export default function AlatiSection() {
   // exactly the "Eurocom-style" late pop-in bug, just for tools instead of
   // integrations.
   const pageLoading = loading || premiumLoading;
-  const PREMIUM_TOOLS = filterEntitledModules(premiumAnalyticsModules, enabledPremiumModules)
-    .map(([, mod]) => mod)
-    .filter((mod) => mod.toolCard)
-    .map((mod) => mod.toolCard);
+  const PREMIUM_TOOLS = [
+    ...filterEntitledModules(premiumAnalyticsModules, enabledPremiumModules)
+      .map(([, mod]) => mod)
+      .filter((mod) => mod.toolCard)
+      .map((mod) => ({ ...mod.toolCard, origin: "analitika" })),
+    ...filterEntitledModules(premiumItInfraModules, enabledPremiumModules)
+      .map(([, mod]) => mod)
+      .filter((mod) => mod.toolCard)
+      .map((mod) => ({ ...mod.toolCard, origin: "it-administracija" })),
+  ];
 
   useEffect(() => {
     let cancelled = false;
@@ -172,10 +188,11 @@ export default function AlatiSection() {
                   type="button"
                   className="tool-card-open-btn tool-card-open-btn-inline"
                   onClick={() => {
-                    window.location.hash = "/analitika";
+                    window.location.hash =
+                      t.origin === "it-administracija" ? "/it-infrastruktura" : "/analitika";
                   }}
                 >
-                  Otvori u Analitici
+                  {t.origin === "it-administracija" ? "Otvori u IT administraciji" : "Otvori u Analitici"}
                 </button>
                 <button
                   className="integration-remove"
@@ -245,10 +262,11 @@ export default function AlatiSection() {
                       type="button"
                       className="tool-card-open-btn"
                       onClick={() => {
-                        window.location.hash = "/analitika";
+                        window.location.hash =
+                          t.origin === "it-administracija" ? "/it-infrastruktura" : "/analitika";
                       }}
                     >
-                      Otvori u Analitici
+                      {t.origin === "it-administracija" ? "Otvori u IT administraciji" : "Otvori u Analitici"}
                     </button>
                   )}
                 </div>
