@@ -74,15 +74,25 @@ function ConversationListItem({ conversation, active, onSelect }) {
   );
 }
 
+// Only meaningful on outbound messages — an inbound message's own status
+// ("received") isn't something the operator needs to see spelled out.
+const OUTBOUND_STATUS_LABEL = {
+  sent: "Poslato",
+  delivered: "Isporučeno",
+  read: "Pročitano",
+  failed: "Nije poslato",
+};
+
 function MessageBubble({ message }) {
   const outbound = message.direction === "outbound";
+  const statusLabel = outbound && OUTBOUND_STATUS_LABEL[message.status];
   return (
     <div className={"inbox-bubble-row" + (outbound ? " outbound" : "")}>
       <div className="inbox-bubble">
         <p className="inbox-bubble-text">{message.text}</p>
         <span className="inbox-bubble-meta">
           {formatTime(message.timestamp)}
-          {outbound && message.status === "failed" && " · nije poslato"}
+          {statusLabel && ` · ${statusLabel}`}
         </span>
       </div>
     </div>
@@ -180,6 +190,18 @@ export default function Messages() {
 
   const selectedConversation = conversations.find((c) => c.id === selectedId);
 
+  // Messenger/Instagram only accept a reply within 24h of the customer's
+  // last message (Meta's messaging window — see isWithinMessagingWindow in
+  // server/routes/inbox.js, which enforces the same rule server-side).
+  // WhatsApp has its own separate template mechanism and isn't limited by
+  // this. Checked here too so the input disables proactively instead of
+  // only failing after a send attempt.
+  const messagingWindowClosed =
+    selectedConversation &&
+    (selectedConversation.platform === "facebook" || selectedConversation.platform === "instagram") &&
+    (!selectedConversation.lastInboundAt ||
+      Date.now() - new Date(selectedConversation.lastInboundAt).getTime() >= 24 * 60 * 60 * 1000);
+
   return (
     <div className="inbox-page">
       <h1 className="settings-title">Poruke</h1>
@@ -226,15 +248,26 @@ export default function Messages() {
 
               {error && <div className="woo-error">{error}</div>}
 
+              {messagingWindowClosed && (
+                <div className="woo-error">
+                  Kupac mora prvi da napiše u zadnjih 24h da bi mogao da odgovoriš (Meta pravilo za
+                  messaging prozor).
+                </div>
+              )}
+
               <form className="inbox-chat-input" onSubmit={handleSend}>
                 <input
                   type="text"
                   placeholder="Napiši odgovor…"
                   value={draft}
                   onChange={(e) => setDraft(e.target.value)}
-                  disabled={sending}
+                  disabled={sending || messagingWindowClosed}
                 />
-                <button type="submit" disabled={sending || !draft.trim()} aria-label="Pošalji">
+                <button
+                  type="submit"
+                  disabled={sending || !draft.trim() || messagingWindowClosed}
+                  aria-label="Pošalji"
+                >
                   <SendIcon />
                 </button>
               </form>

@@ -66,6 +66,8 @@ export default function IntegrationsSection() {
   const [metaConnections, setMetaConnections] = useState([]);
   const [showMetaModal, setShowMetaModal] = useState(false);
   const [inboxConnections, setInboxConnections] = useState([]);
+  const [showFacebookModal, setShowFacebookModal] = useState(false);
+  const [showInstagramModal, setShowInstagramModal] = useState(false);
   const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
   const [showViberModal, setShowViberModal] = useState(false);
   const [toast, setToast] = useState(null);
@@ -160,6 +162,8 @@ export default function IntegrationsSection() {
 
   const handleInboxConnected = (connection) => {
     setInboxConnections((prev) => [...prev, connection]);
+    setShowFacebookModal(false);
+    setShowInstagramModal(false);
     setShowWhatsAppModal(false);
     setShowViberModal(false);
   };
@@ -168,6 +172,8 @@ export default function IntegrationsSection() {
     setInboxConnections((prev) => prev.filter((c) => c.id !== id));
   };
 
+  const facebookConnections = inboxConnections.filter((c) => c.platform === "facebook");
+  const instagramConnections = inboxConnections.filter((c) => c.platform === "instagram");
   const whatsappConnections = inboxConnections.filter((c) => c.platform === "whatsapp");
   const viberConnections = inboxConnections.filter((c) => c.platform === "viber");
 
@@ -278,6 +284,28 @@ export default function IntegrationsSection() {
               onDisconnected={handleMetaDisconnected}
               onConnectClick={() => setShowMetaModal(true)}
               onUpdated={handleMetaUpdated}
+              onResult={showToast}
+            />
+          )}
+
+          {facebookConnections.length > 0 && (
+            <InboxChannelIntegration
+              platform="facebook"
+              name="Facebook Messenger"
+              connections={facebookConnections}
+              onDisconnected={handleInboxDisconnected}
+              onConnectClick={() => setShowFacebookModal(true)}
+              onResult={showToast}
+            />
+          )}
+
+          {instagramConnections.length > 0 && (
+            <InboxChannelIntegration
+              platform="instagram"
+              name="Instagram Direct"
+              connections={instagramConnections}
+              onDisconnected={handleInboxDisconnected}
+              onConnectClick={() => setShowInstagramModal(true)}
               onResult={showToast}
             />
           )}
@@ -465,6 +493,46 @@ export default function IntegrationsSection() {
 
           <div className="integration-grid-card">
             <span className="integration-badge">
+              <PlatformBadge platform="facebook" />
+            </span>
+            <p className="integration-grid-name">
+              Facebook Messenger
+              {facebookConnections.length > 0 && (
+                <span className="status-pill">{facebookConnections.length}</span>
+              )}
+            </p>
+            <p className="integration-grid-desc">Primaj i odgovaraj na Messenger poruke u Porukama</p>
+            <button
+              type="button"
+              className="integration-grid-action"
+              onClick={() => setShowFacebookModal(true)}
+            >
+              {facebookConnections.length > 0 ? "+ Poveži još jedan brend" : "Poveži"}
+            </button>
+          </div>
+
+          <div className="integration-grid-card">
+            <span className="integration-badge">
+              <PlatformBadge platform="instagram" />
+            </span>
+            <p className="integration-grid-name">
+              Instagram Direct
+              {instagramConnections.length > 0 && (
+                <span className="status-pill">{instagramConnections.length}</span>
+              )}
+            </p>
+            <p className="integration-grid-desc">Primaj i odgovaraj na Instagram poruke u Porukama</p>
+            <button
+              type="button"
+              className="integration-grid-action"
+              onClick={() => setShowInstagramModal(true)}
+            >
+              {instagramConnections.length > 0 ? "+ Poveži još jedan brend" : "Poveži"}
+            </button>
+          </div>
+
+          <div className="integration-grid-card">
+            <span className="integration-badge">
               <PlatformBadge platform="whatsapp" />
             </span>
             <p className="integration-grid-name">
@@ -568,6 +636,24 @@ export default function IntegrationsSection() {
           wooConnections={wooConnections}
           onClose={() => setShowMetaModal(false)}
           onConnected={handleMetaConnected}
+          onResult={showToast}
+        />
+      )}
+
+      {showFacebookModal && (
+        <InboxChannelConnectModal
+          platform="facebook"
+          onClose={() => setShowFacebookModal(false)}
+          onConnected={handleInboxConnected}
+          onResult={showToast}
+        />
+      )}
+
+      {showInstagramModal && (
+        <InboxChannelConnectModal
+          platform="instagram"
+          onClose={() => setShowInstagramModal(false)}
+          onConnected={handleInboxConnected}
           onResult={showToast}
         />
       )}

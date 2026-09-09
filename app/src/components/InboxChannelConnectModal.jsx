@@ -3,10 +3,37 @@ import { CloseIcon } from "../icons";
 import { connectInboxChannel } from "../api/inboxConnections";
 import InfoTooltip from "./InfoTooltip";
 
-// WhatsApp and Viber connect through the same "brand + access token" shape
-// as every other per-brand inbox connection — only the extra id field (and
-// where the token comes from) differs between the two.
+// All four channels connect through the same "brand + access token" shape
+// — only the extra id field (and where the token/id come from) differ.
 const CHANNEL_CONFIG = {
+  facebook: {
+    title: "Poveži Facebook Messenger",
+    subtitle: "Poveži Facebook Page za jedan brend — poruke stižu u isti Poruke inbox.",
+    idField: {
+      key: "pageId",
+      label: "Facebook Page ID",
+      hint: "Meta Business Suite → Podešavanja → Nalozi → tvoja stranica, ili App Dashboard → Messenger → Podešavanje — Page ID (broj, ne naziv strane).",
+      placeholder: "102938475601234",
+    },
+    tokenLabel: "Page Access Token",
+    tokenHint:
+      "Trajni Page Access Token sa pages_messaging dozvolom — App Dashboard → Messenger → Podešavanje → Generate Token za tu stranicu.",
+    tokenPlaceholder: "EAAxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+  },
+  instagram: {
+    title: "Poveži Instagram Direct",
+    subtitle: "Poveži Instagram Business nalog za jedan brend — poruke stižu u isti Poruke inbox.",
+    idField: {
+      key: "pageId",
+      label: "Instagram Business Account ID",
+      hint: "Meta Business Suite → Podešavanja → Nalozi → tvoj Instagram nalog, ili preko Graph API Explorer-a (GET /me/accounts, pa instagram_business_account polje).",
+      placeholder: "178234560192837",
+    },
+    tokenLabel: "Access Token",
+    tokenHint:
+      "Isti Page Access Token kao za povezanu Facebook stranicu (Instagram Direct ide preko iste Page Send API), sa instagram_manage_messages dozvolom.",
+    tokenPlaceholder: "EAAxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+  },
   whatsapp: {
     title: "Poveži WhatsApp Business",
     subtitle: "Poveži WhatsApp Business broj za jedan brend — poruke stižu u isti Poruke inbox.",

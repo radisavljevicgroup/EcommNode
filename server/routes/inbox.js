@@ -96,6 +96,7 @@ function toPublicConversation(c) {
     accountLabel: c.account_label,
     lastMessageText: c.last_message_text,
     lastMessageAt: c.last_message_at,
+    lastInboundAt: c.last_inbound_at,
     unreadCount: c.unread_count,
   };
 }
@@ -151,8 +152,9 @@ router.post("/inbox/webhook", async (req, res) => {
         // entry's own id) — resolve which brand it belongs to once per
         // entry rather than once per message.
         const { token, accountLabel: registeredLabel } = resolveInboundAccount(platform, entry.id);
+        const { messages, statusUpdates } = normalize(entry);
 
-        for (const message of normalize(entry)) {
+        for (const message of messages) {
           if (!message.text) continue;
           const conversation = await store.getOrCreateConversation({
             platform: message.platform,
@@ -172,6 +174,14 @@ router.post("/inbox/webhook", async (req, res) => {
               : undefined,
           });
           await store.saveInboundMessage({ conversation, message });
+        }
+
+        for (const update of statusUpdates) {
+          if (update.messageId) {
+            await store.updateMessageStatus(platform, update.messageId, update.status);
+          } else if (update.watermark) {
+            await store.markOutboundReadBefore(platform, update.watermark);
+          }
         }
       }
     } else if (body.object === "whatsapp_business_account") {
@@ -293,6 +303,20 @@ function sendErrorMessage(err) {
   return err.message || "Slanje poruke nije uspelo.";
 }
 
+const MESSAGING_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+// Messenger/Instagram's Send API only accepts messaging_type: "RESPONSE"
+// (what sendPageMessage always sends, see metaMessaging.js) within 24h of
+// the customer's last message — outside that, Meta rejects the call
+// outright. Checked here so the operator gets a clear message before
+// typing a reply, instead of after clicking send. WhatsApp has its own
+// separate template-based mechanism for "outside the window" and isn't
+// covered by this check.
+function isWithinMessagingWindow(conversation) {
+  if (!conversation.last_inbound_at) return false;
+  return Date.now() - new Date(conversation.last_inbound_at).getTime() < MESSAGING_WINDOW_MS;
+}
+
 router.post("/inbox/conversations/:id/messages", requireAuth, async (req, res) => {
   const { text } = req.body || {};
   if (!text || !text.trim()) {
@@ -309,6 +333,11 @@ router.post("/inbox/conversations/:id/messages", requireAuth, async (req, res) =
     let outboundSenderId;
 
     if (conversation.platform === "facebook" || conversation.platform === "instagram") {
+      if (!isWithinMessagingWindow(conversation)) {
+        return res.status(400).json({
+          error: "Kupac mora prvi da napiše u zadnjih 24h da bi mogao da odgovoriš (Meta pravilo za messaging prozor).",
+        });
+      }
       const { token } = resolveOutboundAccount(conversation);
       if (!token) {
         return res.status(400).json({ error: "Nema podešenog access token-a za ovaj nalog (PAGE_ACCESS_TOKEN ili registrovana konekcija)." });

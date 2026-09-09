@@ -140,13 +140,30 @@ async function fetchWhatsAppAccountName(whatsappToken, phoneNumberId) {
   return promise;
 }
 
-// Converts one Messenger webhook `entry` into the unified message shape.
-// Skips delivery/read echoes and postbacks — only actual text messages are
-// surfaced in the inbox for now.
+// Converts one Messenger webhook `entry` into the unified message shape,
+// plus any delivery/read receipts in the same entry — same {messages,
+// statusUpdates} shape normalizeWhatsAppEntry already returns below, so
+// the webhook handler processes both the same way. Postbacks (button
+// clicks) are still skipped — only text messages and receipts matter here.
 function normalizeMessengerEntry(entry) {
   const messages = [];
+  const statusUpdates = [];
   const pageId = entry.id;
   for (const event of entry.messaging || []) {
+    if (event.delivery) {
+      // `mids` — the specific message ids Meta confirms as delivered.
+      (event.delivery.mids || []).forEach((mid) =>
+        statusUpdates.push({ messageId: mid, status: "delivered" })
+      );
+      continue;
+    }
+    if (event.read) {
+      // Read receipts carry a `watermark` (epoch ms), not specific message
+      // ids — it means "everything up to this timestamp is read", not a
+      // list to match by messageId like `delivery`/WhatsApp statuses.
+      statusUpdates.push({ watermark: event.read.watermark, status: "read" });
+      continue;
+    }
     if (!event.message || event.message.is_echo) continue;
     messages.push({
       platform: "facebook",
@@ -158,13 +175,14 @@ function normalizeMessengerEntry(entry) {
       status: "received",
     });
   }
-  return messages;
+  return { messages, statusUpdates };
 }
 
 // Instagram Direct webhooks use the same `messaging` shape as Messenger,
 // just under object: "instagram".
 function normalizeInstagramEntry(entry) {
-  return normalizeMessengerEntry(entry).map((m) => ({ ...m, platform: "instagram" }));
+  const { messages, statusUpdates } = normalizeMessengerEntry(entry);
+  return { messages: messages.map((m) => ({ ...m, platform: "instagram" })), statusUpdates };
 }
 
 // WhatsApp Cloud API webhooks nest everything under entry.changes[].value —

@@ -84,6 +84,11 @@ async function saveInboundMessage({ conversation, message }) {
   const patch = {
     last_message_text: message.text,
     last_message_at: message.timestamp,
+    // Separate from last_message_at on purpose — that one also moves on
+    // our own outbound replies (see saveOutboundMessage below), so it
+    // can't answer "did the customer write in the last 24h" for the Meta
+    // messaging-window check (routes/inbox.js's isWithinMessagingWindow).
+    last_inbound_at: message.timestamp,
     unread_count: (conversation.unread_count || 0) + 1,
   };
   if (message.senderName && !conversation.sender_name) patch.sender_name = message.senderName;
@@ -133,6 +138,21 @@ async function updateMessageStatus(platform, messageId, status) {
     .eq("message_id", messageId);
 }
 
+// Messenger/Instagram read receipts carry a `watermark` (epoch ms) instead
+// of specific message ids — "everything up to this moment is read", not a
+// list to match by messageId like updateMessageStatus above. Only our own
+// outbound messages are marked read (a read receipt on the customer's own
+// inbound messages wouldn't mean anything).
+async function markOutboundReadBefore(platform, watermarkMs) {
+  const supabase = requireSupabase();
+  await supabase
+    .from("inbox_messages")
+    .update({ status: "read" })
+    .eq("platform", platform)
+    .eq("direction", "outbound")
+    .lte("created_at", new Date(watermarkMs).toISOString());
+}
+
 async function listConversations() {
   const supabase = requireSupabase();
   const { data, error } = await supabase
@@ -175,6 +195,7 @@ module.exports = {
   saveInboundMessage,
   saveOutboundMessage,
   updateMessageStatus,
+  markOutboundReadBefore,
   listConversations,
   getConversation,
   listMessages,
