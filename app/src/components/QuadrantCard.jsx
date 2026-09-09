@@ -25,6 +25,7 @@ export default function QuadrantCard({
   wide,
   onMetricClick,
   bare,
+  compareLabel,
 }) {
   const [primary, ...subs] = metrics;
 
@@ -35,6 +36,28 @@ export default function QuadrantCard({
     loading || !values
       ? "…"
       : formatKpiValue(metric.format, values[metric.key], values[`${metric.key}Currency`] || currency);
+
+  // null when comparison is off, or when this particular metric has no
+  // previous-period value to compare against (e.g. CR/CAC with no
+  // GA4/Meta connection) — same shape as RevenueTrendChart's yoyPercent.
+  const renderChange = (metric) => {
+    if (loading || !values) return null;
+    const change = values.changePercent?.[metric.key];
+    if (change === null || change === undefined) return null;
+    // Sign alone isn't "good" or "bad" the same way for every metric — a
+    // rising Return Rate is bad news despite the positive sign, so the
+    // badge color follows each metric's own goodDirection instead of just
+    // whether `change` is positive.
+    const isGoodNews = metric.goodDirection === "down" ? change <= 0 : change >= 0;
+    return (
+      <span
+        className={"yoy-badge quadrant-yoy-badge " + (isGoodNews ? "up" : "down")}
+        title={compareLabel}
+      >
+        {change >= 0 ? "▲" : "▼"} {Math.abs(change).toFixed(1)}%
+      </span>
+    );
+  };
 
   if (wide) {
     const row = (
@@ -47,7 +70,10 @@ export default function QuadrantCard({
               <ChartButton metric={primary} onMetricClick={onMetricClick} />
             </span>
           </div>
-          <div className="quadrant-primary-value">{renderValue(primary)}</div>
+          <div className="quadrant-primary-value">
+            {renderValue(primary)}
+            {renderChange(primary)}
+          </div>
         </div>
 
         {subs.map((metric) => (
@@ -59,7 +85,10 @@ export default function QuadrantCard({
                 <ChartButton metric={metric} onMetricClick={onMetricClick} />
               </span>
             </div>
-            <div className="quadrant-sub-value">{renderValue(metric)}</div>
+            <div className="quadrant-sub-value">
+              {renderValue(metric)}
+              {renderChange(metric)}
+            </div>
           </div>
         ))}
       </div>
@@ -87,7 +116,10 @@ export default function QuadrantCard({
             <ChartButton metric={primary} onMetricClick={onMetricClick} />
           </span>
         </div>
-        <div className="quadrant-primary-value">{renderValue(primary)}</div>
+        <div className="quadrant-primary-value">
+          {renderValue(primary)}
+          {renderChange(primary)}
+        </div>
       </div>
 
       {subs.length > 0 && (
@@ -101,7 +133,10 @@ export default function QuadrantCard({
                   <ChartButton metric={metric} onMetricClick={onMetricClick} />
                 </span>
               </div>
-              <div className="quadrant-sub-value">{renderValue(metric)}</div>
+              <div className="quadrant-sub-value">
+                {renderValue(metric)}
+                {renderChange(metric)}
+              </div>
             </div>
           ))}
         </div>

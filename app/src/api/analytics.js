@@ -11,12 +11,13 @@ async function request(path) {
   return data;
 }
 
-function buildQuery({ connectionIds, from, to, sortBy }) {
+function buildQuery({ connectionIds, from, to, sortBy, compare }) {
   const params = new URLSearchParams();
   if (connectionIds?.length) params.set("connectionIds", connectionIds.join(","));
   if (from) params.set("from", from);
   if (to) params.set("to", to);
   if (sortBy) params.set("sortBy", sortBy);
+  if (compare) params.set("compare", "true");
   return params.toString();
 }
 

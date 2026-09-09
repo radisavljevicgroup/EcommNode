@@ -446,4 +446,5 @@ module.exports = {
   normalizeCityKey,
   newCustomerCount,
   inRange,
+  shiftYears,
 };

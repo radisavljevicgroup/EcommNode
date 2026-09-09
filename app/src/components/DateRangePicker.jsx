@@ -4,7 +4,7 @@ import { useState } from "react";
 // UTC (e.g. Serbia), local midnight on the 1st becomes the previous day,
 // shifting every preset's boundary back by a day. Build the string from
 // local date parts instead.
-function isoDate(d) {
+export function isoDate(d) {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
@@ -17,7 +17,7 @@ function daysAgo(n) {
   return d;
 }
 
-function startOfMonth(offset = 0) {
+export function startOfMonth(offset = 0) {
   const d = new Date();
   d.setMonth(d.getMonth() + offset, 1);
   return d;

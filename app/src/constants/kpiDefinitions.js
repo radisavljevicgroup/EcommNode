@@ -10,6 +10,7 @@ export const KPI_QUADRANTS = [
         label: "Broj porudžbina",
         definition: "Ukupan broj realizovanih porudžbina u periodu.",
         format: "integer",
+        goodDirection: "up",
       },
       {
         key: "cr",
@@ -17,6 +18,7 @@ export const KPI_QUADRANTS = [
         definition:
           "Conversion Rate — procenat GA4 poseta koje su rezultovale porudžbinom (Broj porudžbina / GA4 sesije). Računa se samo za prodavnice koje imaju povezan Google Analytics 4.",
         format: "percent",
+        goodDirection: "up",
       },
     ],
   },
@@ -30,6 +32,7 @@ export const KPI_QUADRANTS = [
         definition:
           "Average Order Value — prosečna vrednost korpe (Ukupan prihod / Ukupan broj porudžbina).",
         format: "currency",
+        goodDirection: "up",
       },
       {
         key: "upt",
@@ -37,6 +40,7 @@ export const KPI_QUADRANTS = [
         definition:
           "Units Per Transaction — prosečan broj artikala po porudžbini (Ukupan broj prodatih artikala / Ukupan broj porudžbina).",
         format: "decimal",
+        goodDirection: "up",
       },
     ],
   },
@@ -49,6 +53,7 @@ export const KPI_QUADRANTS = [
         label: "Procenat dostave",
         definition: "Udio troškova dostave u ukupnom prihodu.",
         format: "percent",
+        goodDirection: "down",
       },
       {
         key: "ofct",
@@ -56,6 +61,7 @@ export const KPI_QUADRANTS = [
         definition:
           "Order Fulfillment Cycle Time — prosečno vreme od kreiranja porudžbine do slanja na dostavu.",
         format: "days",
+        goodDirection: "down",
       },
       {
         key: "returnRate",
@@ -63,6 +69,7 @@ export const KPI_QUADRANTS = [
         definition:
           "Return Rate — stopa otkazanih ili vraćenih porudžbina (Vraćene/Otkazane / Ukupne porudžbine).",
         format: "percent",
+        goodDirection: "down",
       },
     ],
   },
@@ -77,6 +84,7 @@ export const KPI_QUADRANTS = [
         definition:
           "Customer Lifetime Value — ukupna istorijska potrošnja po jedinstvenom kupcu (kupac je identifikovan preko broja telefona).",
         format: "currency",
+        goodDirection: "up",
       },
       {
         key: "rpr",
@@ -84,6 +92,7 @@ export const KPI_QUADRANTS = [
         definition:
           "Repeat Purchase Rate — procenat kupaca sa više od 1 porudžbine (Povratni kupci / Ukupni jedinstveni kupci).",
         format: "percent",
+        goodDirection: "up",
       },
       {
         key: "tbo",
@@ -91,6 +100,7 @@ export const KPI_QUADRANTS = [
         definition:
           "Time Between Orders — prosečno vreme (u danima) između uzastopnih kupovina istog kupca.",
         format: "days",
+        goodDirection: "down",
       },
       {
         key: "clv",
@@ -98,6 +108,7 @@ export const KPI_QUADRANTS = [
         definition:
           "Predikcija životne vrednosti — procenjena ukupna vrednost koju će prosečan kupac doneti tokom celog svog životnog veka. Heuristička procena (AOV × učestalost kupovine × procenjeni životni vek), ne pravi prediktivni model.",
         format: "currency",
+        goodDirection: "up",
       },
       {
         key: "cac",
@@ -105,6 +116,7 @@ export const KPI_QUADRANTS = [
         definition:
           "Customer Acquisition Cost — prosečna cena akvizicije novog kupca (Potrošnja na Meta oglase / Broj novih kupaca u periodu — kupac čija je prva ikad porudžbina u ovom periodu). Računa se samo za prodavnice koje imaju povezan Meta Ads.",
         format: "currency",
+        goodDirection: "down",
       },
     ],
   },

@@ -161,6 +161,30 @@ async function computeCacTrend(connections, allOrders, { from, to, company }) {
   return { unit, series, currency: currency || "RSD" };
 }
 
+// Same shape/reasoning as dashboard.js's changePercent — that copy compares
+// a period to the one immediately before it, this one to the same period a
+// year back, but the arithmetic (and the null-guarding) is identical.
+function changePercent(current, previous) {
+  if (current === null || current === undefined) return null;
+  if (!previous) return null;
+  return ((current - previous) / previous) * 100;
+}
+
+const SUMMARY_METRIC_KEYS = [
+  "orderCount",
+  "cr",
+  "aov",
+  "upt",
+  "shippingPercent",
+  "rpr",
+  "ltv",
+  "tbo",
+  "clv",
+  "cac",
+  "ofct",
+  "returnRate",
+];
+
 router.get("/analytics/summary", async (req, res) => {
   const connections = resolveConnections(req);
   if (!connections.length) {
@@ -183,12 +207,47 @@ router.get("/analytics/summary", async (req, res) => {
   }
   try {
     const orders = await getOrdersForConnections(connections);
-    const { from, to } = req.query;
+    const { from, to, compare } = req.query;
     const summary = analytics.computeSummary(orders, { from, to });
-    summary.cr = await computeConversionRate(connections, { from, to });
-    const cacResult = await computeCac(connections, orders, { from, to, company: req.company });
-    summary.cac = cacResult?.value ?? null;
-    summary.cacCurrency = cacResult?.currency ?? null;
+
+    if (compare === "true" || compare === "1") {
+      // "Isti period / isti mesec / isti dan" all reduce to the exact same
+      // operation server-side — the frontend just sends a different [from,
+      // to] depending on which of the three the merchant picked (see
+      // SalesAnalysis.jsx). Reusing `orders` here (not a second store
+      // fetch) is the same reasoning ltv/rpr/tbo/clv already rely on: it's
+      // the full order history, already covers any date window.
+      const prevFrom = from ? analytics.shiftYears(from, -1) : null;
+      const prevTo = to ? analytics.shiftYears(to, -1) : null;
+      const prevSummary = analytics.computeSummary(orders, { from: prevFrom, to: prevTo });
+
+      const [[crCurr, crPrev], [cacCurrResult, cacPrevResult]] = await Promise.all([
+        Promise.all([
+          computeConversionRate(connections, { from, to }),
+          computeConversionRate(connections, { from: prevFrom, to: prevTo }),
+        ]),
+        Promise.all([
+          computeCac(connections, orders, { from, to, company: req.company }),
+          computeCac(connections, orders, { from: prevFrom, to: prevTo, company: req.company }),
+        ]),
+      ]);
+      summary.cr = crCurr;
+      prevSummary.cr = crPrev;
+      summary.cac = cacCurrResult?.value ?? null;
+      summary.cacCurrency = cacCurrResult?.currency ?? null;
+      prevSummary.cac = cacPrevResult?.value ?? null;
+
+      summary.changePercent = {};
+      SUMMARY_METRIC_KEYS.forEach((key) => {
+        summary.changePercent[key] = changePercent(summary[key], prevSummary[key]);
+      });
+    } else {
+      summary.cr = await computeConversionRate(connections, { from, to });
+      const cacResult = await computeCac(connections, orders, { from, to, company: req.company });
+      summary.cac = cacResult?.value ?? null;
+      summary.cacCurrency = cacResult?.currency ?? null;
+    }
+
     res.json(summary);
   } catch {
     res.status(400).json({ error: "Ne mogu da izračunam analitiku." });

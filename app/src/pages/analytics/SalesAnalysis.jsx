@@ -10,7 +10,7 @@ import {
   triggerSync,
 } from "../../api/analytics";
 import MultiSelect from "../../components/MultiSelect";
-import DateRangePicker, { PRESETS } from "../../components/DateRangePicker";
+import DateRangePicker, { PRESETS, isoDate, startOfMonth } from "../../components/DateRangePicker";
 import QuadrantCard from "../../components/QuadrantCard";
 import MetricTrendModal from "../../components/MetricTrendModal";
 import RevenueTrendChart from "../../components/charts/RevenueTrendChart";
@@ -21,6 +21,17 @@ import { siteLabel } from "../../utils/site";
 import { RefreshIcon } from "../../icons";
 
 const YEAR_PRESET = PRESETS.find((p) => p.key === "year");
+
+// The three comparison modes all reduce to the same backend operation
+// (shiftYears on whatever [from, to] is currently active) — "Isti mesec"
+// and "Isti dan" just first move `range` to a fixed anchor (month-to-date,
+// today) before that shift happens; "Isti period" leaves `range` alone and
+// compares whatever's already selected. See server/routes/analytics.js.
+const COMPARE_MODES = [
+  { key: "period", label: "Isti period", labelSuffix: "isti period prošle godine" },
+  { key: "month", label: "Isti mesec", labelSuffix: "isti mesec prošle godine" },
+  { key: "day", label: "Isti dan", labelSuffix: "isti dan prošle godine" },
+];
 
 export default function SalesAnalysis() {
   const [connections, setConnections] = useState([]);
@@ -36,8 +47,22 @@ export default function SalesAnalysis() {
   const [chartMetric, setChartMetric] = useState(null);
   const [productSortBy, setProductSortBy] = useState("revenue");
   const [refreshKey, setRefreshKey] = useState(0);
+  const [compareMode, setCompareMode] = useState(null);
 
   const [from, to] = range;
+
+  const handleCompareModeClick = (mode) => {
+    if (compareMode === mode) {
+      setCompareMode(null);
+      return;
+    }
+    if (mode === "month") {
+      setRange([isoDate(startOfMonth()), isoDate(new Date())]);
+    } else if (mode === "day") {
+      setRange([isoDate(new Date()), isoDate(new Date())]);
+    }
+    setCompareMode(mode);
+  };
 
   useEffect(() => {
     Promise.all([fetchWooStatus(), fetchShopifyStatus()])
@@ -81,7 +106,7 @@ export default function SalesAnalysis() {
     setLoading(true);
     setError("");
 
-    const filters = { connectionIds: selectedIds, from, to };
+    const filters = { connectionIds: selectedIds, from, to, compare: Boolean(compareMode) };
 
     Promise.all([
       fetchAnalyticsSummary(filters),
@@ -107,7 +132,7 @@ export default function SalesAnalysis() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [idsKey, from, to, productSortBy, refreshKey]);
+  }, [idsKey, from, to, productSortBy, refreshKey, compareMode]);
 
   useEffect(() => {
     if (selectedIds.length === 0) return undefined;
@@ -142,6 +167,9 @@ export default function SalesAnalysis() {
   };
 
   const storeOptions = connections.map((c) => ({ id: c.id, label: siteLabel(c.siteUrl) }));
+  const compareLabel = compareMode
+    ? `u odnosu na ${COMPARE_MODES.find((m) => m.key === compareMode).labelSuffix}`
+    : null;
 
   return (
     <div className="analytics-page">
@@ -161,6 +189,18 @@ export default function SalesAnalysis() {
           showSelectAll
         />
         <DateRangePicker from={from} to={to} onChange={(f, t) => setRange([f, t])} />
+        <div className="date-range-presets compare-mode-presets">
+          {COMPARE_MODES.map((m) => (
+            <button
+              key={m.key}
+              type="button"
+              className={"date-range-preset" + (compareMode === m.key ? " active" : "")}
+              onClick={() => handleCompareModeClick(m.key)}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
         <button
           type="button"
           className="btn-save analytics-sync-btn"
@@ -198,6 +238,7 @@ export default function SalesAnalysis() {
                 currency={summary?.currency || "RSD"}
                 wide={q.wide}
                 onMetricClick={setChartMetric}
+                compareLabel={compareLabel}
               />
             ))}
           </div>
