@@ -308,10 +308,12 @@ function OrderCard({ order, expanded, onToggle, onCallCountChange }) {
                         <div className="order-item-thumb placeholder" />
                       )}
                     </td>
-                    <td>{item.name}</td>
-                    <td>{item.sku || "—"}</td>
-                    <td>{item.quantity}</td>
-                    <td>
+                    <td data-label="Proizvod" className="order-item-name">
+                      {item.name}
+                    </td>
+                    <td data-label="Šifra">{item.sku || "—"}</td>
+                    <td data-label="Količina">{item.quantity}</td>
+                    <td data-label="Cena">
                       {item.price} {order.currency}
                     </td>
                   </tr>

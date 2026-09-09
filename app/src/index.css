@@ -639,6 +639,14 @@ body {
   .settings-layout,
   .orders-layout {
     flex-direction: column;
+    /* Base rule sets align-items: flex-start for the desktop two-column
+       layout (rail + content side by side) — in column direction that
+       becomes the cross-axis (width) alignment, so without this override
+       settings-main/orders content shrink-wraps to its widest descendant's
+       max-content width (e.g. the unwrapped brand filter-tabs row) instead
+       of filling the screen, dragging the whole page into horizontal
+       scroll. */
+    align-items: stretch;
   }
 
   .icon-rail {
@@ -2491,6 +2499,7 @@ body {
   font-size: 13px;
   color: var(--text-dark);
   margin: 0 0 2px;
+  overflow-wrap: break-word;
 }
 
 .order-card-value.muted {
@@ -2509,14 +2518,12 @@ body {
 @media (max-width: 560px) {
   .orders-page-header {
     align-items: stretch;
+    min-width: 0;
   }
 
   .orders-search,
   .orders-search input {
     width: 100%;
-  }
-
-  .orders-search input {
     min-width: 0;
   }
 
@@ -2531,6 +2538,12 @@ body {
 
   .filter-tab {
     flex-shrink: 0;
+  }
+
+  .orders-toolbar {
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
   }
 
   .orders-toolbar-secondary {
@@ -2551,6 +2564,64 @@ body {
     flex-basis: 100%;
     justify-content: space-between;
     padding-left: 34px;
+  }
+
+  .order-card-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Below this width the 5-column items table no longer fits and was
+     silently scrolling off the right edge of .orders-items-table-wrap
+     instead of wrapping — reflow each row into a small stacked block
+     (thumbnail, full-width name, then label: value meta) instead. */
+  .orders-items-table-wrap {
+    overflow-x: visible;
+  }
+
+  .orders-items-table thead {
+    display: none;
+  }
+
+  .orders-items-table,
+  .orders-items-table tbody,
+  .orders-items-table tr,
+  .orders-items-table td {
+    display: block;
+    width: auto;
+    max-width: 100%;
+  }
+
+  .orders-items-table tr {
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .orders-items-table tr:last-child {
+    border-bottom: none;
+  }
+
+  .orders-items-table td {
+    padding: 2px 0;
+    border-bottom: none;
+    overflow-wrap: break-word;
+  }
+
+  .order-item-name {
+    margin-top: 6px;
+    font-weight: 600;
+  }
+
+  .orders-items-table td:first-child {
+    margin-top: 0;
+  }
+
+  .orders-items-table td[data-label]:not(.order-item-name) {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .orders-items-table td[data-label]:not(.order-item-name)::before {
+    content: attr(data-label) ": ";
   }
 }
 
