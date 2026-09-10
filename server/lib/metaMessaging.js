@@ -31,6 +31,56 @@ async function graphFetch(url, options) {
   return data;
 }
 
+// --- Facebook Login for the "Poveži se sa Facebook-om" connect flow -----
+// Replaces the old "paste a Page Access Token you found in Graph API
+// Explorer" modal, which was never something a non-developer merchant
+// could realistically do on their own. The frontend gets a short-lived
+// USER token from FB.login() (see lib/facebookSdk.js); these two calls
+// turn that into the actual Page Access Tokens (+ linked Instagram
+// account ids) the rest of this file/routes/inbox.js already expects —
+// nothing downstream of "we have a page id + access token" changes.
+
+// A user token from FB.login() is short-lived (~1-2h) — pages/access
+// tokens minted from a LONG-lived user token effectively never expire
+// (until the merchant revokes access), which is what we need to store and
+// reuse for sending messages indefinitely. This is the standard Meta
+// "token exchange" step, not something FB.login() does on its own.
+async function exchangeForLongLivedUserToken(shortLivedUserToken) {
+  const appId = process.env.META_APP_ID;
+  const appSecret = process.env.META_APP_SECRET;
+  if (!appId || !appSecret) {
+    throw new Error("META_APP_ID/META_APP_SECRET nisu podešeni na serveru.");
+  }
+  const url = new URL(`${GRAPH_API_BASE}/oauth/access_token`);
+  url.searchParams.set("grant_type", "fb_exchange_token");
+  url.searchParams.set("client_id", appId);
+  url.searchParams.set("client_secret", appSecret);
+  url.searchParams.set("fb_exchange_token", shortLivedUserToken);
+  const data = await graphFetch(url.toString());
+  return data.access_token;
+}
+
+// Every Page the merchant manages, each with its own (already long-lived,
+// since it's minted from a long-lived user token) Page Access Token, plus
+// the linked Instagram professional account if there is one — exactly the
+// {id, name, accessToken, instagram} shape the frontend page-picker needs
+// to call POST /inbox/connections with, for either platform, no further
+// lookups required.
+async function listManagedPages(longLivedUserToken) {
+  const url = new URL(`${GRAPH_API_BASE}/me/accounts`);
+  url.searchParams.set("fields", "id,name,access_token,instagram_business_account{id,username}");
+  url.searchParams.set("access_token", longLivedUserToken);
+  const data = await graphFetch(url.toString());
+  return (data.data || []).map((page) => ({
+    id: page.id,
+    name: page.name,
+    accessToken: page.access_token,
+    instagram: page.instagram_business_account
+      ? { id: page.instagram_business_account.id, username: page.instagram_business_account.username }
+      : null,
+  }));
+}
+
 // Meta requires each Page (Instagram professional accounts message through
 // their linked Page too, so this covers both) to be explicitly subscribed
 // to our app's webhook, on top of the app-level webhook URL already
@@ -242,6 +292,8 @@ function normalizeWhatsAppEntry(entry) {
 
 module.exports = {
   verifySignature,
+  exchangeForLongLivedUserToken,
+  listManagedPages,
   subscribePage,
   sendPageMessage,
   sendWhatsAppMessage,

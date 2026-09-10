@@ -16,6 +16,7 @@ import MetaIntegration from "../../components/MetaIntegration";
 import MetaConnectModal from "../../components/MetaConnectModal";
 import InboxChannelIntegration from "../../components/InboxChannelIntegration";
 import InboxChannelConnectModal from "../../components/InboxChannelConnectModal";
+import MetaPagesConnectModal from "../../components/MetaPagesConnectModal";
 import PlatformBadge from "../../components/PlatformBadge";
 import Toast from "../../components/Toast";
 import { fetchWooStatus } from "../../api/woocommerce";
@@ -641,7 +642,7 @@ export default function IntegrationsSection() {
       )}
 
       {showFacebookModal && (
-        <InboxChannelConnectModal
+        <MetaPagesConnectModal
           platform="facebook"
           onClose={() => setShowFacebookModal(false)}
           onConnected={handleInboxConnected}
@@ -650,7 +651,7 @@ export default function IntegrationsSection() {
       )}
 
       {showInstagramModal && (
-        <InboxChannelConnectModal
+        <MetaPagesConnectModal
           platform="instagram"
           onClose={() => setShowInstagramModal(false)}
           onConnected={handleInboxConnected}

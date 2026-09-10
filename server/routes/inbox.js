@@ -386,6 +386,25 @@ router.get("/inbox/connections", requireAuth, (req, res) => {
   res.json({ connections: connectionsStore.getConnections(req.company).map(toPublicConnection) });
 });
 
+// Step 2 of "Poveži se sa Facebook-om" (step 1 is the frontend's FB.login()
+// popup, see lib/facebookSdk.js) — takes the short-lived USER token that
+// popup returns and turns it into the list of Pages (+ linked Instagram
+// accounts) the merchant can pick from. Nothing is saved here; picking one
+// in MetaPagesConnectModal.jsx still goes through the normal
+// POST /inbox/connections below (same subscribePage() call either way).
+router.post("/inbox/oauth/facebook/pages", requireAuth, async (req, res) => {
+  const userAccessToken = req.body?.accessToken;
+  if (!userAccessToken) return res.status(400).json({ error: "accessToken je obavezan." });
+
+  try {
+    const longLivedToken = await meta.exchangeForLongLivedUserToken(userAccessToken);
+    const pages = await meta.listManagedPages(longLivedToken);
+    res.json({ pages });
+  } catch (err) {
+    res.status(400).json({ error: "Preuzimanje stranica nije uspelo: " + err.message });
+  }
+});
+
 router.post("/inbox/connections", requireAuth, async (req, res) => {
   const { label, platform } = req.body || {};
   // Trimmed defensively — a stray trailing newline/space from copy-paste

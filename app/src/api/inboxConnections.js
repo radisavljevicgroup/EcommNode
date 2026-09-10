@@ -28,3 +28,15 @@ export function connectInboxChannel(payload) {
 export function disconnectInboxChannel(id) {
   return request(`/inbox/connections/${id}/delete`, { method: "POST" });
 }
+
+// Step 2 of "Poveži se sa Facebook-om" — exchanges the short-lived user
+// token from facebookLogin() (lib/facebookSdk.js) for the merchant's list
+// of Pages + linked Instagram accounts, each already carrying its own
+// long-lived Page Access Token ready to pass straight to
+// connectInboxChannel above.
+export function fetchManagedFacebookPages(accessToken) {
+  return request("/inbox/oauth/facebook/pages", {
+    method: "POST",
+    body: JSON.stringify({ accessToken }),
+  });
+}
