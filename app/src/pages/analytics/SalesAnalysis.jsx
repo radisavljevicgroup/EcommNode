@@ -208,6 +208,7 @@ export default function SalesAnalysis() {
               series={trends.series}
               yoyPercent={trends.yoyPercent}
               currency={summary?.currency || "RSD"}
+              showPrevious={false}
             />
           )}
           {topProducts && (

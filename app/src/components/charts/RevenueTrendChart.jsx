@@ -9,19 +9,31 @@ import {
   CartesianGrid,
 } from "recharts";
 
-export default function RevenueTrendChart({ series, yoyPercent, currency, title = "Mesečni trendovi prihoda" }) {
+// showPrevious=false is what the always-on overview chart above the
+// "Poređenje sa prošlom godinom" section uses now — that comparison lives
+// in its own section further down (YearComparisonSection.jsx), so this
+// chart went back to a single "Ova godina" line to stop showing the same
+// comparison twice on one page. YearComparisonSection keeps the default
+// (true).
+export default function RevenueTrendChart({
+  series,
+  yoyPercent,
+  currency,
+  title = "Mesečni trendovi prihoda",
+  showPrevious = true,
+}) {
   const positive = yoyPercent !== null && yoyPercent >= 0;
   // Only draw the prior-year line when there's actually something to
   // compare against — a brand-new store with no history a year back would
   // otherwise show a flat line pinned at zero, which reads as a data bug
   // rather than "no data".
-  const hasPrevious = series.some((p) => p.previousRevenue > 0);
+  const hasPrevious = showPrevious && series.some((p) => p.previousRevenue > 0);
 
   return (
     <div className="chart-card">
       <div className="chart-card-head">
         <h3>{title}</h3>
-        {yoyPercent !== null && (
+        {showPrevious && yoyPercent !== null && (
           <span className={"yoy-badge " + (positive ? "up" : "down")}>
             {positive ? "▲" : "▼"} {Math.abs(yoyPercent).toFixed(1)}% u odnosu na prošlu godinu
           </span>
