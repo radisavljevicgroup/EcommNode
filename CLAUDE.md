@@ -4,6 +4,37 @@ Ovaj projekat se razvija paralelno sa dva Claude naloga na dva različita
 računara. Ovaj fajl postoji da obe sesije prate ista pravila bez potrebe da
 korisnik ručno prenosi instrukcije između njih.
 
+## 0. Na početku SVAKE sesije, pre bilo kakve izmene: povuci oba repo-a
+
+Pre nego što se dirne bilo koji fajl (kod, config, čak i ovaj CLAUDE.md),
+prvo proveri da li je druga sesija/računar u međuvremenu nešto
+push-ovao — u OBA repo-a, ne samo u glavnom:
+
+```bash
+cd EcommNode          && git fetch origin && git log HEAD..origin/main --oneline
+cd ../ecommnode-premium && git fetch origin && git log HEAD..origin/main --oneline
+```
+
+- Ako bilo koja komanda ispiše commit-e → to je rad druge sesije koji
+  lokalno ne postoji. Uradi `git pull --ff-only` na oba repo-a PRE nego
+  što počneš svoj zadatak (ne posle) — u suprotnom radiš na zastareloj
+  osnovi i rizikuješ upravo ono što se desilo 2026-09-10: build/izmena
+  napravljena bez najnovijeg stanja drugog računara je izgledala uspešno
+  lokalno, ali je na produkciji tiho izostavila/pregazila tuđi rad (vidi
+  sekciju 1, "Pre SVAKOG `npm run build`").
+- Ako `git pull --ff-only` odbije zbog lokalnih nekomitovanih izmena —
+  ne diraj ih nasilno (bez `reset --hard`/`checkout --`). Prvo pogledaj
+  šta je to (`git status`, `git diff`) — verovatno je nedovršen rad ove
+  iste sesije od ranije (ili mašinski-specifične izmene poput
+  `app/vite.config.js` / `.claude/launch.json` putanja, koje i ne treba
+  da se commituju, vidi sekciju 4) — pa tek onda odluči da li da
+  stash-uješ, commituješ ili ostaviš netaknuto.
+- Ovo ne zamenjuje pravila iz sekcije 1 (rebuild `dist/` pre push-a,
+  provera pre "gurnuto je, deploy-uj") — to je provera PRE početka rada,
+  ne pred kraj. Pravilo iz sekcije 1 i "Opšte" (sekcija 4) i dalje važi
+  neposredno pre samog `npm run build`/push-a, jer druga sesija može
+  pushovati i USRED tvog rada.
+
 ## 1. Deploy pipeline — kako zapravo radi
 
 `.cpanel.yml` na serveru (cPanel Git™ Version Control) radi ovo pri svakom
