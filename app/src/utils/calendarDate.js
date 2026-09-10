@@ -64,6 +64,20 @@ export function buildWeekDays(date) {
   return Array.from({ length: 7 }, (_, i) => addDays(start, i));
 }
 
+// A rolling window of `count` consecutive days starting exactly at `date`
+// (no snapping to Monday, unlike buildWeekDays) — used for the narrow-screen
+// day-at-a-time view, where the window can start on any weekday.
+export function buildDayWindow(date, count) {
+  const start = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  return Array.from({ length: count }, (_, i) => addDays(start, i));
+}
+
+// WEEKDAY_SHORT_SR is Monday-first (index 0 = "Pon"); getDay() is
+// Sunday-first (0 = Sunday), hence the +6 %7 shift to realign them.
+export function weekdayShort(date) {
+  return WEEKDAY_SHORT_SR[(date.getDay() + 6) % 7];
+}
+
 // 6 full weeks (42 days) covering the month `date` falls in, Monday-first,
 // padded with the trailing days of the previous/next month.
 export function buildMonthGrid(date) {

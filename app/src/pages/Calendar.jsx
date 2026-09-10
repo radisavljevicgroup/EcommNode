@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import CalendarSidebar from "../components/calendar/CalendarSidebar";
 import WeekView from "../components/calendar/WeekView";
 import MonthView from "../components/calendar/MonthView";
@@ -17,6 +17,7 @@ import {
 import {
   addDays,
   addMonths,
+  buildDayWindow,
   buildMonthGrid,
   buildWeekDays,
   formatMonthYear,
@@ -29,6 +30,30 @@ const VIEWS = [
   { id: "week", label: "Nedelja" },
   { id: "month", label: "Mesec" },
 ];
+
+// Below this width the week view swaps its fixed 7-day grid for a 3-day
+// rolling window (see mobileDays below) — matches the breakpoint the rest
+// of the calendar's mobile layout already uses.
+const NARROW_BREAKPOINT = 640;
+const MOBILE_DAY_COUNT = 3;
+
+// Swipe must be mostly horizontal and past this distance to count as
+// "next/prev" rather than the user just scrolling the hour grid vertically
+// or tapping a slot.
+const SWIPE_THRESHOLD_PX = 45;
+
+function useIsNarrow(breakpoint) {
+  const [isNarrow, setIsNarrow] = useState(
+    () => typeof window !== "undefined" && window.innerWidth <= breakpoint
+  );
+  useEffect(() => {
+    const mq = window.matchMedia(`(max-width: ${breakpoint}px)`);
+    const handler = (e) => setIsNarrow(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, [breakpoint]);
+  return isNarrow;
+}
 
 export default function Calendar() {
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -47,9 +72,20 @@ export default function Calendar() {
       .catch((err) => setError(err.message));
   }, []);
 
+  const isNarrow = useIsNarrow(NARROW_BREAKPOINT);
   const weekDays = useMemo(() => buildWeekDays(currentDate), [currentDate]);
+  // Below NARROW_BREAKPOINT, "week" view shows a rolling MOBILE_DAY_COUNT-day
+  // window starting at currentDate instead of a Monday-aligned full week —
+  // buildWeekDays' 7 columns don't fit a phone screen without squeezing
+  // each one unreadably thin.
+  const mobileDays = useMemo(
+    () => buildDayWindow(currentDate, MOBILE_DAY_COUNT),
+    [currentDate]
+  );
+  const weekViewDays = isNarrow ? mobileDays : weekDays;
+  const dayWindowSize = isNarrow ? MOBILE_DAY_COUNT : 7;
   const monthGridDays = useMemo(() => buildMonthGrid(currentDate), [currentDate]);
-  const visibleDays = view === "week" ? weekDays : monthGridDays;
+  const visibleDays = view === "week" ? weekViewDays : monthGridDays;
   const rangeFrom = toISODate(visibleDays[0]);
   const rangeTo = toISODate(visibleDays[visibleDays.length - 1]);
 
@@ -126,9 +162,29 @@ export default function Calendar() {
   const goToday = () => setCurrentDate(new Date());
 
   const goPrevPeriod = () =>
-    setCurrentDate((cur) => (view === "week" ? addDays(cur, -7) : addMonths(cur, -1)));
+    setCurrentDate((cur) => (view === "week" ? addDays(cur, -dayWindowSize) : addMonths(cur, -1)));
   const goNextPeriod = () =>
-    setCurrentDate((cur) => (view === "week" ? addDays(cur, 7) : addMonths(cur, 1)));
+    setCurrentDate((cur) => (view === "week" ? addDays(cur, dayWindowSize) : addMonths(cur, 1)));
+
+  // Swipe left/right through the mobile 3-day window — mirrors goPrevPeriod
+  // /goNextPeriod above rather than calling setCurrentDate directly, so a
+  // swipe and the toolbar arrows always agree on how far one "page" moves.
+  const touchRef = useRef(null);
+  const handleWeekTouchStart = (e) => {
+    const t = e.touches[0];
+    touchRef.current = { x: t.clientX, y: t.clientY };
+  };
+  const handleWeekTouchEnd = (e) => {
+    const start = touchRef.current;
+    touchRef.current = null;
+    if (!start) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - start.x;
+    const dy = t.clientY - start.y;
+    if (Math.abs(dx) < SWIPE_THRESHOLD_PX || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+    if (dx < 0) goNextPeriod();
+    else goPrevPeriod();
+  };
 
   const jumpToWeek = (date) => {
     setCurrentDate(date);
@@ -260,14 +316,20 @@ export default function Calendar() {
         {error && <div className="woo-error">{error}</div>}
 
         {view === "week" ? (
-          <WeekView
-            days={weekDays}
-            eventsByDay={eventsByDay}
-            categoryMap={categoryMap}
-            onSlotClick={openCreateModal}
-            onEventClick={openEditModal}
-            onEventMove={moveEvent}
-          />
+          <div
+            className="cal-week-swipe-wrap"
+            onTouchStart={isNarrow ? handleWeekTouchStart : undefined}
+            onTouchEnd={isNarrow ? handleWeekTouchEnd : undefined}
+          >
+            <WeekView
+              days={weekViewDays}
+              eventsByDay={eventsByDay}
+              categoryMap={categoryMap}
+              onSlotClick={openCreateModal}
+              onEventClick={openEditModal}
+              onEventMove={moveEvent}
+            />
+          </div>
         ) : (
           <MonthView
             gridDays={monthGridDays}

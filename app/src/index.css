@@ -682,7 +682,7 @@ body {
   }
 
   .icon-rail-item:hover .icon-rail-submenu,
-  .icon-rail-item.active .icon-rail-submenu {
+  .icon-rail-item.open .icon-rail-submenu {
     opacity: 1;
     visibility: visible;
     pointer-events: auto;
@@ -914,6 +914,23 @@ body {
   margin-bottom: 20px;
 }
 
+/* This row can hold a badge, name+description, and up to two buttons
+   (e.g. "Otvori u Analitici" + "Isključi") — none of which shrink below
+   their own content. Below this width there's no longer room for all of
+   them on one line, and .integration-info (flex:1, min-width:0) used to
+   get squeezed down to a sliver, wrapping its description one word per
+   line. Wrapping the row and giving info a minimum width instead pushes
+   the buttons onto their own full-width line. */
+@media (max-width: 560px) {
+  .integration-card {
+    flex-wrap: wrap;
+  }
+
+  .integration-card .integration-info {
+    min-width: 180px;
+  }
+}
+
 .integration-badge {
   width: 44px;
   height: 44px;
@@ -974,6 +991,14 @@ body {
   margin: 0 0 2px;
   display: flex;
   align-items: center;
+  /* The name itself is often a raw URL (no spaces, so nothing to wrap
+     between) — without flex-wrap + overflow-wrap, a long one just
+     overflows this box's bounds instead of shrinking, and later siblings
+     in the head row (e.g. .eurocom-integration-actions) paint on top of
+     that overflow, visually covering it. */
+  flex-wrap: wrap;
+  overflow-wrap: anywhere;
+  row-gap: 4px;
   gap: 8px;
 }
 
@@ -981,6 +1006,7 @@ body {
   font-size: 12.5px;
   color: var(--text-muted);
   margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .integration-meta {
@@ -1296,6 +1322,30 @@ body {
   flex-shrink: 0;
 }
 
+/* Below this width, .integration-info (flex:1, can shrink to ~0) and
+   .eurocom-integration-actions (flex-shrink:0, sized to its widest
+   button, e.g. "Draft-uj artikle bez stanja") can no longer both fit on
+   one row — forcing info down to a sliver instead of wrapping the row
+   used to squeeze the name/site text so far that later siblings painted
+   over it. Wrapping the row and giving info a minimum width pushes the
+   actions column onto its own full-width line instead. Must come after
+   the base rule above: same specificity, so source order decides which
+   align-items wins. */
+@media (max-width: 560px) {
+  .woo-integration-head {
+    flex-wrap: wrap;
+  }
+
+  .woo-integration-head .integration-info {
+    min-width: 200px;
+  }
+
+  .eurocom-integration-actions {
+    width: 100%;
+    align-items: stretch;
+  }
+}
+
 .eurocom-settings {
   margin-top: 16px;
   padding-top: 16px;
@@ -1468,6 +1518,22 @@ body {
 .eurocom-auto-sync-row span:last-child {
   opacity: 0.75;
   text-align: right;
+}
+
+/* The value ("9. sep 21:09 · ažurirano 0 od 59 artikala") is long and, next
+   to the fixed-width label, has too little room left on one row at narrow
+   widths — it used to shrink word-by-word into a single-word-per-line
+   column instead. Stacking label above value avoids that squeeze. */
+@media (max-width: 480px) {
+  .eurocom-auto-sync-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+  }
+
+  .eurocom-auto-sync-row span:last-child {
+    text-align: left;
+  }
 }
 
 .eurocom-diff-section {
@@ -5465,6 +5531,15 @@ body {
 }
 
 /* week view */
+.cal-week-swipe-wrap {
+  /* Lets the browser handle vertical scroll (the hour grid) natively while
+     our own touchstart/touchend handlers in Calendar.jsx interpret
+     horizontal drags as swipe-to-navigate — without this the browser may
+     try to claim horizontal drags itself (e.g. as a back/forward gesture)
+     before our handler sees the touchend. */
+  touch-action: pan-y;
+}
+
 .cal-week {
   background: #ffffff;
   border: 1px solid var(--border);
@@ -5475,7 +5550,11 @@ body {
 .cal-week-header,
 .cal-week-allday {
   display: grid;
-  grid-template-columns: 56px repeat(7, 1fr);
+  /* --cal-day-count is set inline on .cal-week by WeekView (days.length) —
+     7 for the desktop week, 3 for the narrow-screen day window — so this
+     grid always matches however many day columns are actually rendered
+     instead of a hardcoded week length. */
+  grid-template-columns: 56px repeat(var(--cal-day-count, 7), 1fr);
   border-bottom: 1px solid var(--border);
 }
 
@@ -5575,7 +5654,7 @@ body {
 
 .cal-week-body {
   display: grid;
-  grid-template-columns: 56px repeat(7, 1fr);
+  grid-template-columns: 56px repeat(var(--cal-day-count, 7), 1fr);
   max-height: 640px;
   overflow-y: auto;
 }
@@ -5585,6 +5664,16 @@ body {
     flex-direction: column;
     padding: 0 16px;
     margin: 20px auto 40px;
+    /* Base rule sets align-items: flex-start for the desktop two-column
+       layout (sidebar + main side by side) — in column direction that
+       becomes the cross-axis (width) alignment, so without this override
+       .cal-main shrink-wraps to its widest descendant's max-content width
+       (the week grid's min-width:620px, see .cal-week below) instead of
+       filling the screen. Since the page sits inside overflow-x:hidden,
+       that excess width doesn't scroll — it's just cut off, hiding the
+       later days of the week with no way to reach them. Same failure mode
+       already fixed this way for .settings-layout/.orders-layout. */
+    align-items: stretch;
   }
 
   .cal-sidebar {
@@ -5593,20 +5682,10 @@ body {
 }
 
 @media (max-width: 640px) {
-  /* The week/day grid's columns can't shrink below a usable width, so it
-     scrolls horizontally as one unit instead — header, all-day row and
-     hour body share this scroll position because they're all direct
-     children of the same .cal-week box. */
-  .cal-week {
-    overflow-x: auto;
-    overflow-y: hidden;
-  }
-
-  .cal-week-header,
-  .cal-week-allday,
-  .cal-week-body {
-    min-width: 620px;
-  }
+  /* Below this width Calendar.jsx switches the week view from 7 columns to
+     a 3-day rolling window (--cal-day-count: 3), so the grid above already
+     fits without shrinking each column unreadably — no horizontal scroll
+     needed here the way the old fixed-7-column layout required. */
 
   .cal-month-grid {
     grid-auto-rows: 84px;

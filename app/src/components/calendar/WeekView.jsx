@@ -1,11 +1,11 @@
 import { useRef, useState } from "react";
 import {
-  WEEKDAY_SHORT_SR,
   isToday,
   layoutDayEvents,
   minutesFromTime,
   timeFromMinutes,
   toISODate,
+  weekdayShort,
 } from "../../utils/calendarDate";
 
 const HOUR_START = 6;
@@ -190,12 +190,12 @@ export default function WeekView({ days, eventsByDay, categoryMap, onSlotClick, 
   };
 
   return (
-    <div className="cal-week">
+    <div className="cal-week" style={{ "--cal-day-count": days.length }}>
       <div className="cal-week-header">
         <div className="cal-week-gutter" />
-        {days.map((day, i) => (
+        {days.map((day) => (
           <div key={day.toISOString()} className="cal-week-day-head">
-            <span className="cal-week-day-name">{WEEKDAY_SHORT_SR[i]}</span>
+            <span className="cal-week-day-name">{weekdayShort(day)}</span>
             <span className={"cal-week-day-num" + (isToday(day) ? " today" : "")}>
               {day.getDate()}
             </span>
