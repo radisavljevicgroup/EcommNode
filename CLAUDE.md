@@ -31,6 +31,43 @@ se pokrene.
    `src/` bez rebuild-ovanog `dist/`. Ako menjaš `app/src`, `app/dist` mora
    biti u istom commitu (ili odmah sledećem, pre deploy-a).
 
+### Pre SVAKOG `npm run build`: proveri da je `ecommnode-premium` checkout ažuran
+
+Otkriveno 2026-09-10: `app/src/premium` i `server/premium` su Windows
+junction-ovi (simlinkovi) ka lokalnom checkout-u
+[ecommnode-premium](https://github.com/radisavljevicgroup/ecommnode-premium)
+na tom istom računaru (vidi sekciju 3). `AlatiSection.jsx`,
+`ItInfrastruktura.jsx` i `Analytics.jsx` koriste
+`import.meta.glob("../premium/*/...")` da pokupe premium module — ako
+folder za neki modul (npr. `stock-control`) fizički ne postoji u lokalnom
+`ecommnode-premium` checkout-u u trenutku kad se `npm run build` pokrene
+(jer taj checkout nije `git pull`-ovan, pa mu fali commit koji je taj
+folder dodao), Vite ga **tiho izostavi iz bundle-a** — bez ijedne greške
+ili warning-a pri build-u. Rezultat: `npm run build` "uspe", `dist/` se
+commituje i deploy-uje normalno, ali ceo alat (kartica u "Alati", tab u
+IT Infrastrukturi...) nestane sa live sajta kao da nikad nije ni pisan —
+lako zavara na "nešto je sa deploy-om/git-om", kad je zapravo stvar u
+tome da je build napravljen sa zastarelim lokalnim `premium/` checkout-om.
+
+Zato, pre SVAKOG `npm run build` u `app/` (na bilo kom od dva računara):
+
+```bash
+cd <putanja-do-ecommnode-premium>   # na ovom računaru: C:\Users\MarkoJ\ecommnode-premium
+git pull origin main
+cd ../EcommNode/app
+npm run build
+```
+
+Posle build-a, ako je nešto u premium modulima menjano nedavno, brzo
+proveri da je stvarno ušlo u bundle pre commit-a:
+
+```bash
+grep -o "<neki tekst jedinstven za taj modul>" dist/assets/index-*.js
+```
+
+Prazan rezultat = modul nije ušao u build → proveri `ecommnode-premium`
+checkout (git log/status) pre nego što nastaviš.
+
 ### Pre nego što kažeš korisniku "gurnuto je, pokreni deploy"
 
 Proveri da `git diff --stat <prethodni-commit> <novi-commit>` pokazuje
@@ -173,7 +210,23 @@ vodi taj server proces, i uputi na jednu od dve opcije ispod (3. sekcija).
 - Pre nego što bilo koja sesija pokrene `npm run build` u `app/`, proveri
   da li postoje nekomitovane izmene u `app/src` koje ta build sesija nema
   lokalno (npr. `git fetch` pa uporedi) — build sa nepotpunim source-om
-  briše tuđi rad iz `dist/`.
+  briše tuđi rad iz `dist/`. **I** proveri da je lokalni
+  `ecommnode-premium` checkout `git pull`-ovan na najnoviji `origin/main`
+  pre tog istog build-a — vidi sekciju 1, "Pre SVAKOG `npm run build`" —
+  jer zastareo premium checkout ne baca grešku, samo tiho izbaci ceo alat
+  iz bundle-a.
+- Kad korisnik javi da je nešto što je juče radilo na produkciji danas
+  nestalo (alat, integracija, dugme...) — prvo proveri git istoriju i
+  reflog na oba repo-a (`EcommNode` i `ecommnode-premium`) da isključiš
+  "izgubljen commit" (retko, obično nije to). Ako je istorija netaknuta,
+  sumnjaj redom na: (1) cPanel deploy koji kasni za GitHub-om (uporedi
+  HEAD Commit vs. Last Deployed SHA za OBA repo-a posebno, ne samo za
+  glavni), (2) stari Node worker proces koji nije ubijen posle deploy-a
+  (sekcija 1), (3) bundle napravljen sa zastarelim `ecommnode-premium`
+  checkout-om (ovaj odeljak, iznad) — ovo poslednje pogađa baš alate koji
+  su "bili tu juče, nema ih danas" bez ikakve vidljive greške, i lako se
+  pomeša sa (1) ili (2) dok se stvarno ne proveri sadržaj bundle-a
+  (`grep` po tekstu jedinstvenom za taj alat u `dist/assets/index-*.js`).
 - Baza (Supabase, `iwixrkrsurdpdiamszdw.supabase.co`) je deljena između
   local i produkcije — nalozi, firme/company scoping i slično su tu, pa se
   VIDE svuda. Integracije/konekcije (sekcija 2) nisu u bazi i NE dele se.
