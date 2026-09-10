@@ -50,13 +50,7 @@ export default function YearComparisonSection({ selectedIds }) {
 
     Promise.all([
       fetchAnalyticsSummary({ connectionIds: selectedIds, from, to, compare: true }),
-      fetchYoyTrends({
-        connectionIds: selectedIds,
-        mode: compareMode,
-        from,
-        to,
-        day: compareMode === "day" ? from : undefined,
-      }),
+      fetchYoyTrends({ connectionIds: selectedIds, from, to }),
     ])
       .then(([s, t]) => {
         if (cancelled) return;
@@ -78,14 +72,19 @@ export default function YearComparisonSection({ selectedIds }) {
 
   // RevenueTrendChart's x-axis field is literally named "month" (it was
   // built for the always-on monthly overview chart above) — reused as-is
-  // here for daily/hourly labels too rather than forking the component
-  // just to rename one prop key.
+  // here for daily/hourly/monthly labels too rather than forking the
+  // component just to rename one prop key. Granularity comes back from the
+  // server (see /analytics/yoy-trends's pickGranularity) — it's derived
+  // from how long [from, to] actually spans, not from compareMode, so a
+  // wide "Isti period" range can land on monthly same as the top chart.
+  const granularity = trends?.granularity || "daily";
   const chartSeries = (trends?.series || []).map((p) => ({
-    month: p.day || p.hour,
+    month: p.month || p.day || p.hour,
     revenue: p.revenue,
     previousRevenue: p.previousRevenue,
   }));
-  const chartTitle = compareMode === "day" ? "Prihod po satu" : "Prihod po danu";
+  const CHART_TITLES = { hourly: "Prihod po satu", daily: "Prihod po danu", monthly: "Prihod po mesecu" };
+  const chartTitle = CHART_TITLES[granularity];
 
   return (
     <div className="yoy-section">

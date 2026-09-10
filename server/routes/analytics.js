@@ -279,23 +279,40 @@ router.get("/analytics/trends", async (req, res) => {
 
 // Backs the "Poređenje sa prošlom godinom" section (SalesAnalysis.jsx) —
 // fully independent of /analytics/summary|trends above and whatever [from,
-// to] the main filters are set to. mode=day switches to hourly buckets for
-// a single calendar day (`day` param); period/month use daily buckets over
-// a [from, to] range, since a custom range or one month is usually too
-// short for the monthly chart above to say anything.
+// to] the main filters are set to. Granularity isn't tied to which of
+// "Isti period/mesec/dan" picked the range — it's derived from how long
+// the resulting [from, to] actually spans, so "Isti period" (a free custom
+// range) gets the same drill-down a merchant would expect at any scale:
+// a year-ish range breaks down by month, a month-ish range by day, and a
+// single day by hour (which "Isti dan" always lands on, since from===to).
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function pickGranularity(from, to) {
+  if (!from || !to) return "monthly";
+  const spanDays = Math.round((new Date(to) - new Date(from)) / DAY_MS) + 1;
+  if (spanDays <= 1) return "hourly";
+  if (spanDays <= 31) return "daily";
+  return "monthly";
+}
+
 router.get("/analytics/yoy-trends", async (req, res) => {
   const connections = resolveConnections(req);
   if (!connections.length) {
-    return res.json({ series: [], yoyPercent: null, currentTotal: 0, previousTotal: 0 });
+    return res.json({ series: [], yoyPercent: null, currentTotal: 0, previousTotal: 0, granularity: "daily" });
   }
   try {
     const orders = await getOrdersForConnections(connections);
-    const { mode, from, to, day } = req.query;
-    if (mode === "day") {
-      if (!day) return res.status(400).json({ error: "day je obavezan za mode=day." });
-      return res.json(analytics.computeHourlyTrends(orders, { day }));
-    }
-    res.json(analytics.computeDailyTrends(orders, { from, to }));
+    const { from, to } = req.query;
+    const granularity = pickGranularity(from, to);
+
+    const result =
+      granularity === "hourly"
+        ? analytics.computeHourlyTrends(orders, { day: from })
+        : granularity === "monthly"
+        ? analytics.computeTrends(orders, { from, to })
+        : analytics.computeDailyTrends(orders, { from, to });
+
+    res.json({ ...result, granularity });
   } catch {
     res.status(400).json({ error: "Ne mogu da izračunam poređenje." });
   }

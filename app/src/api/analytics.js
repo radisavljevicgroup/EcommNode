@@ -29,16 +29,15 @@ export function fetchAnalyticsTrends(filters) {
   return request(`/analytics/trends?${buildQuery(filters)}`);
 }
 
-// Backs the independent "Poređenje sa prošlom godinom" section — mode is
-// "period" | "month" | "day"; day-mode ignores from/to and needs `day`
-// instead (see server/routes/analytics.js's /analytics/yoy-trends).
-export function fetchYoyTrends({ connectionIds, mode, from, to, day }) {
+// Backs the independent "Poređenje sa prošlom godinom" section — the
+// server picks the chart's granularity (hourly/daily/monthly) from how
+// long [from, to] actually spans, not from which of "Isti period/mesec/
+// dan" picked that range (see server/routes/analytics.js).
+export function fetchYoyTrends({ connectionIds, from, to }) {
   const params = new URLSearchParams();
   if (connectionIds?.length) params.set("connectionIds", connectionIds.join(","));
-  params.set("mode", mode);
   if (from) params.set("from", from);
   if (to) params.set("to", to);
-  if (day) params.set("day", day);
   return request(`/analytics/yoy-trends?${params.toString()}`);
 }
 
