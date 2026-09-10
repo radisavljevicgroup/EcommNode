@@ -8,6 +8,9 @@ const DEFAULT_SETTINGS = {
   // switched on — off by default. Today this is a manual toggle; later
   // it'll also be gated by an actual subscription/payment check.
   enabledPremiumTools: [],
+  // How many of the most recent orders (across every connected site) the
+  // "Interni nalozi" premium tool shows — see server/premium/eurocom.
+  internalOrdersCount: 10,
 };
 
 // Keyed by company (see lib/auth.js) — each company gets its own settings

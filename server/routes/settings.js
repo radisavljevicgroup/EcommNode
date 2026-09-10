@@ -13,6 +13,7 @@ router.put("/settings", (req, res) => {
     staleTrackingEnabled,
     unfiscalizedTrackingEnabled,
     enabledPremiumTools,
+    internalOrdersCount,
   } = req.body || {};
   const patch = {};
 
@@ -37,6 +38,13 @@ router.put("/settings", (req, res) => {
       return res.status(400).json({ error: "enabledPremiumTools mora biti niz stringova." });
     }
     patch.enabledPremiumTools = enabledPremiumTools;
+  }
+  if (internalOrdersCount !== undefined) {
+    const n = Number(internalOrdersCount);
+    if (!Number.isInteger(n) || n <= 0) {
+      return res.status(400).json({ error: "Broj porudžbina mora biti pozitivan ceo broj." });
+    }
+    patch.internalOrdersCount = n;
   }
 
   res.json(updateSettings(req.company, patch));
