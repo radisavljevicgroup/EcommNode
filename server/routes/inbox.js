@@ -413,6 +413,18 @@ router.post("/inbox/connections", requireAuth, async (req, res) => {
   };
 
   let webhookWarning = null;
+  if (platform === "facebook" || platform === "instagram") {
+    try {
+      await meta.subscribePage(accessToken, pageId);
+    } catch (err) {
+      // Same spirit as Viber's catch below — a connection with a bad/
+      // expired token or missing permission would fail the same way on
+      // its first send anyway, but here it fails *silently* on the
+      // receiving side (Meta just never sends anything) unless we surface
+      // it now.
+      webhookWarning = `Nalog je sačuvan, ali pretplata na webhook nije uspela: ${err.message}. Dok se ovo ne reši, poruke neće stizati — proveri da token ima dozvolu za slanje/primanje poruka (pages_messaging).`;
+    }
+  }
   if (platform === "viber") {
     // Viber has no external page id of its own — the connection's own id
     // is what its conversations get stored under (see resolveOutboundAccount).

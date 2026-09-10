@@ -31,6 +31,27 @@ async function graphFetch(url, options) {
   return data;
 }
 
+// Meta requires each Page (Instagram professional accounts message through
+// their linked Page too, so this covers both) to be explicitly subscribed
+// to our app's webhook, on top of the app-level webhook URL already
+// configured in the Meta App Dashboard. Skipping this call is invisible —
+// saving the connection "succeeds" and the Page shows as connected, but
+// Meta silently never sends any messaging events for it, so nothing ever
+// shows up in Poruke. Mirrors Viber's own explicit setWebhook() call below
+// in routes/inbox.js — same idea, this is Meta's equivalent.
+async function subscribePage(pageAccessToken, pageId) {
+  const url = new URL(`${GRAPH_API_BASE}/${pageId}/subscribed_apps`);
+  url.searchParams.set(
+    "subscribed_fields",
+    "messages,messaging_postbacks,message_deliveries,message_reads"
+  );
+  url.searchParams.set("access_token", pageAccessToken);
+  const data = await graphFetch(url.toString(), { method: "POST" });
+  if (!data.success) {
+    throw new Error("Meta nije potvrdila pretplatu na webhook za ovu stranicu.");
+  }
+}
+
 // Facebook Messenger and Instagram Direct both send through the same Page
 // Send API endpoint/token — the only difference is which channel the
 // recipient id (PSID vs IGSID) belongs to.
@@ -221,6 +242,7 @@ function normalizeWhatsAppEntry(entry) {
 
 module.exports = {
   verifySignature,
+  subscribePage,
   sendPageMessage,
   sendWhatsAppMessage,
   fetchProfileName,
