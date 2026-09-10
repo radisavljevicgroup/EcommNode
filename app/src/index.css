@@ -2030,6 +2030,16 @@ body {
   font-weight: 800;
   text-transform: uppercase;
   color: #ffffff;
+  overflow: hidden;
+  /* Fallback background (visible only if the platform's icon image fails
+     to load) — the real logos already carry their own brand color. */
+  background: #9ca3af;
+}
+
+.platform-badge img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .platform-badge.platform-facebook {
