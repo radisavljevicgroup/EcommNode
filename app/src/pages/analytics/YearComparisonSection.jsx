@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import DateRangePicker, { isoDate, startOfMonth } from "../../components/DateRangePicker";
+import { isoDate, startOfMonth } from "../../components/DateRangePicker";
 import RevenueTrendChart from "../../components/charts/RevenueTrendChart";
 import InfoTooltip from "../../components/InfoTooltip";
 import { fetchAnalyticsSummary, fetchYoyTrends } from "../../api/analytics";
@@ -19,9 +19,19 @@ const ALL_METRICS = KPI_QUADRANTS.flatMap((q) => q.metrics);
 // stores" is one global concern. Everything about WHICH period to compare
 // (and how granular the chart is) lives here, on its own state, so
 // switching a mode here can't change what the KPI cards/chart above show.
+function daysAgo(n) {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return d;
+}
+
 export default function YearComparisonSection({ selectedIds }) {
   const [compareMode, setCompareMode] = useState("month");
-  const [periodRange, setPeriodRange] = useState([isoDate(startOfMonth()), isoDate(new Date())]);
+  // Deliberately NOT the same range "Isti mesec" would show (month-to-
+  // date) — defaulting to that made switching between the two look like
+  // nothing happened, since both landed on an identical [from, to] until
+  // the merchant touched the date inputs.
+  const [periodRange, setPeriodRange] = useState([isoDate(daysAgo(7)), isoDate(new Date())]);
   const [summary, setSummary] = useState(null);
   const [trends, setTrends] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -110,11 +120,24 @@ export default function YearComparisonSection({ selectedIds }) {
           ))}
         </div>
         {compareMode === "period" && (
-          <DateRangePicker
-            from={periodRange[0]}
-            to={periodRange[1]}
-            onChange={(f, t) => setPeriodRange([f, t])}
-          />
+          // Bare two-date input, not the shared DateRangePicker — that
+          // component always drags its own "Zadnjih 7 dana/Ovaj mesec/
+          // Ova godina/Prilagođeno" preset row along with it, which is
+          // exactly the second, competing set of period controls that
+          // made this section look unseparated from the one above again.
+          <div className="date-range-custom">
+            <input
+              type="date"
+              value={periodRange[0]}
+              onChange={(e) => setPeriodRange([e.target.value, periodRange[1]])}
+            />
+            <span>—</span>
+            <input
+              type="date"
+              value={periodRange[1]}
+              onChange={(e) => setPeriodRange([periodRange[0], e.target.value])}
+            />
+          </div>
         )}
       </div>
 
