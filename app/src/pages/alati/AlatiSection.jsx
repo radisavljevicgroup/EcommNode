@@ -31,6 +31,25 @@ const premiumItInfraModules = import.meta.glob("../../premium/*/itInfraTab.jsx",
   eager: true,
 });
 
+// A third flavor (e.g. Interni nalozi) opens into Porudžbine instead —
+// same toolCard/origin pattern as the two above.
+const premiumOrdersModules = import.meta.glob("../../premium/*/ordersTab.jsx", {
+  eager: true,
+});
+
+// Where a premium tool's "Otvori u ..." button sends the user, keyed by the
+// `origin` tag set above. Falls back to Analitika (the original, only
+// destination before it-administracija/porudzbine existed).
+const ORIGIN_TARGETS = {
+  "it-administracija": { hash: "/it-infrastruktura", label: "Otvori u IT administraciji" },
+  porudzbine: { hash: "/porudzbine", label: "Otvori u Porudžbinama" },
+  analitika: { hash: "/analitika", label: "Otvori u Analitici" },
+};
+
+function originTarget(origin) {
+  return ORIGIN_TARGETS[origin] || ORIGIN_TARGETS.analitika;
+}
+
 function ToolStatus({ enabled }) {
   return (
     <span className={"tool-status" + (enabled ? " on" : "")}>
@@ -81,6 +100,10 @@ export default function AlatiSection() {
       .map(([, mod]) => mod)
       .filter((mod) => mod.toolCard)
       .map((mod) => ({ ...mod.toolCard, origin: "it-administracija" })),
+    ...filterEntitledModules(premiumOrdersModules, enabledPremiumModules)
+      .map(([, mod]) => mod)
+      .filter((mod) => mod.toolCard)
+      .map((mod) => ({ ...mod.toolCard, origin: "porudzbine" })),
   ];
 
   useEffect(() => {
@@ -188,11 +211,10 @@ export default function AlatiSection() {
                   type="button"
                   className="tool-card-open-btn tool-card-open-btn-inline"
                   onClick={() => {
-                    window.location.hash =
-                      t.origin === "it-administracija" ? "/it-infrastruktura" : "/analitika";
+                    window.location.hash = originTarget(t.origin).hash;
                   }}
                 >
-                  {t.origin === "it-administracija" ? "Otvori u IT administraciji" : "Otvori u Analitici"}
+                  {originTarget(t.origin).label}
                 </button>
                 <button
                   className="integration-remove"
@@ -262,11 +284,10 @@ export default function AlatiSection() {
                       type="button"
                       className="tool-card-open-btn"
                       onClick={() => {
-                        window.location.hash =
-                          t.origin === "it-administracija" ? "/it-infrastruktura" : "/analitika";
+                        window.location.hash = originTarget(t.origin).hash;
                       }}
                     >
-                      {t.origin === "it-administracija" ? "Otvori u IT administraciji" : "Otvori u Analitici"}
+                      {originTarget(t.origin).label}
                     </button>
                   )}
                 </div>

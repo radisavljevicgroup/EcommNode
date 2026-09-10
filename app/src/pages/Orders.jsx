@@ -26,11 +26,20 @@ import NoteTooltip from "../components/NoteTooltip";
 import { ORDER_STATUS_OPTIONS } from "../constants/orderStatuses";
 import IconRail from "../components/IconRail";
 import Messages from "./Messages";
+import { fetchSettings } from "../api/settings";
+import { filterEntitledModules, useEnabledPremiumModules } from "../lib/premiumModules";
 
 const ORDERS_RAIL_ITEMS = [
   { key: "porudzbine", icon: OrdersIcon, label: "Porudžbine" },
   { key: "poruke", icon: ChatIcon, label: "Poruke" },
 ];
+
+// Premium tabs for this page (e.g. Interni nalozi) aren't part of this
+// open-source checkout — vendored locally into app/src/premium/<name>/
+// ordersTab.jsx (gitignored), same glob/entitlement/activation pattern as
+// ItInfrastruktura.jsx's itInfraTab.jsx modules. See that file's comments
+// for why the toolCard-key check against enabledPremiumTools exists.
+const premiumOrdersModules = import.meta.glob("../premium/*/ordersTab.jsx", { eager: true });
 
 const PER_PAGE_OPTIONS = [10, 20, 30, 50];
 
@@ -343,13 +352,38 @@ function OrdersSkeleton() {
 
 export default function Orders() {
   const [section, setSection] = useState("porudzbine");
+  const [enabledPremiumTools, setEnabledPremiumTools] = useState([]);
+  const { enabledPremiumModules } = useEnabledPremiumModules();
+
+  useEffect(() => {
+    fetchSettings()
+      .then((data) => setEnabledPremiumTools(data.enabledPremiumTools || []))
+      .catch(() => {});
+  }, []);
+
+  const premiumTabs = filterEntitledModules(premiumOrdersModules, enabledPremiumModules)
+    .map(([, mod]) => mod)
+    .filter((mod) => !mod.toolCard?.key || enabledPremiumTools.includes(mod.toolCard.key))
+    .flatMap((mod) => mod.tabs || []);
+
+  const railItems = [
+    ...ORDERS_RAIL_ITEMS,
+    ...premiumTabs.map(({ key, icon, label }) => ({ key, icon, label })),
+  ];
+  const activeTab = premiumTabs.find((t) => t.key === section);
 
   return (
     <div className="orders-layout">
-      <IconRail items={ORDERS_RAIL_ITEMS} active={section} onSelect={setSection} />
+      <IconRail items={railItems} active={section} onSelect={setSection} />
       <div className="settings-main">
         <div className="settings-wrap">
-          {section === "poruke" ? <Messages /> : <OrdersOverview />}
+          {activeTab ? (
+            <activeTab.Component />
+          ) : section === "poruke" ? (
+            <Messages />
+          ) : (
+            <OrdersOverview />
+          )}
         </div>
       </div>
     </div>
