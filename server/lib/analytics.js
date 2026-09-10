@@ -346,6 +346,89 @@ function computeTrends(allOrders, { from, to }) {
   return { series, yoyPercent, currentTotal, previousTotal };
 }
 
+function dayKey(dateStr) {
+  const d = new Date(dateStr);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+    d.getDate()
+  ).padStart(2, "0")}`;
+}
+
+function dailyRevenueMap(orders, from, to) {
+  const periodOrders = realized(filterByRange(orders, from, to));
+  const map = new Map();
+  periodOrders.forEach((o) => {
+    const key = dayKey(o.dateCreated);
+    map.set(key, (map.get(key) || 0) + toNumber(o.total));
+  });
+  return map;
+}
+
+// Same "Isti period"/"Isti mesec" comparison as computeTrends above, just
+// bucketed by day instead of month — a custom range or a single month is
+// usually too short for monthly buckets to say anything (a week-long
+// "Isti period" would collapse to one or two points).
+function computeDailyTrends(allOrders, { from, to }) {
+  const current = dailyRevenueMap(allOrders, from, to);
+  const lastYearFrom = from ? shiftYears(from, -1) : null;
+  const lastYearTo = to ? shiftYears(to, -1) : null;
+  const previous = dailyRevenueMap(allOrders, lastYearFrom, lastYearTo);
+
+  const days = [...current.keys()].sort();
+  const series = days.map((d) => {
+    const [y, mm, dd] = d.split("-");
+    const previousDayKey = `${Number(y) - 1}-${mm}-${dd}`;
+    return {
+      day: `${dd}.${mm}`,
+      revenue: current.get(d) || 0,
+      previousRevenue: previous.get(previousDayKey) || 0,
+    };
+  });
+
+  const currentTotal = [...current.values()].reduce((a, b) => a + b, 0);
+  const previousTotal = [...previous.values()].reduce((a, b) => a + b, 0);
+  const yoyPercent = previousTotal ? ((currentTotal - previousTotal) / previousTotal) * 100 : null;
+
+  return { series, yoyPercent, currentTotal, previousTotal };
+}
+
+// "Isti dan" compares one specific calendar day (this year) against the
+// same calendar day a year back, hour by hour — a single day has no
+// meaningful "days" to bucket by, but 24 hours of intraday pattern (open
+// hours, lunch/evening peaks) is exactly what a merchant checking "how's
+// today going vs. last year" wants to see.
+function hourlyRevenueMap(orders, dayIso) {
+  const target = new Date(dayIso);
+  const y = target.getFullYear();
+  const m = target.getMonth();
+  const d = target.getDate();
+  const map = new Map();
+  realized(orders).forEach((o) => {
+    const od = new Date(o.dateCreated);
+    if (od.getFullYear() === y && od.getMonth() === m && od.getDate() === d) {
+      const hour = od.getHours();
+      map.set(hour, (map.get(hour) || 0) + toNumber(o.total));
+    }
+  });
+  return map;
+}
+
+function computeHourlyTrends(allOrders, { day }) {
+  const current = hourlyRevenueMap(allOrders, day);
+  const previous = hourlyRevenueMap(allOrders, shiftYears(day, -1));
+
+  const series = Array.from({ length: 24 }, (_, hour) => ({
+    hour: `${String(hour).padStart(2, "0")}:00`,
+    revenue: current.get(hour) || 0,
+    previousRevenue: previous.get(hour) || 0,
+  }));
+
+  const currentTotal = [...current.values()].reduce((a, b) => a + b, 0);
+  const previousTotal = [...previous.values()].reduce((a, b) => a + b, 0);
+  const yoyPercent = previousTotal ? ((currentTotal - previousTotal) / previousTotal) * 100 : null;
+
+  return { series, yoyPercent, currentTotal, previousTotal };
+}
+
 function computeTopProducts(
   allOrders,
   { from, to, sortBy = "revenue" },
@@ -444,6 +527,8 @@ function computeGeoDistribution(allOrders, { from, to }, limit = 15) {
 module.exports = {
   computeSummary,
   computeTrends,
+  computeDailyTrends,
+  computeHourlyTrends,
   computeTopProducts,
   computeGeoDistribution,
   computeMetricTrend,

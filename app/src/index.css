@@ -3027,6 +3027,73 @@ body {
   cursor: default;
 }
 
+.yoy-section {
+  margin-top: 40px;
+  padding-top: 32px;
+  border-top: 1px solid var(--border);
+}
+
+.yoy-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  margin-top: 16px;
+}
+
+@media (max-width: 1024px) {
+  .yoy-metrics-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 560px) {
+  .yoy-metrics-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.yoy-metric-card {
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px 16px;
+}
+
+.yoy-metric-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.yoy-metric-values {
+  display: flex;
+  gap: 16px;
+}
+
+.yoy-metric-value-col {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.yoy-metric-year {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.yoy-metric-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-dark);
+}
+
+.yoy-metric-value-muted {
+  color: var(--text-muted);
+}
+
 .sync-banner {
   background: #e8f0fe;
   color: #1a56db;

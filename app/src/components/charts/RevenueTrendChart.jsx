@@ -9,7 +9,7 @@ import {
   CartesianGrid,
 } from "recharts";
 
-export default function RevenueTrendChart({ series, yoyPercent, currency }) {
+export default function RevenueTrendChart({ series, yoyPercent, currency, title = "Mesečni trendovi prihoda" }) {
   const positive = yoyPercent !== null && yoyPercent >= 0;
   // Only draw the prior-year line when there's actually something to
   // compare against — a brand-new store with no history a year back would
@@ -20,7 +20,7 @@ export default function RevenueTrendChart({ series, yoyPercent, currency }) {
   return (
     <div className="chart-card">
       <div className="chart-card-head">
-        <h3>Mesečni trendovi prihoda</h3>
+        <h3>{title}</h3>
         {yoyPercent !== null && (
           <span className={"yoy-badge " + (positive ? "up" : "down")}>
             {positive ? "▲" : "▼"} {Math.abs(yoyPercent).toFixed(1)}% u odnosu na prošlu godinu

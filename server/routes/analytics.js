@@ -236,11 +236,20 @@ router.get("/analytics/summary", async (req, res) => {
       summary.cac = cacCurrResult?.value ?? null;
       summary.cacCurrency = cacCurrResult?.currency ?? null;
       prevSummary.cac = cacPrevResult?.value ?? null;
+      prevSummary.cacCurrency = cacPrevResult?.currency ?? null;
 
       summary.changePercent = {};
       SUMMARY_METRIC_KEYS.forEach((key) => {
         summary.changePercent[key] = changePercent(summary[key], prevSummary[key]);
       });
+      // Raw previous-period values, not just the delta — the "Poređenje sa
+      // prošlom godinom" section (SalesAnalysis.jsx) shows both years' real
+      // numbers side by side, not a single value with an up/down badge.
+      summary.previous = {
+        ...Object.fromEntries(SUMMARY_METRIC_KEYS.map((key) => [key, prevSummary[key]])),
+        cacCurrency: prevSummary.cacCurrency,
+        currency: prevSummary.currency,
+      };
     } else {
       summary.cr = await computeConversionRate(connections, { from, to });
       const cacResult = await computeCac(connections, orders, { from, to, company: req.company });
@@ -265,6 +274,30 @@ router.get("/analytics/trends", async (req, res) => {
     res.json(analytics.computeTrends(orders, { from, to }));
   } catch {
     res.status(400).json({ error: "Ne mogu da izračunam trendove." });
+  }
+});
+
+// Backs the "Poređenje sa prošlom godinom" section (SalesAnalysis.jsx) —
+// fully independent of /analytics/summary|trends above and whatever [from,
+// to] the main filters are set to. mode=day switches to hourly buckets for
+// a single calendar day (`day` param); period/month use daily buckets over
+// a [from, to] range, since a custom range or one month is usually too
+// short for the monthly chart above to say anything.
+router.get("/analytics/yoy-trends", async (req, res) => {
+  const connections = resolveConnections(req);
+  if (!connections.length) {
+    return res.json({ series: [], yoyPercent: null, currentTotal: 0, previousTotal: 0 });
+  }
+  try {
+    const orders = await getOrdersForConnections(connections);
+    const { mode, from, to, day } = req.query;
+    if (mode === "day") {
+      if (!day) return res.status(400).json({ error: "day je obavezan za mode=day." });
+      return res.json(analytics.computeHourlyTrends(orders, { day }));
+    }
+    res.json(analytics.computeDailyTrends(orders, { from, to }));
+  } catch {
+    res.status(400).json({ error: "Ne mogu da izračunam poređenje." });
   }
 });
 

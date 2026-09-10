@@ -29,6 +29,19 @@ export function fetchAnalyticsTrends(filters) {
   return request(`/analytics/trends?${buildQuery(filters)}`);
 }
 
+// Backs the independent "Poređenje sa prošlom godinom" section — mode is
+// "period" | "month" | "day"; day-mode ignores from/to and needs `day`
+// instead (see server/routes/analytics.js's /analytics/yoy-trends).
+export function fetchYoyTrends({ connectionIds, mode, from, to, day }) {
+  const params = new URLSearchParams();
+  if (connectionIds?.length) params.set("connectionIds", connectionIds.join(","));
+  params.set("mode", mode);
+  if (from) params.set("from", from);
+  if (to) params.set("to", to);
+  if (day) params.set("day", day);
+  return request(`/analytics/yoy-trends?${params.toString()}`);
+}
+
 export function fetchTopProducts(filters) {
   return request(`/analytics/top-products?${buildQuery(filters)}`);
 }
