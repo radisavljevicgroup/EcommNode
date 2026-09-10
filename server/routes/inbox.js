@@ -387,7 +387,14 @@ router.get("/inbox/connections", requireAuth, (req, res) => {
 });
 
 router.post("/inbox/connections", requireAuth, async (req, res) => {
-  const { label, platform, pageId, phoneNumberId, accessToken } = req.body || {};
+  const { label, platform } = req.body || {};
+  // Trimmed defensively — a stray trailing newline/space from copy-paste
+  // (easy to miss in a <textarea>) makes Meta reject the token with
+  // "Cannot parse access token", which reads like a wrong/expired token
+  // even when it's really just whitespace riding along with it.
+  const pageId = req.body?.pageId?.trim() || undefined;
+  const phoneNumberId = req.body?.phoneNumberId?.trim() || undefined;
+  const accessToken = req.body?.accessToken?.trim();
 
   if (!label || !platform || !accessToken) {
     return res.status(400).json({ error: "Nedostaju podaci: naziv brenda, platforma i access token su obavezni." });
