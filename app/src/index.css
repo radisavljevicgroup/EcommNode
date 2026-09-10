@@ -2683,6 +2683,26 @@ body {
   color: var(--text-dark);
 }
 
+.eurocom-bulk-category-override {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.eurocom-bulk-category-clear {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  color: var(--text-muted);
+  padding: 2px 4px;
+}
+
+.eurocom-bulk-category-clear:hover {
+  color: var(--text-dark);
+}
+
 .eurocom-bulk-errors {
   margin: 6px 0 0;
   padding-left: 18px;
