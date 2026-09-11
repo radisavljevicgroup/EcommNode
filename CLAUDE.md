@@ -105,6 +105,28 @@ Proveri da `git diff --stat <prethodni-commit> <novi-commit>` pokazuje
 promene i u `app/src/` i u `app/dist/` kad god je frontend menjan — ako
 menja samo jedno od to dvoje, nešto nedostaje.
 
+### `app/.env.production` mora imati `VITE_META_APP_ID` — ne osloni se na lokalni `app/.env`
+
+Otkriveno 2026-09-11: `app/.env` je gitignore-ovan (mašinski-specifičan, kao
+i `server/.env`), ali Meta App ID za Facebook JS SDK (`facebookSdk.js`,
+koristi ga i Meta Ads i Messenger/Instagram OAuth flow) nije secret —
+komentar u `server/.env.example` ovo eksplicitno kaže. Kad je taj App ID
+prvi put uveden (commit `45a6b5e`), sačuvan je samo u lokalnom `.env` na
+mašini koja je tada radila build — build sa DRUGE mašine (čiji lokalni
+`.env` nikad nije imao tu promenljivu) je tiho ispekao **prazan**
+`VITE_META_APP_ID` u `dist/`, bez ijedne build greške ili warning-a, isti
+obrazac kao "Bag nađen..." beleška o `ecommnode-premium` checkout-u iznad —
+samo za env promenljivu umesto za ceo modul. Rezultat: "Poveži se sa
+Facebook-om" na produkciji baca "VITE_META_APP_ID nije podešen" umesto da
+otvori login popup, iako je kod potpuno ispravan.
+
+Ispravka: `VITE_META_APP_ID` je sada u **`app/.env.production`** (taj fajl
+JE u git-u, za razliku od `app/.env`) — vidi taj fajl za trenutnu vrednost.
+Vite ga automatski učita i pregazi `app/.env` pri `vite build` (mode
+`production` je default), pa build sa bilo koje mašine sad ispeče ispravnu
+vrednost bez obzira na tu mašinu lokalni `.env`. Ako se ikad promeni Meta
+App (novi App ID), ažuriraj ovaj fajl, ne samo lokalni `.env`.
+
 ### Posle SVAKOG deploy-a koji dira `server/*` (uključujući `server/premium/`
 ### preko posebnog `ecommnode-premium` deploy-a): ubij Node proces ručno
 
