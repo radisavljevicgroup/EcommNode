@@ -121,6 +121,16 @@ export default function MetaAdsConnectModal({ wooConnections, onClose, onConnect
                         {connectingId === account.id ? "Povezivanje…" : "Poveži"}
                       </button>
                     </div>
+                    {/* Ad account names default to the person's own name in
+                        Meta Ads Manager and are frequently duplicated across
+                        someone's multiple ad accounts — the id (and
+                        currency) is the only thing that actually tells two
+                        same-named rows apart, and it's also exactly what's
+                        shown next to each account in Meta Ads Manager. */}
+                    <p className="woo-field-hint">
+                      ID: act_{account.id}
+                      {account.currency ? ` · ${account.currency}` : ""}
+                    </p>
                     {!account.active && (
                       <p className="woo-field-hint">Nalog trenutno nije aktivan u Meta Ads Manager-u.</p>
                     )}
