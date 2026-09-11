@@ -14,6 +14,13 @@ async function request(path, options = {}) {
   return data;
 }
 
+export function fetchManagedAdAccounts(accessToken) {
+  return request("/meta/oauth/facebook/ad-accounts", {
+    method: "POST",
+    body: JSON.stringify({ accessToken }),
+  });
+}
+
 export function connectMeta(payload) {
   return request("/meta/connect", {
     method: "POST",

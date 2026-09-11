@@ -1,6 +1,7 @@
 const { Router } = require("express");
 const crypto = require("crypto");
 const meta = require("../lib/meta");
+const metaMessaging = require("../lib/metaMessaging");
 const {
   getConnections: getMetaConnections,
   getConnection,
@@ -11,8 +12,13 @@ const {
 const { getConnections: getWooConnections } = require("../lib/store");
 const { getOrdersForConnections } = require("../lib/ordersCache");
 const analytics = require("../lib/analytics");
+const { startScheduler: startTokenRefreshScheduler } = require("../lib/metaAdsTokenRefresh");
 
 const router = Router();
+
+// Started once, here, since this module is only required once per server
+// process (server/index.js) — same pattern as Eurocom/stock-control.
+startTokenRefreshScheduler();
 
 // accessToken never leaves this function — the frontend only ever sees
 // adAccountId/accountName, the same way GA4's serviceAccountJson is
@@ -46,8 +52,33 @@ function connectionError(err) {
   return err.message || "Ne mogu da se povežem na Meta Ads.";
 }
 
+// Step 2 of "Poveži se sa Facebook-om" for Meta Ads (step 1 is the
+// frontend's FB.login() popup with ads_read scope) — turns the short-lived
+// USER token the popup returns into a long-lived one and lists every ad
+// account it can read. Unlike Pages, there's no per-account token to mint:
+// the same long-lived token is what gets stored (and later refreshed by
+// metaAdsTokenRefresh.js) for whichever account the merchant picks in
+// MetaAdsConnectModal.jsx's picker.
+router.post("/meta/oauth/facebook/ad-accounts", async (req, res) => {
+  const userAccessToken = req.body?.accessToken;
+  if (!userAccessToken) return res.status(400).json({ error: "accessToken je obavezan." });
+
+  try {
+    const { accessToken: longLivedToken, expiresIn } =
+      await metaMessaging.exchangeForLongLivedUserTokenWithExpiry(userAccessToken);
+    const accounts = await meta.listAdAccounts(longLivedToken);
+    res.json({
+      accounts,
+      longLivedToken,
+      tokenExpiresAt: new Date(Date.now() + expiresIn * 1000).toISOString(),
+    });
+  } catch (err) {
+    res.status(400).json({ error: "Preuzimanje oglasnih naloga nije uspelo: " + err.message });
+  }
+});
+
 router.post("/meta/connect", async (req, res) => {
-  const { label, accessToken, adAccountId, targetConnectionIds } = req.body || {};
+  const { label, accessToken, adAccountId, targetConnectionIds, tokenExpiresAt } = req.body || {};
 
   if (!accessToken || !adAccountId || !Array.isArray(targetConnectionIds) || !targetConnectionIds.length) {
     return res.status(400).json({
@@ -76,6 +107,11 @@ router.post("/meta/connect", async (req, res) => {
     currency,
     targetConnectionIds,
     company: req.company,
+    // Absent when connected via the old manual System-User-token form
+    // (that kind never expires) — metaAdsTokenRefresh.js skips refreshing
+    // any connection without this set, rather than trying to refresh a
+    // token type Meta's exchange endpoint was never meant to take.
+    tokenExpiresAt: tokenExpiresAt || null,
   };
 
   addConnection(connection);

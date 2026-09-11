@@ -11,6 +11,14 @@ function getConnection(id, company) {
   return connections.find((c) => c.id === id && c.company === company) || null;
 }
 
+// Unscoped — every connection, across every company. Only for the
+// background token-refresh job (metaAdsTokenRefresh.js), same reasoning as
+// Eurocom's getAllConnections: it runs outside any request, so it has no
+// single req.company to filter by.
+function getAllConnections() {
+  return connections;
+}
+
 function addConnection(connection) {
   connections = [...connections, connection];
   file.write(connections);
@@ -31,4 +39,11 @@ function updateConnection(id, company, patch) {
   return getConnection(id, company);
 }
 
-module.exports = { getConnections, getConnection, addConnection, removeConnection, updateConnection };
+module.exports = {
+  getConnections,
+  getAllConnections,
+  getConnection,
+  addConnection,
+  removeConnection,
+  updateConnection,
+};

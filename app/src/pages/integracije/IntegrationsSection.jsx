@@ -13,7 +13,7 @@ import Ga4ConnectModal from "../../components/Ga4ConnectModal";
 import GscIntegration from "../../components/GscIntegration";
 import GscConnectModal from "../../components/GscConnectModal";
 import MetaIntegration from "../../components/MetaIntegration";
-import MetaConnectModal from "../../components/MetaConnectModal";
+import MetaAdsConnectModal from "../../components/MetaAdsConnectModal";
 import InboxChannelIntegration from "../../components/InboxChannelIntegration";
 import InboxChannelConnectModal from "../../components/InboxChannelConnectModal";
 import MetaPagesConnectModal from "../../components/MetaPagesConnectModal";
@@ -633,7 +633,7 @@ export default function IntegrationsSection() {
       )}
 
       {showMetaModal && (
-        <MetaConnectModal
+        <MetaAdsConnectModal
           wooConnections={wooConnections}
           onClose={() => setShowMetaModal(false)}
           onConnected={handleMetaConnected}

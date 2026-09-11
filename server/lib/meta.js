@@ -65,6 +65,26 @@ async function graphRequest(path, params, accessToken) {
   return graphFetch(url.toString());
 }
 
+// Every ad account the logged-in user can read, straight off their
+// long-lived USER token — unlike Pages, Meta has no separate per-account
+// token to mint, so the same token returned here is what gets stored and
+// reused later for /act_<id>/insights calls (and is what
+// metaAdsTokenRefresh.js keeps alive).
+async function listAdAccounts(longLivedUserToken) {
+  const url = new URL(`${GRAPH_API_BASE}/me/adaccounts`);
+  url.searchParams.set("fields", "account_id,name,currency,account_status");
+  url.searchParams.set("access_token", longLivedUserToken);
+  const data = await graphFetch(url.toString());
+  return (data.data || []).map((a) => ({
+    id: a.account_id,
+    name: a.name || null,
+    currency: a.currency || null,
+    // 1 = ACTIVE per Meta's Marketing API enum — surfaced so the picker can
+    // flag a disabled/closed account instead of silently offering it.
+    active: a.account_status === 1,
+  }));
+}
+
 async function testConnection({ accessToken, adAccountId }) {
   const data = await graphRequest(
     `/act_${adAccountId}`,
@@ -272,4 +292,4 @@ async function getPerformance(connection, { from, to } = {}) {
   return result;
 }
 
-module.exports = { testConnection, getPerformance };
+module.exports = { listAdAccounts, testConnection, getPerformance };

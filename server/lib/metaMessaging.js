@@ -45,7 +45,12 @@ async function graphFetch(url, options) {
 // (until the merchant revokes access), which is what we need to store and
 // reuse for sending messages indefinitely. This is the standard Meta
 // "token exchange" step, not something FB.login() does on its own.
-async function exchangeForLongLivedUserToken(shortLivedUserToken) {
+// Same "fb_exchange_token" grant works both to turn a fresh short-lived
+// user token into a long-lived one (initial connect) and to extend an
+// still-valid long-lived token into a new ~60-day one (background refresh,
+// see metaAdsTokenRefresh.js) — Meta doesn't distinguish the two, it just
+// mints a new long-lived token from whatever valid token you hand it.
+async function exchangeUserToken(userToken) {
   const appId = process.env.META_APP_ID;
   const appSecret = process.env.META_APP_SECRET;
   if (!appId || !appSecret) {
@@ -55,9 +60,22 @@ async function exchangeForLongLivedUserToken(shortLivedUserToken) {
   url.searchParams.set("grant_type", "fb_exchange_token");
   url.searchParams.set("client_id", appId);
   url.searchParams.set("client_secret", appSecret);
-  url.searchParams.set("fb_exchange_token", shortLivedUserToken);
+  url.searchParams.set("fb_exchange_token", userToken);
   const data = await graphFetch(url.toString());
-  return data.access_token;
+  return { accessToken: data.access_token, expiresIn: data.expires_in };
+}
+
+async function exchangeForLongLivedUserToken(shortLivedUserToken) {
+  const { accessToken } = await exchangeUserToken(shortLivedUserToken);
+  return accessToken;
+}
+
+// Meta Ads has no Page-token equivalent that "never expires" — reporting
+// reads directly off the long-lived USER token, which does expire (~60
+// days), so callers that need to keep it alive (metaAdsTokenRefresh.js)
+// need the expiry back, not just the token.
+async function exchangeForLongLivedUserTokenWithExpiry(userToken) {
+  return exchangeUserToken(userToken);
 }
 
 // Every Page the merchant manages, each with its own (already long-lived,
@@ -293,6 +311,7 @@ function normalizeWhatsAppEntry(entry) {
 module.exports = {
   verifySignature,
   exchangeForLongLivedUserToken,
+  exchangeForLongLivedUserTokenWithExpiry,
   listManagedPages,
   subscribePage,
   sendPageMessage,
