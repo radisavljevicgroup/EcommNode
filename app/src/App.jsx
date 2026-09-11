@@ -31,8 +31,14 @@ const ROUTES = new Set([...NAV_ITEMS.map((i) => i.route), ...PUBLIC_ROUTES]);
 function routeFromHash() {
   const hash = window.location.hash.replace(/^#\/?/, "");
   // Supabase's password-recovery redirect appends #access_token=...&type=recovery
-  // to the site URL — catch that before the normal route lookup.
-  if (hash.includes("type=recovery") || hash.includes("access_token=")) {
+  // to the site URL — catch that before the normal route lookup. Matching on
+  // bare "access_token=" alone (dropped 2026-09-11) also caught Meta's OAuth
+  // popup landing back here with its own #access_token=... hash (when it
+  // falls back to a top-level redirect instead of postMessage — e.g. no
+  // Valid OAuth Redirect URI configured, or third-party cookies blocked),
+  // wrongly routing a Facebook login into the "change your password" screen.
+  // type=recovery is the actual, specific marker Supabase adds.
+  if (hash.includes("type=recovery")) {
     return "nova-lozinka";
   }
   const route = hash.split("?")[0];
