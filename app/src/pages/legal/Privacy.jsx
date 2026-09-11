@@ -1,6 +1,6 @@
 import LegalPage from "./LegalPage";
 
-const CONTACT_EMAIL = "matijaradisavljevic18@gmail.com";
+const CONTACT_EMAIL = "matija@radisavljevic.group";
 
 export default function Privacy() {
   return (

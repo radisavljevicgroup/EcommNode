@@ -1,6 +1,6 @@
 import LegalPage from "./LegalPage";
 
-const CONTACT_EMAIL = "matijaradisavljevic18@gmail.com";
+const CONTACT_EMAIL = "matija@radisavljevic.group";
 const GITHUB_URL = "https://github.com/radisavljevicgroup/EcommNode";
 
 export default function Terms() {
