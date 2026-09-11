@@ -5984,3 +5984,57 @@ body {
   opacity: 0.6;
   cursor: not-allowed;
 }
+
+/* legal pages (privacy / terms / data deletion) */
+.legal-content {
+  max-width: 760px;
+}
+
+.legal-content h1 {
+  font-size: clamp(26px, 3.2vw, 34px);
+  font-weight: 800;
+  margin: 0;
+}
+
+.legal-updated {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 8px 0 32px;
+}
+
+.legal-content h2 {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-dark);
+  margin: 32px 0 10px;
+}
+
+.legal-content p {
+  font-size: 14.5px;
+  line-height: 1.65;
+  color: var(--text-dark);
+  margin: 0 0 4px;
+}
+
+.legal-content ul {
+  margin: 0 0 4px;
+  padding-left: 20px;
+  font-size: 14.5px;
+  line-height: 1.65;
+  color: var(--text-dark);
+}
+
+.legal-content li {
+  margin-bottom: 6px;
+}
+
+.legal-content a {
+  color: var(--purple);
+}
+
+.legal-content code {
+  background: var(--pill-bg);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 13px;
+}

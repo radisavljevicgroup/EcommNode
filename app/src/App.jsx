@@ -12,14 +12,20 @@ import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 import Landing from "./pages/Landing";
 import EmptyHome from "./pages/EmptyHome";
+import Privacy from "./pages/legal/Privacy";
+import Terms from "./pages/legal/Terms";
+import DataDeletion from "./pages/legal/DataDeletion";
 import { supabase } from "./lib/supabaseClient";
 import { isRouteAllowed, EMPTY_HOME_ROLES } from "./lib/roles";
 
 const AUTH_ROUTES = new Set(["login", "register", "zaboravljena-lozinka", "nova-lozinka"]);
-// Reachable without a session — the marketing landing page plus the auth
-// flow itself. Everything else (dashboard, orders, analytics...) requires
-// being signed in.
-const PUBLIC_ROUTES = new Set([...AUTH_ROUTES, "landing"]);
+// Reachable without a session — the marketing landing page, the auth flow,
+// and the legal pages (their URLs are what get pasted into the Meta App
+// Dashboard's Privacy Policy / Terms of Service / Data Deletion Instructions
+// fields, and Meta's reviewer opens them logged out). Everything else
+// (dashboard, orders, analytics...) requires being signed in.
+const LEGAL_ROUTES = new Set(["privatnost", "uslovi-koriscenja", "brisanje-podataka"]);
+const PUBLIC_ROUTES = new Set([...AUTH_ROUTES, "landing", ...LEGAL_ROUTES]);
 const ROUTES = new Set([...NAV_ITEMS.map((i) => i.route), ...PUBLIC_ROUTES]);
 
 function routeFromHash() {
@@ -116,6 +122,9 @@ export default function App() {
   }, [authChecked, isAuthenticated, route]);
 
   if (route === "landing") return <Landing onNavigate={navigate} />;
+  if (route === "privatnost") return <Privacy />;
+  if (route === "uslovi-koriscenja") return <Terms />;
+  if (route === "brisanje-podataka") return <DataDeletion />;
   if (route === "login") return <Login onNavigate={navigate} />;
   if (route === "register") return <Register onNavigate={navigate} />;
   if (route === "zaboravljena-lozinka") return <ForgotPassword onNavigate={navigate} />;

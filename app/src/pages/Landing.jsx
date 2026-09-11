@@ -339,6 +339,9 @@ export default function Landing({ onNavigate }) {
             <a href={`${GITHUB_URL}/discussions`} target="_blank" rel="noopener noreferrer">
               Diskusije
             </a>
+            <a href="#/privatnost">Politika privatnosti</a>
+            <a href="#/uslovi-koriscenja">Uslovi korišćenja</a>
+            <a href="#/brisanje-podataka">Brisanje podataka</a>
           </div>
         </div>
       </footer>
