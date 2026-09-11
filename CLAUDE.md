@@ -225,6 +225,29 @@ vodi taj server proces, i uputi na jednu od dve opcije ispod (3. sekcija).
   po brendu ako je brend izabran). Ako se ovo doda kasnije, kodovi u
   `app/src/premium/eurocom/catalog.js`'s `EUROCOM_PROGRAMS` su placeholderi
   — nisu potvrđeni protiv `level_1a`/`level_1b` iz stvarnog API-ja.
+- **Bag nađen i ispravljen 2026-09-11** (ecommnode-premium): Eurocom-ov
+  stock sync (`computeUpdates` u `sync.js`) je pisao samo `stock_quantity`
+  u WooCommerce, nikad `stock_status`. WooCommerce REST API **ne**
+  preračunava `stock_status` iz `stock_quantity` sam od sebe (to se dešava
+  samo kroz wp-admin editor pri snimanju proizvoda i pri checkout-u, ne pri
+  API pozivu) — pa je artikal koji je jednom pao na "outofstock" ostajao
+  zauvek tako obeležen na sajtu, čak i kad bi Eurocom kasnije vratio
+  zalihu i sync ispravno podigao `stock_quantity`. Ovo je direktno
+  pokvarilo **stock-control** modul (`server/premium/stock-control`): on
+  odlučuje da li je artikal "vratio zalihu" isključivo preko
+  `stock_status`, pa artikli koje je draft-ovao zbog nestašice nikad nisu
+  automatski vraćani u "publish" dok god je njihov `stock_status` ostajao
+  lažno "outofstock" — potvrđeno na CASMS20BK2 (casiosrbija.rs). Ispravka:
+  `computeUpdates` sad svaki put računa `stock_status` iz Eurocom-ove
+  vrednosti (`instock`/`outofstock`) i piše ga kad god se razlikuje od
+  trenutnog stanja na sajtu — nezavisno od toga da li se `stock_quantity`
+  te iteracije promenio — tako da se već pokvareni artikli sami isprave na
+  sledećem sync-u, bez ručne intervencije. `.env.example` je takođe imao
+  rupu: `STOCK_CONTROL_AUTOSYNC` (analogno `EUROCOM_AUTOSYNC`) uopšte nije
+  bio dokumentovan tamo — dodato; proveri da li je stvarno postavljen na
+  `true` na produkciji, jer bez njega `startScheduler()` u
+  `stock-control/scheduler.js` odmah izlazi i automatska provera se nikad
+  ne pokreće.
 - Za lokalni razvoj koristi **test/sandbox WooCommerce prodavnicu** (ili
   test GA4/GSC property), nikad pravi klijentski nalog.
 - Kad je feature gotov i kod je na produkciji: integracija se **ponovo,
