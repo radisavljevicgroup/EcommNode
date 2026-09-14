@@ -31,7 +31,9 @@ import { filterEntitledModules, useEnabledPremiumModules } from "../lib/premiumM
 
 const ORDERS_RAIL_ITEMS = [
   { key: "porudzbine", icon: OrdersIcon, label: "Porudžbine" },
-  { key: "poruke", icon: ChatIcon, label: "Poruke" },
+  // Hidden while Facebook/Instagram/WhatsApp/Viber messaging integrations
+  // are being sorted out on the Meta app side — see chat history.
+  // { key: "poruke", icon: ChatIcon, label: "Poruke" },
 ];
 
 // Premium tabs for this page (e.g. Interni nalozi) aren't part of this
