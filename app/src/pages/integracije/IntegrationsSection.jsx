@@ -289,6 +289,10 @@ export default function IntegrationsSection() {
             />
           )}
 
+          {/* Facebook/Instagram/WhatsApp/Viber messaging hidden while Meta
+              messaging integrations are being sorted out on the Meta app
+              side — see chat history (matches Poruke tab hidden in
+              Orders.jsx).
           {facebookConnections.length > 0 && (
             <InboxChannelIntegration
               platform="facebook"
@@ -332,6 +336,7 @@ export default function IntegrationsSection() {
               onResult={showToast}
             />
           )}
+          */}
 
           {myIntegrations.length === 0 &&
           wooConnections.length === 0 &&
@@ -492,6 +497,9 @@ export default function IntegrationsSection() {
             )}
           </div>
 
+          {/* Facebook/Instagram/WhatsApp/Viber "Poveži" tiles hidden while
+              Meta messaging integrations are being sorted out — see chat
+              history (matches Poruke tab hidden in Orders.jsx).
           <div className="integration-grid-card">
             <span className="integration-badge">
               <PlatformBadge platform="facebook" />
@@ -571,6 +579,7 @@ export default function IntegrationsSection() {
               {viberConnections.length > 0 ? "+ Poveži još jedan brend" : "Poveži"}
             </button>
           </div>
+          */}
 
           {INTEGRATION_CATALOG.map((p) => {
             const isConnected = connectedKeys.includes(p.key);
