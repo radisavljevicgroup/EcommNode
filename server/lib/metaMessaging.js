@@ -107,12 +107,24 @@ async function listManagedPages(longLivedUserToken) {
 // Meta silently never sends any messaging events for it, so nothing ever
 // shows up in Poruke. Mirrors Viber's own explicit setWebhook() call below
 // in routes/inbox.js — same idea, this is Meta's equivalent.
-async function subscribePage(pageAccessToken, pageId) {
+//
+// Instagram's subscribed_fields are a different, smaller set than
+// Messenger's — "message_deliveries" and "message_reads" aren't valid there
+// (confirmed via the Graph API's own error listing its allowed fields);
+// "messaging_seen" is Instagram's read-receipt equivalent, and there's no
+// Instagram delivery-receipt field at all. The Graph API rejects the whole
+// call if even one field is invalid, so requesting Messenger's list for an
+// Instagram page previously failed the subscription entirely — not just the
+// delivery/read receipts, but the "messages" field too, silently blocking
+// all incoming Instagram DMs.
+const SUBSCRIBED_FIELDS = {
+  facebook: "messages,messaging_postbacks,message_deliveries,message_reads",
+  instagram: "messages,messaging_postbacks,messaging_seen",
+};
+
+async function subscribePage(pageAccessToken, pageId, platform) {
   const url = new URL(`${GRAPH_API_BASE}/${pageId}/subscribed_apps`);
-  url.searchParams.set(
-    "subscribed_fields",
-    "messages,messaging_postbacks,message_deliveries,message_reads"
-  );
+  url.searchParams.set("subscribed_fields", SUBSCRIBED_FIELDS[platform] || SUBSCRIBED_FIELDS.facebook);
   url.searchParams.set("access_token", pageAccessToken);
   const data = await graphFetch(url.toString(), { method: "POST" });
   if (!data.success) {

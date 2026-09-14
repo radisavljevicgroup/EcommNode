@@ -441,7 +441,7 @@ router.post("/inbox/connections", requireAuth, async (req, res) => {
   let webhookWarning = null;
   if (platform === "facebook" || platform === "instagram") {
     try {
-      await meta.subscribePage(accessToken, pageId);
+      await meta.subscribePage(accessToken, pageId, platform);
     } catch (err) {
       // Same spirit as Viber's catch below — a connection with a bad/
       // expired token or missing permission would fail the same way on
