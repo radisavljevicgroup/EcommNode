@@ -44,8 +44,10 @@ function toPublic(connection, company) {
 function connectionError(err) {
   if (err.status === 401 || err.status === 403) {
     return (
-      "Access token je nevažeći, istekao je, ili nema dozvolu ads_read za ovaj oglasni nalog. " +
-      "Generiši novi token u Meta Business Suite (Business Settings → System Users) ili proveri dozvole. " +
+      "Access token je nevažeći, istekao je, ili Facebook nalog kojim je konekcija napravljena " +
+      "nema ads_read pristup ovom oglasnom nalogu. Proveri u Business Settings → Ad Accounts → " +
+      "People da taj nalog ima ulogu Admin/Advertiser na oglasnom nalogu, pa ukloni i ponovo " +
+      "poveži Meta Ads u Podešavanja → Integracije („Poveži se sa Facebook-om”). " +
       `(Meta poruka: ${err.message})`
     );
   }
