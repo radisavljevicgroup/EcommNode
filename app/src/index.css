@@ -3357,6 +3357,43 @@ body {
   }
 }
 
+/* Manager home's 4 KPI cards are peers (no "wide" row) — one row of 4
+   instead of quadrant-grid's default 3+1 layout. */
+.manager-home-kpi-grid {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+@media (max-width: 1024px) {
+  .manager-home-kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 720px) {
+  .manager-home-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* GA4 + GSC side by side on the manager home page — each still fills the
+   row alone (flex, not grid) if the other integration isn't connected. */
+.manager-home-dual-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.manager-home-dual-row > .chart-card {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+@media (max-width: 900px) {
+  .manager-home-dual-row {
+    flex-direction: column;
+  }
+}
+
 .quadrant-card {
   background: #ffffff;
   border: 1px solid var(--border);

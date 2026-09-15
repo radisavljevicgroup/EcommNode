@@ -74,6 +74,22 @@ function realized(orders) {
   return orders.filter((o) => REALIZED_STATUSES.includes(o.status));
 }
 
+// "Poslate"/"dostavljene" have no dedicated shipment-tracking field
+// anywhere in this app yet — mapped onto the closest existing WooCommerce
+// statuses (processing/completed) as a first pass for the manager home
+// page's logistics card, same as "vraćene" already reuses RETURNED_STATUSES
+// (cancelled+refunded) for returnRate elsewhere in this file. Revisit this
+// mapping if/when real shipment tracking is added.
+function orderStatusCounts(orders, from, to) {
+  const periodOrders = filterByRange(orders, from, to);
+  return {
+    cancelled: periodOrders.filter((o) => o.status === "cancelled").length,
+    shipped: periodOrders.filter((o) => o.status === "processing").length,
+    delivered: periodOrders.filter((o) => o.status === "completed").length,
+    returned: periodOrders.filter((o) => RETURNED_STATUSES.includes(o.status)).length,
+  };
+}
+
 function totalRevenue(orders) {
   return orders.reduce((sum, o) => sum + toNumber(o.total), 0);
 }
@@ -317,7 +333,10 @@ function monthlyRevenueMap(orders, from, to) {
   const map = new Map();
   periodOrders.forEach((o) => {
     const key = monthKey(o.dateCreated);
-    map.set(key, (map.get(key) || 0) + toNumber(o.total));
+    const entry = map.get(key) || { revenue: 0, orders: 0 };
+    entry.revenue += toNumber(o.total);
+    entry.orders += 1;
+    map.set(key, entry);
   });
   return map;
 }
@@ -336,11 +355,19 @@ function computeTrends(allOrders, { from, to }) {
   const series = months.map((m) => {
     const [y, mm] = m.split("-");
     const previousMonthKey = `${Number(y) - 1}-${mm}`;
-    return { month: m, revenue: current.get(m) || 0, previousRevenue: previous.get(previousMonthKey) || 0 };
+    const currEntry = current.get(m) || { revenue: 0, orders: 0 };
+    const prevEntry = previous.get(previousMonthKey) || { revenue: 0, orders: 0 };
+    return {
+      month: m,
+      revenue: currEntry.revenue,
+      previousRevenue: prevEntry.revenue,
+      orders: currEntry.orders,
+      previousOrders: prevEntry.orders,
+    };
   });
 
-  const currentTotal = [...current.values()].reduce((a, b) => a + b, 0);
-  const previousTotal = [...previous.values()].reduce((a, b) => a + b, 0);
+  const currentTotal = [...current.values()].reduce((a, b) => a + b.revenue, 0);
+  const previousTotal = [...previous.values()].reduce((a, b) => a + b.revenue, 0);
   const yoyPercent = previousTotal ? ((currentTotal - previousTotal) / previousTotal) * 100 : null;
 
   return { series, yoyPercent, currentTotal, previousTotal };
@@ -534,10 +561,12 @@ module.exports = {
   computeMetricTrend,
   filterByRange,
   realized,
+  orderStatusCounts,
   customerKey,
   groupByCustomer,
   normalizeCityKey,
   newCustomerCount,
   inRange,
   shiftYears,
+  endOfDayIfDateOnly,
 };

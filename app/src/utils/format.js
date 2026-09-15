@@ -15,6 +15,8 @@ export function formatKpiValue(format, value, currency = "RSD") {
       return `${value.toFixed(1)}%`;
     case "decimal":
       return value.toFixed(2);
+    case "multiplier":
+      return `${value.toFixed(2)}x`;
     case "days":
       return `${value.toFixed(1)} dana`;
     case "integer":

@@ -30,6 +30,30 @@ function periodBounds(days) {
   };
 }
 
+// Same "current vs. immediately preceding period of equal length"
+// comparison as periodBounds above, but anchored to an explicit [from, to]
+// (e.g. a DateRangePicker preset like "Ovaj mesec"/"Prošli mesec") instead
+// of a rolling N-days-from-now window — periodBounds can't express "prošli
+// mesec" since it always ends at "now".
+function periodBoundsFromRange(fromStr, toStr) {
+  const from = new Date(fromStr);
+  const to = new Date(analytics.endOfDayIfDateOnly(toStr));
+  const spanMs = to.getTime() - from.getTime() + 1;
+  const prevTo = new Date(from.getTime() - 1);
+  const prevFrom = new Date(prevTo.getTime() - spanMs + 1);
+  return {
+    from: from.toISOString(),
+    to: to.toISOString(),
+    prevFrom: prevFrom.toISOString(),
+    prevTo: prevTo.toISOString(),
+  };
+}
+
+function resolvePeriod(query) {
+  if (query.from && query.to) return periodBoundsFromRange(query.from, query.to);
+  return periodBounds(Number(query.days) || DEFAULT_DAYS);
+}
+
 function changePercent(current, previous) {
   if (current === null || current === undefined) return null;
   if (!previous) return null;
@@ -39,7 +63,12 @@ function changePercent(current, previous) {
 function periodRevenueOrders(allOrders, from, to) {
   const periodOrders = analytics.realized(analytics.filterByRange(allOrders, from, to));
   const revenue = periodOrders.reduce((sum, o) => sum + parseFloat(o.total || 0), 0);
-  return { revenue, orders: periodOrders.length, aov: periodOrders.length ? revenue / periodOrders.length : 0 };
+  return {
+    revenue,
+    orders: periodOrders.length,
+    aov: periodOrders.length ? revenue / periodOrders.length : 0,
+    statusCounts: analytics.orderStatusCounts(allOrders, from, to),
+  };
 }
 
 // Only Meta connections actually targeting one of the brand-filtered
@@ -51,18 +80,23 @@ function linkedMetaConnections(storeConnections, company) {
   );
 }
 
-function resolveStoreConnections(connectionId, company) {
+// connectionIds (comma list) is the newer multi-brand filter used by the
+// manager home page's MultiSelect; connectionId (single) stays for the
+// original single-brand dropdown on the generic Dashboard.
+function resolveStoreConnections(query, company) {
   const all = [...getWooConnections(company), ...getShopifyConnections(company)];
-  return connectionId ? all.filter((c) => c.id === connectionId) : all;
+  if (query.connectionIds) {
+    const ids = query.connectionIds.split(",").filter(Boolean);
+    return all.filter((c) => ids.includes(c.id));
+  }
+  return query.connectionId ? all.filter((c) => c.id === query.connectionId) : all;
 }
 
 router.get("/dashboard/summary", async (req, res) => {
-  const days = Number(req.query.days) || DEFAULT_DAYS;
-  const { from, to, prevFrom, prevTo } = periodBounds(days);
-  const { connectionId } = req.query;
+  const { from, to, prevFrom, prevTo } = resolvePeriod(req.query);
 
   try {
-    const storeConnections = resolveStoreConnections(connectionId, req.company);
+    const storeConnections = resolveStoreConnections(req.query, req.company);
     const allOrders = storeConnections.length ? await getOrdersForConnections(storeConnections) : [];
     const currency = allOrders[0]?.currency || "RSD";
 
@@ -127,10 +161,30 @@ router.get("/dashboard/summary", async (req, res) => {
     res.json({
       currency,
       metaCurrency,
-      period: { from, to, days },
+      period: { from, to },
       revenue: { current: curr.revenue, previous: prev.revenue, changePercent: changePercent(curr.revenue, prev.revenue) },
       orders: { current: curr.orders, previous: prev.orders, changePercent: changePercent(curr.orders, prev.orders) },
       aov: { current: curr.aov, previous: prev.aov, changePercent: changePercent(curr.aov, prev.aov) },
+      cancelledOrders: {
+        current: curr.statusCounts.cancelled,
+        previous: prev.statusCounts.cancelled,
+        changePercent: changePercent(curr.statusCounts.cancelled, prev.statusCounts.cancelled),
+      },
+      shippedOrders: {
+        current: curr.statusCounts.shipped,
+        previous: prev.statusCounts.shipped,
+        changePercent: changePercent(curr.statusCounts.shipped, prev.statusCounts.shipped),
+      },
+      deliveredOrders: {
+        current: curr.statusCounts.delivered,
+        previous: prev.statusCounts.delivered,
+        changePercent: changePercent(curr.statusCounts.delivered, prev.statusCounts.delivered),
+      },
+      returnedOrders: {
+        current: curr.statusCounts.returned,
+        previous: prev.statusCounts.returned,
+        changePercent: changePercent(curr.statusCounts.returned, prev.statusCounts.returned),
+      },
       adSpend: { current: spendCurr, previous: spendPrev, changePercent: changePercent(spendCurr, spendPrev) },
       roas: { current: roasCurr, previous: roasPrev, changePercent: changePercent(roasCurr, roasPrev) },
       conversionRate: { current: crCurr, previous: crPrev, changePercent: changePercent(crCurr, crPrev) },

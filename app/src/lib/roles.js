@@ -15,6 +15,10 @@ export const EMPTY_HOME_ROLES = new Set([
   ...RESTRICTED_ROLES,
 ]);
 
+// Gets the manager-specific "Početna" (ManagerHome.jsx) instead of the
+// generic Dashboard.jsx — see App.jsx's route switch.
+export const MANAGER_HOME_ROLES = new Set(["E-commerce Manager"]);
+
 // Nav routes hidden for one specific (non-restricted) role, on top of the
 // restricted-role rules above.
 export const ROLE_HIDDEN_ROUTES = {
