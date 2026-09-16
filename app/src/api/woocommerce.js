@@ -40,6 +40,7 @@ export function fetchWooOrders(
     search = "",
     stale = false,
     unfiscalized = false,
+    personalization = false,
     status,
     fulfillment,
     fiscal,
@@ -52,6 +53,7 @@ export function fetchWooOrders(
   if (search) params.set("search", search);
   if (stale) params.set("stale", "true");
   if (unfiscalized) params.set("unfiscalized", "true");
+  if (personalization) params.set("personalization", "true");
   // Sent even when empty — an empty (but present) list means "every status
   // deselected", which must match nothing rather than falling back to "all".
   if (status !== undefined) params.set("status", status.join(","));
@@ -66,6 +68,10 @@ export function fetchStaleOrderCount() {
 
 export function fetchUnfiscalizedCount() {
   return request("/orders/unfiscalized-count");
+}
+
+export function fetchPersonalizationCount() {
+  return request("/orders/personalization-count");
 }
 
 export function adjustOrderCallCount(connectionId, orderId, delta) {

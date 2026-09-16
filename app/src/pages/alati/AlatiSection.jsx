@@ -82,6 +82,9 @@ export default function AlatiSection() {
   const [staleThreshold, setStaleThreshold] = useState("");
   const [staleSaved, setStaleSaved] = useState(false);
   const [unfiscalizedEnabled, setUnfiscalizedEnabled] = useState(false);
+  const [personalizationEnabled, setPersonalizationEnabled] = useState(false);
+  const [personalizationProductIds, setPersonalizationProductIds] = useState("");
+  const [personalizationSaved, setPersonalizationSaved] = useState(false);
   const [enabledPremiumTools, setEnabledPremiumTools] = useState([]);
   const [loading, setLoading] = useState(true);
   const { enabledPremiumModules, loading: premiumLoading } = useEnabledPremiumModules();
@@ -114,6 +117,8 @@ export default function AlatiSection() {
         setStaleEnabled(data.staleTrackingEnabled !== false);
         setStaleThreshold(String(data.staleOrderThresholdDays ?? 30));
         setUnfiscalizedEnabled(data.unfiscalizedTrackingEnabled !== false);
+        setPersonalizationEnabled(data.personalizationEnabled === true);
+        setPersonalizationProductIds((data.personalizationProductIds || []).join(", "));
         setEnabledPremiumTools(data.enabledPremiumTools || []);
       })
       .catch(() => {})
@@ -125,7 +130,11 @@ export default function AlatiSection() {
     };
   }, []);
 
-  const enabledMap = { stale: staleEnabled, unfiscalized: unfiscalizedEnabled };
+  const enabledMap = {
+    stale: staleEnabled,
+    unfiscalized: unfiscalizedEnabled,
+    personalization: personalizationEnabled,
+  };
 
   const toggleStale = (enabled) => {
     setStaleEnabled(enabled);
@@ -137,6 +146,24 @@ export default function AlatiSection() {
     updateSettings({ unfiscalizedTrackingEnabled: enabled }).catch(() => {});
   };
 
+  const togglePersonalization = (enabled) => {
+    setPersonalizationEnabled(enabled);
+    updateSettings({ personalizationEnabled: enabled }).catch(() => {});
+  };
+
+  const savePersonalizationProductIds = () => {
+    const ids = personalizationProductIds
+      .split(",")
+      .map((id) => id.trim())
+      .filter(Boolean);
+    updateSettings({ personalizationProductIds: ids })
+      .then(() => {
+        setPersonalizationSaved(true);
+        setTimeout(() => setPersonalizationSaved(false), 2000);
+      })
+      .catch(() => {});
+  };
+
   const togglePremiumTool = (key, enabled) => {
     const next = enabled
       ? [...enabledPremiumTools, key]
@@ -145,7 +172,11 @@ export default function AlatiSection() {
     updateSettings({ enabledPremiumTools: next }).catch(() => {});
   };
 
-  const toggleHandlers = { stale: toggleStale, unfiscalized: toggleUnfiscalized };
+  const toggleHandlers = {
+    stale: toggleStale,
+    unfiscalized: toggleUnfiscalized,
+    personalization: togglePersonalization,
+  };
 
   const saveStaleThreshold = () => {
     const n = Number(staleThreshold);
@@ -334,6 +365,24 @@ export default function AlatiSection() {
                       disabled={!staleEnabled || loading}
                     />
                     {staleSaved && <span className="stale-saved-hint">Sačuvano</span>}
+                  </div>
+                )}
+                {t.key === "personalization" && (
+                  <div className="stale-threshold-field">
+                    <label className="settings-row-label" htmlFor="alati-personalization-products">
+                      ID ili šifra (SKU) proizvoda, odvojeni zarezom
+                    </label>
+                    <input
+                      id="alati-personalization-products"
+                      className="settings-input"
+                      type="text"
+                      placeholder="npr. 123, ABC-456"
+                      value={personalizationProductIds}
+                      onChange={(e) => setPersonalizationProductIds(e.target.value)}
+                      onBlur={savePersonalizationProductIds}
+                      disabled={!personalizationEnabled || loading}
+                    />
+                    {personalizationSaved && <span className="stale-saved-hint">Sačuvano</span>}
                   </div>
                 )}
               </div>

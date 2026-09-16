@@ -4,6 +4,7 @@ import {
   fetchWooStatus,
   fetchStaleOrderCount,
   fetchUnfiscalizedCount,
+  fetchPersonalizationCount,
   adjustOrderCallCount,
 } from "../api/woocommerce";
 import { fetchShopifyStatus } from "../api/shopify";
@@ -16,7 +17,10 @@ import {
   PhoneIcon,
   PlusIcon,
   MinusIcon,
+  PersonalizeIcon,
 } from "../icons";
+import PersonalizationModal from "../components/PersonalizationModal";
+import { fetchCompletedPersonalizationOrders } from "../api/personalization";
 import { siteLabel } from "../utils/site";
 import woocommerceLogo from "../assets/woocommerce.png";
 import shopifyLogo from "../assets/shopify.png";
@@ -121,6 +125,50 @@ function FulfillmentIcon({ order }) {
   );
 }
 
+// Finds the first line item on the order that matches the merchant's
+// personalizationProductIds allowlist (Podešavanja → Alati → Personalizacija
+// porudžbina) — an order can only be personalized against one product at a
+// time, so the first match wins. Merchants naturally know a product's SKU
+// (printed on labels, used in their own catalog) rather than WooCommerce's
+// internal numeric product_id, so the allowlist is matched against either,
+// case-insensitively (SKUs can carry mixed case, e.g. "UslŠt").
+function personalizableProductId(order, productIds) {
+  if (!productIds || productIds.length === 0) return null;
+  const normalizedIds = productIds.map((id) => String(id).trim().toLowerCase());
+  for (const item of order.items || []) {
+    const pid = String(item.productId ?? "");
+    const sku = String(item.sku ?? "");
+    // Return whichever value actually matched the allowlist — NOT
+    // whichever the item happens to have, since a product's numeric
+    // product_id and its SKU aren't interchangeable: the merchant may have
+    // listed only the SKU, in which case sending the (unlisted) product_id
+    // back to the server for validation would be rejected even though the
+    // match was real (see server/routes/personalization.js's own check
+    // against the same allowlist).
+    if (pid && normalizedIds.includes(pid.toLowerCase())) return pid;
+    if (sku && normalizedIds.includes(sku.toLowerCase())) return sku;
+  }
+  return null;
+}
+
+function PersonalizationIcon({ onClick, completed }) {
+  return (
+    <HoverLabel text={completed ? "Izgravirano" : "Personalizacija"}>
+      <button
+        type="button"
+        className={"order-personalization-icon" + (completed ? " done" : "")}
+        onClick={(e) => {
+          e.stopPropagation();
+          onClick();
+        }}
+        aria-label="Personalizacija porudžbine"
+      >
+        <PersonalizeIcon />
+      </button>
+    </HoverLabel>
+  );
+}
+
 function CallCounter({ order, onCountChange }) {
   const [busy, setBusy] = useState(false);
   const count = order.callCount || 0;
@@ -203,7 +251,15 @@ function sameAddress(a, b) {
   );
 }
 
-function OrderCard({ order, expanded, onToggle, onCallCountChange }) {
+function OrderCard({
+  order,
+  expanded,
+  onToggle,
+  onCallCountChange,
+  personalizationProductId,
+  personalizationCompleted,
+  onOpenPersonalization,
+}) {
   const billingLine = formatAddress(order.billing);
   const shippingLine = formatAddress(order.shipping);
   const shippingDiffers =
@@ -233,6 +289,12 @@ function OrderCard({ order, expanded, onToggle, onCallCountChange }) {
               </span>
             )}
             <FulfillmentIcon order={order} />
+            {personalizationProductId && (
+              <PersonalizationIcon
+                completed={personalizationCompleted}
+                onClick={() => onOpenPersonalization(personalizationProductId)}
+              />
+            )}
             {order.customerNote && <NoteTooltip text={order.customerNote} />}
           </p>
           <p className="order-card-date">{formatDateTime(order.dateCreated)}</p>
@@ -412,10 +474,42 @@ function OrdersOverview() {
   const [staleCount, setStaleCount] = useState(0);
   const [unfiscalizedOnly, setUnfiscalizedOnly] = useState(false);
   const [unfiscalizedCount, setUnfiscalizedCount] = useState(0);
+  const [personalizationOnly, setPersonalizationOnly] = useState(false);
+  const [personalizationCount, setPersonalizationCount] = useState(0);
   const [loadingStatus, setLoadingStatus] = useState(true);
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [error, setError] = useState("");
   const [expandedId, setExpandedId] = useState(null);
+  const [personalizationProductIds, setPersonalizationProductIds] = useState([]);
+  const [personalizationOrder, setPersonalizationOrder] = useState(null);
+  const [completedPersonalizationKeys, setCompletedPersonalizationKeys] = useState(new Set());
+  // Bumped whenever the modal marks/unmarks an order as izgravirano, so
+  // both the count badge and (if the "za graviranje" filter is active) the
+  // list itself drop that order right away instead of waiting for a page
+  // change or reload.
+  const [personalizationRefreshTick, setPersonalizationRefreshTick] = useState(0);
+
+  useEffect(() => {
+    fetchSettings()
+      .then((data) => {
+        setPersonalizationProductIds(
+          data.personalizationEnabled ? data.personalizationProductIds || [] : []
+        );
+      })
+      .catch(() => {});
+  }, []);
+
+  // Refetched on personalizationRefreshTick so marking/unmarking izgravirano
+  // in the modal recolors the icon in the list right away.
+  useEffect(() => {
+    fetchCompletedPersonalizationOrders()
+      .then((data) => {
+        setCompletedPersonalizationKeys(
+          new Set((data.completed || []).map((c) => `${c.connectionId}:${c.orderId}`))
+        );
+      })
+      .catch(() => {});
+  }, [personalizationRefreshTick]);
 
   useEffect(() => {
     Promise.all([fetchWooStatus(), fetchShopifyStatus()])
@@ -438,6 +532,12 @@ function OrdersOverview() {
       .catch(() => {});
   }, [unfiscalizedOnly]);
 
+  useEffect(() => {
+    fetchPersonalizationCount()
+      .then((data) => setPersonalizationCount(data.count || 0))
+      .catch(() => {});
+  }, [personalizationOnly, personalizationRefreshTick]);
+
   // Searches as you type — debounced so every keystroke doesn't fire a
   // request.
   useEffect(() => {
@@ -456,15 +556,16 @@ function OrdersOverview() {
     setLoadingOrders(true);
     setError("");
 
-    // The stale/unfiscalized banner views have their own fixed status/fiscal
-    // semantics — don't cross them with these filters.
-    const otherFiltersActive = staleOnly || unfiscalizedOnly;
+    // The stale/unfiscalized/personalization banner views have their own
+    // fixed status/fiscal semantics — don't cross them with these filters.
+    const otherFiltersActive = staleOnly || unfiscalizedOnly || personalizationOnly;
     fetchWooOrders(selectedId === "all" ? undefined : selectedId, {
       page,
       perPage,
       search,
       stale: staleOnly,
       unfiscalized: unfiscalizedOnly,
+      personalization: personalizationOnly,
       status:
         otherFiltersActive || selectedStatuses.length === ORDER_STATUS_OPTIONS.length
           ? undefined
@@ -496,6 +597,8 @@ function OrdersOverview() {
     search,
     staleOnly,
     unfiscalizedOnly,
+    personalizationOnly,
+    personalizationRefreshTick,
     statusesKey,
     fulfillmentFilter,
     fiscalFilter,
@@ -529,6 +632,7 @@ function OrdersOverview() {
   const showStaleOrders = () => {
     setStaleOnly(true);
     setUnfiscalizedOnly(false);
+    setPersonalizationOnly(false);
     setPage(1);
   };
 
@@ -540,11 +644,24 @@ function OrdersOverview() {
   const showUnfiscalizedOrders = () => {
     setUnfiscalizedOnly(true);
     setStaleOnly(false);
+    setPersonalizationOnly(false);
     setPage(1);
   };
 
   const clearUnfiscalizedFilter = () => {
     setUnfiscalizedOnly(false);
+    setPage(1);
+  };
+
+  const showPersonalizationOrders = () => {
+    setPersonalizationOnly(true);
+    setStaleOnly(false);
+    setUnfiscalizedOnly(false);
+    setPage(1);
+  };
+
+  const clearPersonalizationFilter = () => {
+    setPersonalizationOnly(false);
     setPage(1);
   };
 
@@ -605,6 +722,24 @@ function OrdersOverview() {
             </span>
             <button type="button" onClick={showUnfiscalizedOrders}>
               Vidi nefiskalizovane porudžbine
+            </button>
+          </div>
+        )
+      )}
+
+      {personalizationOnly ? (
+        <div className="stale-filter-banner">
+          <span>Prikazane su samo porudžbine koje čekaju na graviranje.</span>
+          <button type="button" onClick={clearPersonalizationFilter}>
+            Ukloni filter
+          </button>
+        </div>
+      ) : (
+        personalizationCount > 0 && (
+          <div className="stale-filter-banner stale-filter-prompt">
+            <span>Imaš {personalizationCount} porudžbina koje čekaju na graviranje.</span>
+            <button type="button" onClick={showPersonalizationOrders}>
+              Vidi porudžbine za graviranje
             </button>
           </div>
         )
@@ -709,6 +844,13 @@ function OrdersOverview() {
                     cur.map((o) => (o.id === orderId ? { ...o, callCount: count } : o))
                   )
                 }
+                personalizationProductId={personalizableProductId(order, personalizationProductIds)}
+                personalizationCompleted={completedPersonalizationKeys.has(
+                  `${order.connectionId}:${order.id}`
+                )}
+                onOpenPersonalization={(productId) =>
+                  setPersonalizationOrder({ order, productId })
+                }
               />
             ))}
           </div>
@@ -718,6 +860,16 @@ function OrdersOverview() {
             onChange={setPage}
           />
         </>
+      )}
+
+      {personalizationOrder && (
+        <PersonalizationModal
+          order={personalizationOrder.order}
+          productId={personalizationOrder.productId}
+          connectionId={personalizationOrder.order.connectionId}
+          onClose={() => setPersonalizationOrder(null)}
+          onStatusChange={() => setPersonalizationRefreshTick((t) => t + 1)}
+        />
       )}
     </div>
   );

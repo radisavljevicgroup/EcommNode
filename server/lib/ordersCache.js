@@ -180,6 +180,28 @@ function getUnfiscalizedOrders(connections, { page, perPage }) {
   };
 }
 
+// Orders waiting for graviranje/personalization work — `keys` is the
+// pending set from personalizationStore.getPendingPersonalizationKeys
+// (already files-present-and-not-completed), computed there since that
+// data lives in Supabase, not this cache.
+function getPersonalizationOrders(connections, { page, perPage, keys }) {
+  const all = getOrdersForConnections(connections);
+  const pending = all
+    .filter((o) => keys.has(`${o.connectionId}:${o.id}`))
+    .sort((a, b) => new Date(a.dateCreated) - new Date(b.dateCreated));
+
+  const start = (page - 1) * perPage;
+  return {
+    orders: pending.slice(start, start + perPage),
+    pagination: {
+      page,
+      perPage,
+      total: pending.length,
+      totalPages: Math.max(1, Math.ceil(pending.length / perPage)),
+    },
+  };
+}
+
 function matchesSearch(order, needle) {
   const haystack = [
     order.number,
@@ -254,5 +276,6 @@ module.exports = {
   getOrdersPage,
   getStaleOrders,
   getUnfiscalizedOrders,
+  getPersonalizationOrders,
   getSyncStatus,
 };

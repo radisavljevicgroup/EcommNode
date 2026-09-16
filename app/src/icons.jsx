@@ -335,3 +335,12 @@ export const StorePickupIcon = () => (
     <path d="M9.5 20v-6h5v6" />
   </svg>
 );
+
+export const PersonalizeIcon = () => (
+  <svg {...iconProps}>
+    <path d="M9.5 14.5 3 21l1.5-5.5L15 5a2.1 2.1 0 0 1 3 3Z" />
+    <path d="M13 7l3.5 3.5" />
+    <path d="M17 3s1 1 1 2.5S17 8 17 8" />
+    <path d="M21 7s-1-1-2.5-1S16 7 16 7" />
+  </svg>
+);

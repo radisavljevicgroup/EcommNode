@@ -14,6 +14,8 @@ router.put("/settings", (req, res) => {
     unfiscalizedTrackingEnabled,
     enabledPremiumTools,
     internalOrdersCount,
+    personalizationEnabled,
+    personalizationProductIds,
   } = req.body || {};
   const patch = {};
 
@@ -45,6 +47,18 @@ router.put("/settings", (req, res) => {
       return res.status(400).json({ error: "Broj porudžbina mora biti pozitivan ceo broj." });
     }
     patch.internalOrdersCount = n;
+  }
+  if (personalizationEnabled !== undefined) {
+    patch.personalizationEnabled = Boolean(personalizationEnabled);
+  }
+  if (personalizationProductIds !== undefined) {
+    if (
+      !Array.isArray(personalizationProductIds) ||
+      !personalizationProductIds.every((id) => typeof id === "string" || typeof id === "number")
+    ) {
+      return res.status(400).json({ error: "personalizationProductIds mora biti niz ID-jeva." });
+    }
+    patch.personalizationProductIds = personalizationProductIds.map((id) => String(id).trim()).filter(Boolean);
   }
 
   res.json(updateSettings(req.company, patch));

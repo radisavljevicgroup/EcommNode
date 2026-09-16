@@ -17,6 +17,7 @@ const inboxRouter = require("./routes/inbox");
 const dashboardRouter = require("./routes/dashboard");
 const calendarRouter = require("./routes/calendar");
 const firmaRouter = require("./routes/firma");
+const personalizationRouter = require("./routes/personalization");
 const { requireAuth, requirePremiumModule } = require("./lib/auth");
 
 dotenv.config();
@@ -48,8 +49,11 @@ app.use(
 // Captures the exact request bytes alongside the parsed body — the Meta
 // inbox webhook (routes/inbox.js) needs the raw payload to verify
 // X-Hub-Signature-256, since re-serializing the parsed JSON isn't
-// guaranteed to byte-match what Meta actually signed.
-app.use(express.json({ limit: "10mb", verify: (req, res, buf) => { req.rawBody = buf; } }));
+// guaranteed to byte-match what Meta actually signed. Raised from 10mb to
+// 25mb for routes/personalization.js, which accepts up to
+// MAX_FILES_PER_UPLOAD base64-encoded files (same data-URL-in-JSON pattern
+// as routes/workers.js's avatar upload) in a single request.
+app.use(express.json({ limit: "25mb", verify: (req, res, buf) => { req.rawBody = buf; } }));
 
 // requireAuth verifies the caller's Supabase session and attaches
 // req.company/req.userId — every route below reads/writes data scoped to
@@ -70,6 +74,7 @@ app.use("/api", inboxRouter);
 app.use("/api", requireAuth, dashboardRouter);
 app.use("/api", requireAuth, calendarRouter);
 app.use("/api", requireAuth, firmaRouter);
+app.use("/api", requireAuth, personalizationRouter);
 
 // Premium integrations (e.g. Eurocom International) live outside this
 // open-source repo — each one is a self-contained router at

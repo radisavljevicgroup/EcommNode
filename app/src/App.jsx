@@ -2,6 +2,8 @@ import { useState, useEffect } from "react";
 import Header, { NAV_ITEMS } from "./components/Header";
 import Dashboard from "./pages/Dashboard";
 import ManagerHome from "./pages/ManagerHome";
+import RestrictedHome from "./pages/RestrictedHome";
+import ItAdminHome from "./pages/ItAdminHome";
 import Orders from "./pages/Orders";
 import Calendar from "./pages/Calendar";
 import Analytics from "./pages/Analytics";
@@ -17,7 +19,13 @@ import Privacy from "./pages/legal/Privacy";
 import Terms from "./pages/legal/Terms";
 import DataDeletion from "./pages/legal/DataDeletion";
 import { supabase } from "./lib/supabaseClient";
-import { isRouteAllowed, EMPTY_HOME_ROLES, MANAGER_HOME_ROLES } from "./lib/roles";
+import {
+  isRouteAllowed,
+  EMPTY_HOME_ROLES,
+  MANAGER_HOME_ROLES,
+  RESTRICTED_HOME_ROLES,
+  IT_ADMIN_HOME_ROLES,
+} from "./lib/roles";
 
 const AUTH_ROUTES = new Set(["login", "register", "zaboravljena-lozinka", "nova-lozinka"]);
 // Reachable without a session — the marketing landing page, the auth flow,
@@ -172,6 +180,10 @@ export default function App() {
         <EmptyHome />
       ) : MANAGER_HOME_ROLES.has(roleName) ? (
         <ManagerHome onNavigate={navigate} />
+      ) : RESTRICTED_HOME_ROLES[roleName] ? (
+        <RestrictedHome secondChart={RESTRICTED_HOME_ROLES[roleName]} />
+      ) : IT_ADMIN_HOME_ROLES.has(roleName) ? (
+        <ItAdminHome />
       ) : (
         <Dashboard />
       )}

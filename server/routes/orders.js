@@ -1,12 +1,19 @@
 const { Router } = require("express");
 const { getConnections } = require("../lib/store");
 const { getConnections: getShopifyConnections } = require("../lib/shopifyStore");
-const { getOrdersPage, getStaleOrders, getUnfiscalizedOrders } = require("../lib/ordersCache");
+const {
+  getOrdersPage,
+  getStaleOrders,
+  getUnfiscalizedOrders,
+  getPersonalizationOrders,
+} = require("../lib/ordersCache");
 const {
   isStaleTrackingEnabled,
   isUnfiscalizedTrackingEnabled,
+  isPersonalizationEnabled,
 } = require("../lib/settingsStore");
 const { adjustCallCount } = require("../lib/orderCallsStore");
+const { getPendingPersonalizationKeys } = require("../lib/personalizationStore");
 
 const router = Router();
 
@@ -26,7 +33,8 @@ router.get("/orders", async (req, res) => {
     return res.status(401).json({ error: "Nisi povezan ni sa jednom prodavnicom." });
   }
 
-  const { connectionId, search, stale, unfiscalized, fulfillment, fiscal } = req.query;
+  const { connectionId, search, stale, unfiscalized, personalization, fulfillment, fiscal } =
+    req.query;
   const page = Math.max(1, parseInt(req.query.page, 10) || 1);
   const perPage = ALLOWED_PER_PAGE.includes(Number(req.query.perPage))
     ? Number(req.query.perPage)
@@ -72,6 +80,20 @@ router.get("/orders", async (req, res) => {
     }
   }
 
+  // "Za graviranje" — orders with personalization files attached that
+  // haven't been marked done yet (see personalizationStore.js). The
+  // pending set lives in Supabase, not the WooCommerce cache, so it's
+  // fetched separately and intersected with the cached order list here.
+  if (personalization === "true" || personalization === "1") {
+    try {
+      const keys = await getPendingPersonalizationKeys(req.company);
+      const result = getPersonalizationOrders(targets, { page, perPage, keys });
+      return res.json(result);
+    } catch {
+      return res.status(400).json({ error: "Ne mogu da učitam porudžbine za graviranje." });
+    }
+  }
+
   // The main list also reads from the local cache instead of hitting
   // WooCommerce live on every page click — paginating a real API call was
   // slow, especially for "all integrations" which had to fetch a growing
@@ -105,6 +127,18 @@ router.get("/orders/unfiscalized-count", async (req, res) => {
     res.json({ count: result.pagination.total });
   } catch {
     res.status(400).json({ error: "Ne mogu da izračunam broj nefiskalizovanih porudžbina." });
+  }
+});
+
+router.get("/orders/personalization-count", async (req, res) => {
+  if (!isPersonalizationEnabled(req.company)) return res.json({ count: 0 });
+  const connections = [...getConnections(req.company), ...getShopifyConnections(req.company)];
+  try {
+    const keys = await getPendingPersonalizationKeys(req.company);
+    const result = getPersonalizationOrders(connections, { page: 1, perPage: 1, keys });
+    res.json({ count: result.pagination.total });
+  } catch {
+    res.status(400).json({ error: "Ne mogu da izračunam broj porudžbina za graviranje." });
   }
 });
 

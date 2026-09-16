@@ -1,4 +1,4 @@
-import { ClockIcon, ReceiptIcon } from "../../icons";
+import { ClockIcon, ReceiptIcon, PersonalizeIcon } from "../../icons";
 
 // Add new tools here — each entry gets a card in "Sve alatke" and, once
 // enabled, a row in "Moje alatke".
@@ -29,6 +29,21 @@ export const TOOLS = [
         povlači novčanu kaznu. Alatka prati porudžbine u statusu <strong>„Gotovo"</strong>{" "}
         kojima račun još nije fiskalizovan i javlja upozorenje na stranici Porudžbine, sa
         opcijom da se odmah filtriraju i vide.
+      </>
+    ),
+  },
+  {
+    key: "personalization",
+    name: "Personalizacija porudžbina",
+    icon: PersonalizeIcon,
+    shortDesc: "Kupac prilaže fajlove za personalizaciju uz izabrane proizvode.",
+    desc: (
+      <>
+        Za proizvode koje označiš kao personalizabilne, na stranici Porudžbine se pored
+        ikonice za dostavu pojavljuje dodatna ikonica — klikom se otvara prozor u koji se
+        prevlače (ili biraju) fajlovi vezani za personalizaciju te porudžbine (npr. tekst za
+        gravuru ili slika za štampu), koji se čuvaju uz konkretnu porudžbinu i proizvod. Koji
+        proizvodi aktiviraju alatku bira se ispod, unosom njihovih ID-jeva.
       </>
     ),
   },

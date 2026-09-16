@@ -2435,6 +2435,194 @@ body {
   color: #b65c00;
 }
 
+.order-personalization-icon {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: var(--purple);
+}
+
+.order-personalization-icon svg {
+  width: 15px;
+  height: 15px;
+  stroke: currentColor;
+}
+
+.order-personalization-icon.done {
+  color: #1a7f37;
+}
+
+.personalization-modal-card {
+  max-width: 460px;
+}
+
+.personalization-dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  border: 2px dashed var(--border);
+  border-radius: 12px;
+  padding: 24px 16px;
+  color: var(--text-muted);
+  font-size: 13px;
+  text-align: center;
+  margin-bottom: 14px;
+}
+
+.personalization-dropzone svg {
+  width: 26px;
+  height: 26px;
+  stroke: currentColor;
+  color: var(--purple);
+}
+
+.personalization-dropzone.drag-over {
+  border-color: var(--purple);
+  background: var(--pill-bg);
+}
+
+.personalization-dropzone p {
+  margin: 0;
+}
+
+.personalization-browse-btn {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--purple);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.personalization-saved-label {
+  margin: 4px 0 6px;
+}
+
+.personalization-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--pill-bg);
+  margin-bottom: 14px;
+}
+
+.personalization-status-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.personalization-status-row.done .personalization-status-label {
+  color: #1a7f37;
+}
+
+.personalization-status-label svg {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+  flex-shrink: 0;
+}
+
+.personalization-status-toggle {
+  background: none;
+  border: none;
+  color: var(--purple);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: underline;
+  flex-shrink: 0;
+}
+
+.personalization-status-toggle:disabled {
+  opacity: 0.5;
+  cursor: default;
+  text-decoration: none;
+}
+
+.personalization-file-list {
+  list-style: none;
+  margin: 0 0 14px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.personalization-file-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--pill-bg);
+  font-size: 12.5px;
+}
+
+.personalization-file-thumb {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  object-fit: cover;
+  display: block;
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+}
+
+.personalization-file-thumb.placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+  color: var(--text-muted);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.personalization-file-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-dark);
+}
+
+a.personalization-file-name {
+  text-decoration: underline;
+}
+
+.personalization-file-size {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.personalization-remove-file {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.personalization-remove-file svg {
+  width: 13px;
+  height: 13px;
+  stroke: currentColor;
+}
+
 .order-call-counter {
   display: inline-flex;
   align-items: center;
@@ -3371,6 +3559,19 @@ body {
 
 @media (max-width: 720px) {
   .manager-home-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Restricted home's 2 KPI cards (see RestrictedHome.jsx) — a plain even
+   row rather than quadrant-grid's 3-column default, which would leave a
+   visibly empty third slot. */
+.restricted-home-kpi-grid {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+@media (max-width: 720px) {
+  .restricted-home-kpi-grid {
     grid-template-columns: 1fr;
   }
 }
