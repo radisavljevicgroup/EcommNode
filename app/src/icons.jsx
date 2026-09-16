@@ -344,3 +344,9 @@ export const PersonalizeIcon = () => (
     <path d="M21 7s-1-1-2.5-1S16 7 16 7" />
   </svg>
 );
+
+export const FunnelIcon = () => (
+  <svg {...iconProps}>
+    <path d="M3 4h18l-7 8v6l-4 2v-8Z" />
+  </svg>
+);

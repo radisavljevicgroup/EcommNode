@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { fetchSettings, updateSettings } from "../../api/settings";
+import { fetchGa4Status } from "../../api/ga4";
 import { TOOLS } from "./catalog";
 import { filterEntitledModules, useEnabledPremiumModules } from "../../lib/premiumModules";
 import { retryable } from "../../lib/fetchWithRetry";
@@ -87,6 +88,11 @@ export default function AlatiSection() {
   const [personalizationSaved, setPersonalizationSaved] = useState(false);
   const [enabledPremiumTools, setEnabledPremiumTools] = useState([]);
   const [loading, setLoading] = useState(true);
+  // Some premium tools (e.g. Sales Funnel Simulator) are useless without a
+  // GA4 connection — rather than let a merchant switch one on and land on
+  // an empty "poveži GA4" page every time, the toggle itself is disabled
+  // up front for any toolCard that declares `requiresGa4`.
+  const [hasGa4, setHasGa4] = useState(true);
   const { enabledPremiumModules, loading: premiumLoading } = useEnabledPremiumModules();
   // Both the built-in tools (settings.json) and the premium tool list
   // (firme.enabled_premium_modules) have to be known before "Moje alatke"
@@ -128,6 +134,12 @@ export default function AlatiSection() {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  useEffect(() => {
+    fetchGa4Status()
+      .then((data) => setHasGa4((data.connections || []).length > 0))
+      .catch(() => {});
   }, []);
 
   const enabledMap = {
@@ -284,6 +296,7 @@ export default function AlatiSection() {
         <div className="integration-grid tool-grid">
           {PREMIUM_TOOLS.map((t) => {
             const enabled = enabledPremiumTools.includes(t.key);
+            const blockedByGa4 = t.requiresGa4 && !hasGa4 && !enabled;
             return (
               <div className="integration-grid-card" key={t.key}>
                 <div className="tool-card-head">
@@ -297,6 +310,11 @@ export default function AlatiSection() {
                 </div>
 
                 <p className="integration-grid-desc">{t.shortDesc}</p>
+                {blockedByGa4 && (
+                  <p className="tool-card-requirement-note">
+                    Zahteva Google Analytics 4 — poveži ga u Podešavanja → Integracije pre uključivanja.
+                  </p>
+                )}
 
                 <div className="tool-card-footer">
                   <div className="tool-card-toggle-row">
@@ -306,7 +324,7 @@ export default function AlatiSection() {
                       type="checkbox"
                       checked={enabled}
                       onChange={(e) => togglePremiumTool(t.key, e.target.checked)}
-                      disabled={loading}
+                      disabled={loading || blockedByGa4}
                       aria-label={`Uključi/isključi: ${t.name}`}
                     />
                   </div>

@@ -1214,6 +1214,16 @@ body {
   flex: 1;
 }
 
+.tool-card-requirement-note {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #92650a;
+  background: #fdf2d8;
+  padding: 6px 8px;
+  border-radius: 6px;
+  margin: 8px 0 0;
+}
+
 .integration-grid-action {
   align-self: flex-start;
   border: none;
