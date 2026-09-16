@@ -363,8 +363,10 @@ export default function ManagerHome({ onNavigate }) {
                 </button>
               </div>
               <p className="chart-subtitle">
-                Obaveštenja pri naglom padu konverzije, anomalijama u prodaji ili padu zaliha ispod
-                kritičnog nivoa.
+                Obaveštenja pri naglom padu konverzije, anomalijama u prodaji, padu zaliha ispod
+                kritičnog nivoa, neuobičajenim promenama u geografskoj raspodeli porudžbina,
+                naglom skoku neuspešnih plaćanja, padu LTV/CAC odnosa ispod zdravog nivoa i
+                prevelikom oslanjanju na plaćeni saobraćaj.
               </p>
               <alertsModule.overview.Component />
             </div>

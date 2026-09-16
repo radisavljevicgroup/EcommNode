@@ -1580,6 +1580,11 @@ body {
   margin: 0;
 }
 
+.stock-control-adopted-tag {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
 .eurocom-collapse-toggle {
   display: flex;
   align-items: center;
