@@ -1,44 +1,59 @@
 import { useState } from "react";
 import { CloseIcon } from "../icons";
 import { siteLabel } from "../utils/site";
+import { googleLogin } from "../lib/googleOAuth";
 import { connectGsc } from "../api/gsc";
 import InfoTooltip from "./InfoTooltip";
 
-function FieldLabel({ text, hint }) {
-  return (
-    <span className="woo-field-label-row">
-      {text}
-      <InfoTooltip text={hint} />
-    </span>
-  );
-}
-
 export default function GscConnectModal({ wooConnections, onClose, onConnected, onResult }) {
-  const [label, setLabel] = useState("");
-  const [siteUrl, setSiteUrl] = useState("");
-  const [serviceAccountJson, setServiceAccountJson] = useState("");
+  const [stage, setStage] = useState("idle"); // idle | loading | picker | error
+  const [sites, setSites] = useState([]);
+  const [pendingId, setPendingId] = useState(null);
+  const [googleEmail, setGoogleEmail] = useState(null);
+  const [labels, setLabels] = useState({});
   const [targetConnectionId, setTargetConnectionId] = useState(wooConnections[0]?.id || "");
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [connectingUrl, setConnectingUrl] = useState(null);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleLogin = async () => {
+    setStage("loading");
     setError("");
-    setLoading(true);
+    try {
+      const data = await googleLogin("gsc");
+      const items = data.items || [];
+      setSites(items);
+      setPendingId(data.pendingId);
+      setGoogleEmail(data.email || null);
+      setLabels(Object.fromEntries(items.map((s) => [s.siteUrl, s.siteUrl])));
+      setStage("picker");
+    } catch (err) {
+      setError(err.message);
+      setStage("error");
+    }
+  };
+
+  const handleConnect = async (site) => {
+    if (!targetConnectionId) return;
+    const label = (labels[site.siteUrl] || site.siteUrl).trim();
+    if (!label) return;
+    setConnectingUrl(site.siteUrl);
     try {
       const data = await connectGsc({
-        label: label || undefined,
-        siteUrl,
-        serviceAccountJson,
+        label,
+        pendingId,
+        siteUrl: site.siteUrl,
         targetConnectionId,
       });
       onResult("success", `Search Console povezan: ${data.connection.label}`);
       onConnected(data.connection);
+      // Row disappears from the picker once connected — same reasoning as
+      // MetaAdsConnectModal: reflects it stayed connected without needing
+      // to close/reopen the modal to see that.
+      setSites((prev) => prev.filter((s) => s.siteUrl !== site.siteUrl));
     } catch (err) {
-      setError(err.message);
       onResult("error", "Neuspešno povezivanje: " + err.message);
     } finally {
-      setLoading(false);
+      setConnectingUrl(null);
     }
   };
 
@@ -49,85 +64,89 @@ export default function GscConnectModal({ wooConnections, onClose, onConnected, 
           <CloseIcon />
         </button>
         <h2 className="modal-title">Poveži Google Search Console</h2>
-        <p className="modal-subtitle">
-          Poveži sajt preko service account-a — isti nalog treba da bude dodat kao korisnik
-          tog sajta u Search Console-u.
-        </p>
+        <p className="modal-subtitle">Izaberi sajt — prijavi se svojim Google nalogom.</p>
 
-        <form className="woo-form" onSubmit={handleSubmit}>
-          <label className="woo-field">
-            <FieldLabel
-              text="Naziv veze (opciono)"
-              hint="Naziv po kom ćeš prepoznati ovu vezu u listi integracija."
-            />
-            <input
-              type="text"
-              placeholder="npr. GSC — parkerolovke.rs"
-              value={label}
-              onChange={(e) => setLabel(e.target.value)}
-            />
-          </label>
-
-          <label className="woo-field">
-            <FieldLabel
-              text="URL sajta"
-              hint="Tačno onako kako je verifikovan u Search Console-u, npr. https://parkerolovke.rs/ ili sc-domain:parkerolovke.rs"
-            />
-            <input
-              type="text"
-              placeholder="https://parkerolovke.rs/"
-              value={siteUrl}
-              onChange={(e) => setSiteUrl(e.target.value)}
-              required
-            />
-          </label>
-
-          <label className="woo-field">
-            <FieldLabel
-              text="Service account JSON ključ"
-              hint="Kreiraj service account u Google Cloud Console-u (IAM & Admin > Service Accounts), preuzmi JSON ključ i nalepi ga ovde. Njegov client_email zatim dodaj kao korisnika sajta u Search Console > Settings > Users and permissions."
-            />
-            <textarea
-              className="woo-textarea"
-              placeholder='{ "type": "service_account", "client_email": "...", "private_key": "..." }'
-              value={serviceAccountJson}
-              onChange={(e) => setServiceAccountJson(e.target.value)}
-              rows={5}
-              required
-            />
-          </label>
-
-          <label className="woo-field">
-            <FieldLabel
-              text="Prodavnica"
-              hint="WooCommerce prodavnica kojoj pripada ovaj sajt u Search Console-u."
-            />
-            <select
-              value={targetConnectionId}
-              onChange={(e) => setTargetConnectionId(e.target.value)}
-              required
+        {(stage === "idle" || stage === "error") && (
+          <>
+            {error && <div className="woo-error">{error}</div>}
+            <button
+              type="button"
+              className="btn-save woo-submit"
+              onClick={handleLogin}
+              disabled={wooConnections.length === 0}
             >
-              {wooConnections.length === 0 && (
-                <option value="">Nema povezanih prodavnica</option>
-              )}
-              {wooConnections.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {siteLabel(c.siteUrl)}
-                </option>
-              ))}
-            </select>
-          </label>
+              Poveži se sa Google nalogom
+            </button>
+            {wooConnections.length === 0 && (
+              <p className="woo-field-hint">Prvo poveži WooCommerce prodavnicu.</p>
+            )}
+          </>
+        )}
 
-          {error && <div className="woo-error">{error}</div>}
+        {stage === "loading" && <div className="empty-hint">Učitavanje sajtova…</div>}
 
-          <button
-            className="btn-save woo-submit"
-            type="submit"
-            disabled={loading || wooConnections.length === 0}
-          >
-            {loading ? "Povezivanje…" : "Poveži"}
-          </button>
-        </form>
+        {stage === "picker" && (
+          <>
+            {googleEmail && <p className="woo-field-hint">Prijavljen kao: {googleEmail}</p>}
+
+            <label className="woo-field">
+              <span className="woo-field-label-row">
+                Prodavnica
+                <InfoTooltip text="WooCommerce prodavnica kojoj pripada izabrani sajt u Search Console-u." />
+              </span>
+              <select
+                value={targetConnectionId}
+                onChange={(e) => setTargetConnectionId(e.target.value)}
+                required
+              >
+                {wooConnections.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {siteLabel(c.siteUrl)}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            {sites.length === 0 ? (
+              <div className="empty-hint">
+                Nijedan verifikovan sajt nije pronađen. Proveri da imaš pristup bar jednom sajtu u
+                Search Console-u sa tim Google nalogom.
+              </div>
+            ) : (
+              <div className="woo-form">
+                {sites.map((site) => (
+                  <div className="meta-account-row" key={site.siteUrl}>
+                    <div className="meta-account-row-main">
+                      <input
+                        type="text"
+                        className="settings-input"
+                        value={labels[site.siteUrl] ?? ""}
+                        onChange={(e) =>
+                          setLabels((prev) => ({ ...prev, [site.siteUrl]: e.target.value }))
+                        }
+                      />
+                      <button
+                        type="button"
+                        className="btn-save"
+                        onClick={() => handleConnect(site)}
+                        disabled={connectingUrl === site.siteUrl || !targetConnectionId}
+                      >
+                        {connectingUrl === site.siteUrl ? "Povezivanje…" : "Poveži"}
+                      </button>
+                    </div>
+                    <p className="woo-field-hint">
+                      {site.siteUrl}
+                      {site.permissionLevel ? ` · ${site.permissionLevel}` : ""}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+            <button type="button" className="integration-edit" onClick={handleLogin}>
+              Osveži listu
+            </button>
+          </>
+        )}
       </div>
     </div>
   );

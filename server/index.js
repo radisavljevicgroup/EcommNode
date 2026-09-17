@@ -11,6 +11,7 @@ const analyticsRouter = require("./routes/analytics");
 const settingsRouter = require("./routes/settings");
 const ga4Router = require("./routes/ga4");
 const gscRouter = require("./routes/gsc");
+const googleOAuthRouter = require("./routes/googleOAuth");
 const metaRouter = require("./routes/meta");
 const workersRouter = require("./routes/workers");
 const inboxRouter = require("./routes/inbox");
@@ -68,6 +69,10 @@ app.use("/api", requireAuth, analyticsRouter);
 app.use("/api", requireAuth, settingsRouter);
 app.use("/api", requireAuth, ga4Router);
 app.use("/api", requireAuth, gscRouter);
+// Google's own redirect back from the consent screen — see
+// routes/googleOAuth.js's header comment for why this can't sit behind
+// requireAuth like the two routers above.
+app.use("/api", googleOAuthRouter);
 app.use("/api", requireAuth, metaRouter);
 app.use("/api", workersRouter);
 app.use("/api", inboxRouter);

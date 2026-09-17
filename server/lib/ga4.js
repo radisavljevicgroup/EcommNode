@@ -1,10 +1,56 @@
 const { parseServiceAccount, getAccessToken } = require("./googleServiceAuth");
+const { getAccessTokenFromRefreshToken } = require("./googleOAuthClient");
 
 const GA4_SCOPE = "https://www.googleapis.com/auth/analytics.readonly";
 
-async function testConnection(connection) {
+// Connections made via "Poveži se sa Google nalogom" carry a refreshToken;
+// older ones made via the retired manual service-account-JSON form carry
+// serviceAccountJson instead — both still work for reading data, only how
+// a NEW connection is created has changed (routes/ga4.js's /ga4/connect).
+async function getToken(connection) {
+  if (connection.refreshToken) {
+    return getAccessTokenFromRefreshToken(connection.refreshToken);
+  }
   const serviceAccount = parseServiceAccount(connection.serviceAccountJson);
-  const token = await getAccessToken(serviceAccount, GA4_SCOPE);
+  return getAccessToken(serviceAccount, GA4_SCOPE);
+}
+
+// Every GA4 account (there can be several) and every property under each,
+// flattened into one pickable list for Ga4ConnectModal.jsx — mirrors
+// listAdAccounts in lib/meta.js. The analytics.readonly scope covers this
+// Admin API read the same way it covers the Data API report calls below.
+async function listProperties(accessToken) {
+  const url = new URL("https://analyticsadmin.googleapis.com/v1beta/accountSummaries");
+  url.searchParams.set("pageSize", "200");
+
+  const items = [];
+  let pageToken;
+  do {
+    if (pageToken) url.searchParams.set("pageToken", pageToken);
+    const res = await fetch(url.toString(), { headers: { Authorization: `Bearer ${accessToken}` } });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const err = new Error(data?.error?.message || `GA4 Admin API greška (HTTP ${res.status}).`);
+      err.status = res.status;
+      throw err;
+    }
+    (data.accountSummaries || []).forEach((account) => {
+      (account.propertySummaries || []).forEach((property) => {
+        items.push({
+          propertyId: (property.property || "").replace("properties/", ""),
+          displayName: property.displayName || null,
+          accountName: account.displayName || null,
+        });
+      });
+    });
+    pageToken = data.nextPageToken || null;
+  } while (pageToken);
+
+  return items;
+}
+
+async function testConnection(connection) {
+  const token = await getToken(connection);
 
   const res = await fetch(
     `https://analyticsdata.googleapis.com/v1beta/properties/${connection.propertyId}:runReport`,
@@ -29,7 +75,7 @@ async function testConnection(connection) {
     throw err;
   }
 
-  return serviceAccount.client_email;
+  return true;
 }
 
 const DEFAULT_DAYS = 28;
@@ -112,8 +158,7 @@ async function getPerformance(connection, { from, to } = {}) {
   const cached = performanceCache.get(cacheKey);
   if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.data;
 
-  const serviceAccount = parseServiceAccount(connection.serviceAccountJson);
-  const token = await getAccessToken(serviceAccount, GA4_SCOPE);
+  const token = await getToken(connection);
 
   const latestAvailable = new Date();
   latestAvailable.setDate(latestAvailable.getDate() - REPORTING_LAG_DAYS);
@@ -201,4 +246,4 @@ async function getPerformance(connection, { from, to } = {}) {
   return result;
 }
 
-module.exports = { testConnection, getPerformance, weekStart };
+module.exports = { testConnection, getPerformance, listProperties, weekStart };

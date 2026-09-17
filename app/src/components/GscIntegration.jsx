@@ -27,6 +27,9 @@ function PropertyRow({ connection, onDisconnected, onResult }) {
           <p className="integration-site">
             {connection.siteUrl} → {siteLabel(connection.targetSiteUrl)}
           </p>
+          {connection.connectedAs && (
+            <p className="integration-site">Prijavljen kao: {connection.connectedAs}</p>
+          )}
         </div>
         <button
           className="integration-remove"
