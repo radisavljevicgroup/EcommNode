@@ -2,6 +2,7 @@ import { useState } from "react";
 import { CloseIcon } from "../icons";
 import { facebookLogin } from "../lib/facebookSdk";
 import { fetchManagedFacebookPages, connectInboxChannel } from "../api/inboxConnections";
+import TestModeNotice from "./TestModeNotice";
 
 // Every permission either channel below could need — requesting the union
 // up front means the same popup/login covers both "Facebook Messenger" and
@@ -103,6 +104,7 @@ export default function MetaPagesConnectModal({ platform, onClose, onConnected, 
 
         {(stage === "idle" || stage === "error") && (
           <>
+            <TestModeNotice provider="Meta" />
             {error && <div className="woo-error">{error}</div>}
             <button type="button" className="btn-save woo-submit" onClick={handleLogin}>
               Poveži se sa Facebook-om

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { CloseIcon } from "../icons";
 import { facebookLogin } from "../lib/facebookSdk";
 import { fetchManagedAdAccounts, connectMeta } from "../api/meta";
+import TestModeNotice from "./TestModeNotice";
 
 // ads_read is enough for reporting (spend/insights) — ads_management would
 // only be needed if this ever creates/edits campaigns, which it doesn't.
@@ -75,6 +76,7 @@ export default function MetaAdsConnectModal({ wooConnections, onClose, onConnect
 
         {(stage === "idle" || stage === "error") && (
           <>
+            <TestModeNotice provider="Meta" />
             {error && <div className="woo-error">{error}</div>}
             <button
               type="button"

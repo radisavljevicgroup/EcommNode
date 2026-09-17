@@ -4,6 +4,7 @@ import { siteLabel } from "../utils/site";
 import { googleLogin } from "../lib/googleOAuth";
 import { connectGa4 } from "../api/ga4";
 import InfoTooltip from "./InfoTooltip";
+import TestModeNotice from "./TestModeNotice";
 
 export default function Ga4ConnectModal({ wooConnections, onClose, onConnected, onResult }) {
   const [stage, setStage] = useState("idle"); // idle | loading | picker | error
@@ -68,6 +69,7 @@ export default function Ga4ConnectModal({ wooConnections, onClose, onConnected, 
 
         {(stage === "idle" || stage === "error") && (
           <>
+            <TestModeNotice provider="Google" />
             {error && <div className="woo-error">{error}</div>}
             <button
               type="button"

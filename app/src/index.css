@@ -2006,6 +2006,25 @@ body {
   border-radius: 8px;
 }
 
+/* Heads-up shown before an OAuth login button while that provider's app
+   is still in "test/development" mode — Google/Meta only let pre-approved
+   accounts sign in, so the merchant needs to know to ask for access before
+   they hit a confusing "access blocked" error mid-flow. */
+.woo-notice {
+  background: #fff8e6;
+  color: #8a6100;
+  font-size: 12.5px;
+  font-weight: 500;
+  padding: 10px 12px;
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
+.woo-notice a {
+  color: inherit;
+  text-decoration: underline;
+}
+
 .woo-submit {
   width: 100%;
   text-align: center;
