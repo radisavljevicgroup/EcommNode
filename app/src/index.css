@@ -1265,6 +1265,49 @@ body {
   margin-bottom: 20px;
 }
 
+/* Sync/check progress bar — see app/src/premium/SyncProgressBar.jsx,
+   shared by Eurocom's "Sinhronizuj" and Kontrola zaliha's "Draft-uj artikle
+   bez stanja", both of which can now take a while since their WooCommerce
+   fetches are deliberately throttled (see server/premium/eurocom/sync.js
+   and .../stock-control/sync.js) to avoid overloading a store's database. */
+.sync-progress {
+  margin-bottom: 14px;
+}
+
+.sync-progress-label {
+  font-size: 12px;
+  color: var(--text-secondary, #666);
+  margin-bottom: 6px;
+}
+
+.sync-progress-track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--pill-bg);
+  overflow: hidden;
+}
+
+.sync-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--purple);
+  transition: width 0.3s ease;
+}
+
+.sync-progress-fill.indeterminate {
+  width: 35%;
+  animation: sync-progress-indeterminate 1.2s ease-in-out infinite;
+}
+
+@keyframes sync-progress-indeterminate {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(285%);
+  }
+}
+
 .woo-integration-head {
   display: flex;
   align-items: center;
