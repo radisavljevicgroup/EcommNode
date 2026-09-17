@@ -159,6 +159,10 @@ export default function ManagerHome({ onNavigate }) {
   const alertsModule = entitledModules.find((mod) => mod.overview?.key === "automatski-alarmi");
   const showAlerts = alertsModule && enabledPremiumTools.includes(alertsModule.toolCard.key);
 
+  const salesFunnelModule = entitledModules.find((mod) => mod.overview?.key === "sales-funnel");
+  const showSalesFunnel =
+    salesFunnelModule && enabledPremiumTools.includes(salesFunnelModule.toolCard.key);
+
   // Eurocom has no self-service on/off switch (see itInfraTab.jsx) — gated
   // purely by company entitlement, same as everywhere else it's checked.
   const showEurocomSync = EurocomHomeSyncStatusCard && enabledPremiumModules.includes("eurocom");
@@ -369,6 +373,26 @@ export default function ManagerHome({ onNavigate }) {
                 prevelikom oslanjanju na plaćeni saobraćaj.
               </p>
               <alertsModule.overview.Component />
+            </div>
+          )}
+
+          {showSalesFunnel && (
+            <div className="chart-card">
+              <div className="chart-card-head">
+                <h3>Sales Funnel Simulator</h3>
+                <button
+                  type="button"
+                  className="performance-link"
+                  onClick={() => onNavigate?.("analitika")}
+                >
+                  Kompletan izveštaj →
+                </button>
+              </div>
+              <p className="chart-subtitle">
+                Levak od prve posete do porudžbine — upozorava kad je otpad u nekoj fazi znatno
+                gori nego 30-dnevni prosek.
+              </p>
+              <salesFunnelModule.overview.Component />
             </div>
           )}
 
