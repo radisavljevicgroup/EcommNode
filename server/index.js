@@ -58,10 +58,25 @@ app.use(express.json({ limit: "25mb", verify: (req, res, buf) => { req.rawBody =
 
 // requireAuth verifies the caller's Supabase session and attaches
 // req.company/req.userId — every route below reads/writes data scoped to
-// that company (see lib/auth.js). Two routers are deliberately excluded:
-// workersRouter does its own, stricter check (requireManager, role-gated);
-// inboxRouter mixes public webhook receivers with merchant-facing
-// endpoints in one file, so it applies requireAuth itself per-route.
+// that company (see lib/auth.js). Three routers are deliberately excluded
+// AND mounted first, before any requireAuth-gated app.use("/api", ...)
+// call: workersRouter does its own, stricter check (requireManager,
+// role-gated); inboxRouter mixes public webhook receivers with
+// merchant-facing endpoints in one file, applying requireAuth itself per-
+// route; googleOAuthRouter is Google's own redirect back from the consent
+// screen, which can't carry our Authorization header at all.
+//
+// Mounting order matters here in a way that's easy to get backwards:
+// Express matches app.use("/api", ...) layers by PATH PREFIX only, not by
+// which router will actually end up handling the request — so a plain
+// requireAuth mounted at "/api" (e.g. connectRouter's, below) intercepts
+// and 401s EVERY /api/* request that reaches it first, including ones
+// meant for a later, unauthenticated router, before that router ever gets
+// a chance to say "not my route". These three have to come before every
+// requireAuth-gated mount for that reason, not just before some of them.
+app.use("/api", workersRouter);
+app.use("/api", inboxRouter);
+app.use("/api", googleOAuthRouter);
 app.use("/api", requireAuth, connectRouter);
 app.use("/api", requireAuth, shopifyRouter);
 app.use("/api", requireAuth, ordersRouter);
@@ -69,13 +84,7 @@ app.use("/api", requireAuth, analyticsRouter);
 app.use("/api", requireAuth, settingsRouter);
 app.use("/api", requireAuth, ga4Router);
 app.use("/api", requireAuth, gscRouter);
-// Google's own redirect back from the consent screen — see
-// routes/googleOAuth.js's header comment for why this can't sit behind
-// requireAuth like the two routers above.
-app.use("/api", googleOAuthRouter);
 app.use("/api", requireAuth, metaRouter);
-app.use("/api", workersRouter);
-app.use("/api", inboxRouter);
 app.use("/api", requireAuth, dashboardRouter);
 app.use("/api", requireAuth, calendarRouter);
 app.use("/api", requireAuth, firmaRouter);
