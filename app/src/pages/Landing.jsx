@@ -53,7 +53,7 @@ const BENEFITS = [
   {
     icon: ChartIcon,
     title: "Modularnost",
-    desc: "WooCommerce, Shopify, Google Analytics, Search Console, Meta Ads, WhatsApp, Viber — svaka integracija je zaseban modul. Poveži samo ono što stvarno koristiš.",
+    desc: "WooCommerce, Shopify, Google Analytics, Search Console, Meta Ads — svaka integracija je zaseban modul. Poveži samo ono što stvarno koristiš.",
   },
   {
     icon: UsersIcon,
@@ -66,12 +66,12 @@ const ROADMAP_DONE = [
   "WooCommerce i Shopify — sinhronizacija porudžbina i kataloga",
   "Google Analytics 4 i Search Console na jednom mestu",
   "Meta Ads — potrošnja, ROAS i CAC po kampanji",
-  "Objedinjen inbox — Messenger i Instagram",
   "Dashboard koji sam prijavljuje pad konverzije i neuspela plaćanja",
   "Podrška za više brendova, strogo odvojenih po podacima",
 ];
 
 const ROADMAP_OPEN = [
+  "Objedinjen inbox — Messenger i Instagram",
   "Dodatne platforme i payment gateway integracije",
   "Napredna izveštavanja i izvoz podataka",
   "Još kanala u objedinjenom inboxu",
@@ -119,7 +119,7 @@ export default function Landing({ onNavigate }) {
           <h1>Celo poslovanje u jednom tabu.</h1>
           <p className="landing-lede">
             EcommNode spaja WooCommerce i Shopify porudžbine, Google i Meta analitiku,
-            Analizu prodaje i poruke kupaca sa svih kanala u jedan pregledan alat. Napravljen
+            Analizu prodaje u jedan pregledan alat. Napravljen
             za vlasnike e-commerca, njihove zaposlene i saradnike.
           </p>
           <div className="landing-hero-ctas">
@@ -171,7 +171,7 @@ export default function Landing({ onNavigate }) {
           <h2>Vođenje prodavnice danas znači žongliranje sa deset alata.</h2>
           <p>
             WooCommerce ili Shopify admin za porudžbine. Google Analytics za saobraćaj. Meta
-            Ads Manager za oglase. Posebna aplikacija za Instagram ili FB poruke. Dok
+            Ads Manager za oglase. Dok
             sastaviš celu sliku, pola radnog dana je već prošlo. Koliko ti se samo puta
             desilo da nisi video neku poruku od kupca?
           </p>
