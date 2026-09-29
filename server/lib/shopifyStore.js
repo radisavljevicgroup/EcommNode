@@ -19,4 +19,12 @@ function removeConnection(id, company) {
   return getConnections(company);
 }
 
-module.exports = { getConnections, addConnection, removeConnection };
+function updateConnection(id, company, patch) {
+  connections = connections.map((c) =>
+    c.id === id && c.company === company ? { ...c, ...patch } : c
+  );
+  file.write(connections);
+  return getConnections(company).find((c) => c.id === id);
+}
+
+module.exports = { getConnections, addConnection, removeConnection, updateConnection };

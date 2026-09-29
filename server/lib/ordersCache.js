@@ -58,12 +58,34 @@ function fetchAllOrders(connection) {
     : fetchAllWooOrders(connection);
 }
 
+// Without the (Shopify-approval-gated) read_all_orders scope, Shopify's API
+// only ever returns orders from the last 60 days, no matter what date range
+// we ask for — so a plain replace here would silently delete every Shopify
+// order we'd already captured once it aged out of that 60-day window, on
+// the very next hourly resync. Merge the fresh fetch over whatever we
+// already have by id instead: an order still inside the 60-day window gets
+// its latest status/total, one that has aged out keeps whatever we last
+// saw for it. WooCommerce doesn't need this — its API actually returns the
+// full SYNC_WINDOW_MONTHS range every time, so replace already behaves
+// like a merge there.
+function mergeOrders(existing, fresh) {
+  const byId = new Map(existing.map((o) => [o.id, o]));
+  for (const o of fresh) byId.set(o.id, o);
+  const cutoff = new Date();
+  cutoff.setMonth(cutoff.getMonth() - SYNC_WINDOW_MONTHS);
+  return [...byId.values()].filter((o) => new Date(o.dateCreated) >= cutoff);
+}
+
 async function syncConnection(connection) {
   if (syncing.has(connection.id)) return;
   syncing.add(connection.id);
   syncErrors.delete(connection.id);
   try {
-    const orders = await fetchAllOrders(connection);
+    const fresh = await fetchAllOrders(connection);
+    const orders =
+      connection.platform === "shopify"
+        ? mergeOrders(cache[connection.id]?.orders || [], fresh)
+        : fresh;
     cache[connection.id] = { syncedAt: new Date().toISOString(), orders };
     file.write(cache);
   } catch (err) {

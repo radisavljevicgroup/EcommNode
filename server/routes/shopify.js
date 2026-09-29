@@ -6,11 +6,11 @@ const { getConnections, addConnection, removeConnection } = require("../lib/shop
 const router = Router();
 
 router.post("/shopify/connect", async (req, res) => {
-  const { shopDomain, accessToken } = req.body || {};
+  const { shopDomain, clientId, clientSecret } = req.body || {};
 
-  if (!shopDomain || !accessToken) {
+  if (!shopDomain || !clientId || !clientSecret) {
     return res.status(400).json({
-      error: "Nedostaju podaci: domen prodavnice i Admin API Access Token su obavezni.",
+      error: "Nedostaju podaci: domen prodavnice, Client ID i Client Secret su obavezni.",
     });
   }
 
@@ -23,15 +23,19 @@ router.post("/shopify/connect", async (req, res) => {
     return res.status(400).json({ error: "Ova prodavnica je već povezana." });
   }
 
-  const candidate = { shopDomain: normalizedDomain, accessToken };
+  // testShopifyConnection exchanges clientId/clientSecret for an access
+  // token via Shopify's client credentials grant and stamps it (plus its
+  // expiry) back onto candidate as a side effect — see resolveAccessToken
+  // in lib/shopify.js.
+  const candidate = { shopDomain: normalizedDomain, clientId, clientSecret };
 
   let shop;
   try {
     shop = await testShopifyConnection(candidate);
   } catch (err) {
-    let message = "Ne mogu da se povežem na Shopify. Proveri domen i pristupni token.";
-    if (err.status === 401 || err.status === 403) {
-      message = "Admin API Access Token nije ispravan ili nema dovoljno dozvola.";
+    let message = "Ne mogu da se povežem na Shopify. Proveri domen, Client ID i Client Secret.";
+    if (err.status === 400 || err.status === 401 || err.status === 403) {
+      message = "Client ID ili Client Secret nisu ispravni, ili aplikacija nema dovoljno dozvola.";
     } else if (err.status === 404) {
       message = "Shopify prodavnica nije pronađena na datom domenu.";
     } else if (!err.status) {
@@ -45,7 +49,10 @@ router.post("/shopify/connect", async (req, res) => {
     siteUrl: `https://${normalizedDomain}`,
     shopDomain: normalizedDomain,
     shopName: shop?.name || normalizedDomain,
-    accessToken,
+    clientId,
+    clientSecret,
+    accessToken: candidate.accessToken,
+    tokenExpiresAt: candidate.tokenExpiresAt,
     platform: "shopify",
     company: req.company,
   };

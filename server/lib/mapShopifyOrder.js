@@ -13,6 +13,22 @@ function mapAddress(address) {
   };
 }
 
+// Cash on Delivery orders never reach financial_status "paid" in Shopify —
+// the money is collected at the door, not captured through Shopify
+// Payments, so financial_status just sits at "pending" forever even once
+// the order has shipped and the customer has paid in person. WooCommerce
+// doesn't have this problem (a COD order there goes straight to its own
+// "processing" status on placement), so treating financial_status as the
+// gate for "is this a real sale" silently classified virtually every COD
+// order as unrealized "pending" — same keyword-matching approach as
+// ordersCache.js's PICKUP_KEYWORDS.
+const COD_KEYWORDS = ["cash on delivery", "cod", "pouze", "otkup"];
+
+function isCodGateway(order) {
+  const gateway = (order.payment_gateway_names || []).join(" ").toLowerCase();
+  return COD_KEYWORDS.some((kw) => gateway.includes(kw));
+}
+
 // Shopify has no single "status" field — it's derived from financial_status
 // + fulfillment_status + cancelled_at. Mapped onto the same status
 // vocabulary WooCommerce orders use (see server/lib/mapOrder.js) so every
@@ -24,10 +40,10 @@ function resolveStatus(order) {
   const fulfillment = order.fulfillment_status;
   if (financial === "refunded") return "refunded";
   if (financial === "voided") return "failed";
-  if (financial === "paid" && fulfillment === "fulfilled") return "completed";
-  if (financial === "paid") return "processing";
   if (financial === "partially_paid" || financial === "partially_refunded") return "on-hold";
-  return "pending";
+  const settled = financial === "paid" || isCodGateway(order);
+  if (!settled) return "pending";
+  return fulfillment === "fulfilled" ? "completed" : "processing";
 }
 
 function mapShopifyOrder(order, sourceSiteUrl) {

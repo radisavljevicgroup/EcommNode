@@ -4,8 +4,9 @@ import { connectShopify } from "../api/shopify";
 
 export default function ShopifyConnectModal({ onClose, onConnected, onResult }) {
   const [shopDomain, setShopDomain] = useState("");
-  const [accessToken, setAccessToken] = useState("");
-  const [showToken, setShowToken] = useState(false);
+  const [clientId, setClientId] = useState("");
+  const [clientSecret, setClientSecret] = useState("");
+  const [showSecret, setShowSecret] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -14,7 +15,7 @@ export default function ShopifyConnectModal({ onClose, onConnected, onResult }) 
     setError("");
     setLoading(true);
     try {
-      const data = await connectShopify({ shopDomain, accessToken });
+      const data = await connectShopify({ shopDomain, clientId, clientSecret });
       onResult("success", `Uspešno povezano: ${data.connection.shopName}`);
       onConnected(data.connection);
     } catch (err) {
@@ -42,9 +43,21 @@ export default function ShopifyConnectModal({ onClose, onConnected, onResult }) 
         </p>
         <p className="woo-field-hint">
           U Shopify Adminu: Settings → Apps and sales channels → Develop apps
-          → Create an app → uključi Admin API scope-ove{" "}
-          <strong>read_orders</strong> i <strong>read_products</strong> →
-          Install → kopiraj Admin API access token.
+          → Build apps in Dev Dashboard → Create app. Posle kreiranja,
+          instaliraj aplikaciju na prodavnicu i uključi Admin API scope-ove{" "}
+          <strong>read_orders</strong> i <strong>read_products</strong>. Zatim
+          u App settings → Credentials kopiraj{" "}
+          <strong>Client ID</strong> i <strong>Client Secret</strong> (Shopify
+          od januara 2026. više ne prikazuje gotov access token za nove
+          aplikacije — samo ova dva podatka).
+        </p>
+        <p className="woo-field-hint">
+          Bez dodatnog scope-a <strong>read_all_orders</strong>, Shopify
+          vraća porudžbine samo iz poslednjih 60 dana, bez obzira na period
+          koji EcommNode traži. Za punu istoriju, u App settings → API access
+          zatraži <strong>read_all_orders</strong> (App access requests →
+          Read all orders → Request access) — to mora ručno da odobri
+          Shopify, pa ponovo sinhronizuj posle odobrenja.
         </p>
 
         <form className="woo-form" onSubmit={handleSubmit}>
@@ -58,24 +71,41 @@ export default function ShopifyConnectModal({ onClose, onConnected, onResult }) 
               required
             />
           </label>
+          <p className="woo-field-hint">
+            Unesi *.myshopify.com domen (Shopify Admin → Settings → Domains),
+            ne svoj custom/kupljen domen prodavnice — npr. ne{" "}
+            <em>tvoja-prodavnica.com</em>, već{" "}
+            <em>tvoja-prodavnica.myshopify.com</em>.
+          </p>
 
           <label className="woo-field">
-            <span>Admin API Access Token</span>
+            <span>Client ID</span>
+            <input
+              type="text"
+              placeholder="Client ID iz Dev Dashboard-a"
+              value={clientId}
+              onChange={(e) => setClientId(e.target.value)}
+              required
+            />
+          </label>
+
+          <label className="woo-field">
+            <span>Client Secret</span>
             <div className="woo-secret-wrap">
               <input
-                type={showToken ? "text" : "password"}
-                placeholder="shpat_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-                value={accessToken}
-                onChange={(e) => setAccessToken(e.target.value)}
+                type={showSecret ? "text" : "password"}
+                placeholder="Client Secret iz Dev Dashboard-a"
+                value={clientSecret}
+                onChange={(e) => setClientSecret(e.target.value)}
                 required
               />
               <button
                 type="button"
                 className="woo-secret-toggle"
-                onClick={() => setShowToken((v) => !v)}
-                aria-label={showToken ? "Sakrij" : "Prikaži"}
+                onClick={() => setShowSecret((v) => !v)}
+                aria-label={showSecret ? "Sakrij" : "Prikaži"}
               >
-                {showToken ? <EyeOffIcon /> : <EyeIcon />}
+                {showSecret ? <EyeOffIcon /> : <EyeIcon />}
               </button>
             </div>
           </label>
