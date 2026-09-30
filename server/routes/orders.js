@@ -13,7 +13,7 @@ const {
   isPersonalizationEnabled,
 } = require("../lib/settingsStore");
 const { adjustCallCount } = require("../lib/orderCallsStore");
-const { setOrderRead } = require("../lib/orderReadsStore");
+const { setOrderRead, withReadState } = require("../lib/orderReadsStore");
 const { getPendingPersonalizationKeys } = require("../lib/personalizationStore");
 
 const router = Router();
@@ -64,7 +64,7 @@ router.get("/orders", async (req, res) => {
   if (stale === "true" || stale === "1") {
     try {
       const result = await getStaleOrders(targets, { page, perPage, company: req.company });
-      return res.json(result);
+      return res.json(withReadState(result, req.userId));
     } catch {
       return res.status(400).json({ error: "Ne mogu da učitam zastarele porudžbine." });
     }
@@ -75,7 +75,7 @@ router.get("/orders", async (req, res) => {
   if (unfiscalized === "true" || unfiscalized === "1") {
     try {
       const result = await getUnfiscalizedOrders(targets, { page, perPage });
-      return res.json(result);
+      return res.json(withReadState(result, req.userId));
     } catch {
       return res.status(400).json({ error: "Ne mogu da učitam nefiskalizovane porudžbine." });
     }
@@ -89,7 +89,7 @@ router.get("/orders", async (req, res) => {
     try {
       const keys = await getPendingPersonalizationKeys(req.company);
       const result = getPersonalizationOrders(targets, { page, perPage, keys });
-      return res.json(result);
+      return res.json(withReadState(result, req.userId));
     } catch {
       return res.status(400).json({ error: "Ne mogu da učitam porudžbine za graviranje." });
     }
@@ -103,7 +103,7 @@ router.get("/orders", async (req, res) => {
   // analytics views already rely on.
   try {
     const result = getOrdersPage(targets, { page, perPage, search, status, fulfillment, fiscal });
-    res.json(result);
+    res.json(withReadState(result, req.userId));
   } catch {
     res.status(400).json({ error: "Ne mogu da učitam porudžbine." });
   }
@@ -156,7 +156,7 @@ router.post("/orders/calls", (req, res) => {
 });
 
 // "Nepročitano" (blue bar in Orders.jsx) — set on opening an order, cleared
-// again by "Označi kao nepročitano". Shared per company, see orderReadsStore.js.
+// again by clicking the grey bar. Per user account, see orderReadsStore.js.
 router.post("/orders/read", (req, res) => {
   const { connectionId, orderId, read } = req.body || {};
   if (!connectionId || !orderId || typeof read !== "boolean") {
@@ -166,7 +166,7 @@ router.post("/orders/read", (req, res) => {
     (c) => c.id === connectionId
   );
   if (!ownsConnection) return res.status(404).json({ error: "Nepoznata prodavnica." });
-  setOrderRead(connectionId, String(orderId), read);
+  setOrderRead(req.userId, connectionId, String(orderId), read);
   res.json({ read });
 });
 

@@ -5,7 +5,6 @@ const { mapShopifyOrder } = require("./mapShopifyOrder");
 const { fetchAllShopifyOrdersRaw } = require("./shopify");
 const { getStaleOrderThresholdDays } = require("./settingsStore");
 const { getCallCount } = require("./orderCallsStore");
-const { isOrderUnread } = require("./orderReadsStore");
 
 const file = createJsonFile("orders-cache.json", {});
 let cache = file.read();
@@ -132,7 +131,6 @@ function getOrdersForConnections(connections) {
       connectionId: connections[i].id,
       sourceSiteUrl: tagSource ? connections[i].siteUrl : null,
       callCount: getCallCount(connections[i].id, o.id),
-      unread: isOrderUnread(connections[i].id, o.id),
       isPickup: isPickupOrder(o),
     }))
   );
@@ -151,7 +149,6 @@ function getOrdersForConnectionsTagged(connections) {
       connectionId: connections[i].id,
       sourceSiteUrl: connections[i].siteUrl,
       callCount: getCallCount(connections[i].id, o.id),
-      unread: isOrderUnread(connections[i].id, o.id),
       isPickup: isPickupOrder(o),
     }))
   );
