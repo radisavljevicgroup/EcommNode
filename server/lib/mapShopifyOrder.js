@@ -65,6 +65,7 @@ function mapShopifyOrder(order, sourceSiteUrl) {
     paymentMethod: (order.payment_gateway_names || [])[0] || "",
     shippingMethod: order.shipping_lines?.[0]?.title || "",
     shippingTotal: order.total_shipping_price_set?.shop_money?.amount || "0",
+    discountTotal: order.total_discounts || "0",
     sourceSiteUrl: sourceSiteUrl || null,
     billing: {
       ...mapAddress(order.billing_address),
@@ -90,6 +91,12 @@ function mapShopifyOrder(order, sourceSiteUrl) {
         total: (subtotal - discount).toFixed(2),
         subtotal: subtotal.toFixed(2),
         image: "",
+        // Line item properties (engraving text etc. from a product-options
+        // app) — "_"-prefixed ones are hidden from the customer by Shopify
+        // too.
+        meta: (item.properties || [])
+          .filter((p) => p?.name && !String(p.name).startsWith("_") && p.value !== "" && p.value != null)
+          .map((p) => ({ label: String(p.name), value: String(p.value) })),
       };
     }),
   };

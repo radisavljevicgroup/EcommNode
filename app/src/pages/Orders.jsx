@@ -19,7 +19,9 @@ import {
   PlusIcon,
   MinusIcon,
   PersonalizeIcon,
+  PrinterIcon,
 } from "../icons";
+import { printOrder } from "../utils/printOrder";
 import PersonalizationModal from "../components/PersonalizationModal";
 import { fetchCompletedPersonalizationOrders } from "../api/personalization";
 import { siteLabel } from "../utils/site";
@@ -315,6 +317,18 @@ function OrderCard({
           {order.isPickup && (
             <CallCounter order={order} onCountChange={(count) => onCallCountChange(order.id, count)} />
           )}
+          <button
+            type="button"
+            className="order-print-btn"
+            title="Štampaj porudžbinu"
+            aria-label="Štampaj porudžbinu"
+            onClick={(e) => {
+              e.stopPropagation();
+              printOrder(order);
+            }}
+          >
+            <PrinterIcon />
+          </button>
           <StatusBadge status={order.status} />
           {order.platform !== "shopify" && <FiscalBadge fiscalized={order.fiscalized} />}
           <div className="order-card-total">

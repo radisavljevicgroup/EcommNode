@@ -27,6 +27,37 @@ function isFiscalized(order) {
   return Boolean(refNumber && String(refNumber).trim());
 }
 
+// WooCommerce hands display_key/display_value back as rendered HTML
+// (entities, sometimes a <p> or link) — plain text is all the order print
+// needs.
+function toPlainText(value) {
+  return String(value)
+    .replace(/<[^>]*>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#0?39;|&#8217;/g, "'")
+    .replace(/&#8211;/g, "–")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .trim();
+}
+
+// Customer-entered item options (engraving text, position, script, font…)
+// as WooCommerce shows them under the item in its own order e-mail —
+// "_"-prefixed keys are internal plugin data, and object/array values are
+// plugin payloads rather than something a person typed.
+function mapItemMeta(item) {
+  return (item.meta_data || [])
+    .filter((m) => !String(m.key || "").startsWith("_"))
+    .filter((m) => typeof (m.display_value ?? m.value) !== "object")
+    .map((m) => ({
+      label: toPlainText(m.display_key ?? m.key ?? ""),
+      value: toPlainText(m.display_value ?? m.value ?? ""),
+    }))
+    .filter((m) => m.label && m.value);
+}
+
 function mapOrder(order, sourceSiteUrl) {
   return {
     id: order.id,
@@ -45,6 +76,7 @@ function mapOrder(order, sourceSiteUrl) {
     paymentMethod: order.payment_method_title || order.payment_method || "",
     shippingMethod: order.shipping_lines?.[0]?.method_title || "",
     shippingTotal: order.shipping_total || "0",
+    discountTotal: order.discount_total || "0",
     sourceSiteUrl: sourceSiteUrl || null,
     billing: {
       ...mapAddress(order.billing),
@@ -67,6 +99,7 @@ function mapOrder(order, sourceSiteUrl) {
       // has no separate promotions/campaigns table to check against.
       subtotal: item.subtotal,
       image: item.image?.src || "",
+      meta: mapItemMeta(item),
     })),
   };
 }

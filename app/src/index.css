@@ -2447,6 +2447,31 @@ body {
   color: #0f6cbd;
 }
 
+.order-print-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.order-print-btn:hover {
+  background: var(--pill-bg);
+  color: var(--text-dark);
+}
+
+.order-print-btn svg {
+  width: 17px;
+  height: 17px;
+  stroke: currentColor;
+}
+
 .order-card-header {
   display: flex;
   align-items: center;
