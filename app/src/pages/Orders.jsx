@@ -6,6 +6,7 @@ import {
   fetchUnfiscalizedCount,
   fetchPersonalizationCount,
   adjustOrderCallCount,
+  setOrderRead,
 } from "../api/woocommerce";
 import { fetchShopifyStatus } from "../api/shopify";
 import {
@@ -18,6 +19,7 @@ import {
   PlusIcon,
   MinusIcon,
   PersonalizeIcon,
+  MailIcon,
 } from "../icons";
 import PersonalizationModal from "../components/PersonalizationModal";
 import { fetchCompletedPersonalizationOrders } from "../api/personalization";
@@ -255,6 +257,7 @@ function OrderCard({
   order,
   expanded,
   onToggle,
+  onToggleRead,
   onCallCountChange,
   personalizationProductId,
   personalizationCompleted,
@@ -266,7 +269,7 @@ function OrderCard({
     order.shipping && shippingLine && !sameAddress(order.billing, order.shipping);
 
   return (
-    <div className="order-card">
+    <div className={"order-card" + (order.unread ? " order-card-unread" : "")}>
       <div
         className="order-card-header"
         role="button"
@@ -303,6 +306,18 @@ function OrderCard({
           {order.isPickup && (
             <CallCounter order={order} onCountChange={(count) => onCallCountChange(order.id, count)} />
           )}
+          <button
+            type="button"
+            className="order-read-toggle"
+            title={order.unread ? "Označi kao pročitano" : "Označi kao nepročitano"}
+            aria-label={order.unread ? "Označi kao pročitano" : "Označi kao nepročitano"}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleRead();
+            }}
+          >
+            <MailIcon />
+          </button>
           <StatusBadge status={order.status} />
           {order.platform !== "shopify" && <FiscalBadge fiscalized={order.fiscalized} />}
           <div className="order-card-total">
@@ -480,6 +495,19 @@ function OrdersOverview() {
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [error, setError] = useState("");
   const [expandedId, setExpandedId] = useState(null);
+
+  // Optimistic: the blue bar goes/comes back right away, and is put back
+  // the way it was if the server didn't save it.
+  const markRead = (order, read) => {
+    const setUnread = (unread) =>
+      setOrders((cur) =>
+        cur.map((o) =>
+          o.id === order.id && o.connectionId === order.connectionId ? { ...o, unread } : o
+        )
+      );
+    setUnread(!read);
+    setOrderRead(order.connectionId, order.id, read).catch(() => setUnread(read));
+  };
   const [personalizationProductIds, setPersonalizationProductIds] = useState([]);
   const [personalizationOrder, setPersonalizationOrder] = useState(null);
   const [completedPersonalizationKeys, setCompletedPersonalizationKeys] = useState(new Set());
@@ -836,9 +864,12 @@ function OrdersOverview() {
                 key={order.id}
                 order={order}
                 expanded={expandedId === order.id}
-                onToggle={() =>
-                  setExpandedId((cur) => (cur === order.id ? null : order.id))
-                }
+                onToggle={() => {
+                  // Opening an order reads it, like opening an e-mail.
+                  if (expandedId !== order.id && order.unread) markRead(order, true);
+                  setExpandedId((cur) => (cur === order.id ? null : order.id));
+                }}
+                onToggleRead={() => markRead(order, order.unread)}
                 onCallCountChange={(orderId, count) =>
                   setOrders((cur) =>
                     cur.map((o) => (o.id === orderId ? { ...o, callCount: count } : o))

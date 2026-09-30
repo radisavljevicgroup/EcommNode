@@ -13,6 +13,7 @@ const {
   isPersonalizationEnabled,
 } = require("../lib/settingsStore");
 const { adjustCallCount } = require("../lib/orderCallsStore");
+const { setOrderRead } = require("../lib/orderReadsStore");
 const { getPendingPersonalizationKeys } = require("../lib/personalizationStore");
 
 const router = Router();
@@ -152,6 +153,21 @@ router.post("/orders/calls", (req, res) => {
   }
   const count = adjustCallCount(connectionId, String(orderId), delta);
   res.json({ count });
+});
+
+// "Nepročitano" (blue bar in Orders.jsx) — set on opening an order, cleared
+// again by "Označi kao nepročitano". Shared per company, see orderReadsStore.js.
+router.post("/orders/read", (req, res) => {
+  const { connectionId, orderId, read } = req.body || {};
+  if (!connectionId || !orderId || typeof read !== "boolean") {
+    return res.status(400).json({ error: "connectionId, orderId i read (true/false) su obavezni." });
+  }
+  const ownsConnection = [...getConnections(req.company), ...getShopifyConnections(req.company)].some(
+    (c) => c.id === connectionId
+  );
+  if (!ownsConnection) return res.status(404).json({ error: "Nepoznata prodavnica." });
+  setOrderRead(connectionId, String(orderId), read);
+  res.json({ read });
 });
 
 module.exports = router;

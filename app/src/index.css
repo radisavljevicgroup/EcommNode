@@ -2408,6 +2408,46 @@ body {
   overflow: hidden;
 }
 
+/* Not opened yet — blue bar on the left like an unread e-mail. An inset
+   shadow instead of border-left so the card's rounded corners and width
+   stay the same either way. */
+.order-card-unread {
+  box-shadow: inset 4px 0 0 #0f6cbd;
+}
+
+.order-card-unread .order-card-id {
+  color: #0f6cbd;
+}
+
+.order-read-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.order-read-toggle:hover {
+  background: var(--pill-bg);
+  color: #0f6cbd;
+}
+
+.order-read-toggle svg {
+  width: 17px;
+  height: 17px;
+  stroke: currentColor;
+}
+
+.order-card-unread .order-read-toggle {
+  color: #0f6cbd;
+}
+
 .order-card-header {
   display: flex;
   align-items: center;

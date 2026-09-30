@@ -80,3 +80,11 @@ export function adjustOrderCallCount(connectionId, orderId, delta) {
     body: JSON.stringify({ connectionId, orderId, delta }),
   });
 }
+
+// Marks an order read (opened) or unread again — the blue bar in Orders.jsx.
+export function setOrderRead(connectionId, orderId, read) {
+  return request("/orders/read", {
+    method: "POST",
+    body: JSON.stringify({ connectionId, orderId, read }),
+  });
+}
