@@ -104,7 +104,7 @@ In order to be iterable, non-array objects must have a [Symbol.iterator]() metho
   h2 span { text-decoration: underline; font-weight: normal; }
   table { width: 100%; border-collapse: collapse; border: 1px solid #e5e5e5; margin-bottom: 30px; }
   .td { border: 1px solid #e5e5e5; padding: 12px; text-align: left; vertical-align: middle; color: #636363; }
-  thead .td, tfoot th.td { font-weight: bold; }
+  th.td { font-weight: bold; }
   .meta { margin: 6px 0 0; padding-left: 18px; font-size: 13px; }
   .meta li { margin: 2px 0; }
   .note { margin: 0 0 30px; }
@@ -113,6 +113,8 @@ In order to be iterable, non-array objects must have a [Symbol.iterator]() metho
   address { font-style: normal; border: 1px solid #e5e5e5; padding: 12px; }
   h3 { color: ${aZ}; font-size: 16px; margin: 0 0 12px; }
   tr, li, address { page-break-inside: avoid; }
+  /* Međuzbir…Ukupno stay together on one page instead of splitting. */
+  .totals { break-inside: avoid; page-break-inside: avoid; }
 </style>
 </head>
 <body>
@@ -121,10 +123,15 @@ In order to be iterable, non-array objects must have a [Symbol.iterator]() metho
   <div class="body">
     <p>Primili ste sledeću narudžbinu od ${oZ(n||`kupca`)}:</p>
     <h2><span>[Narudžbina #${oZ(e.number||e.id)}]</span> (${cZ(e.dateCreated)})</h2>
+    <!-- Plain rows only, no <thead>/<tfoot>: browsers repeat those on every
+         printed page, so a two-page order got the totals (and the column
+         header) printed on both pages instead of once. -->
     <table>
-      <thead><tr><th class="td">Proizvod</th><th class="td">Količina</th><th class="td">Cena</th></tr></thead>
-      <tbody>${o}</tbody>
-      <tfoot>${s}</tfoot>
+      <tbody>
+        <tr><th class="td">Proizvod</th><th class="td">Količina</th><th class="td">Cena</th></tr>
+        ${o}
+      </tbody>
+      <tbody class="totals">${s}</tbody>
     </table>
     ${e.customerNote?`<h3>Napomena kupca</h3><p class="note">${oZ(e.customerNote)}</p>`:``}
     <div class="addresses">

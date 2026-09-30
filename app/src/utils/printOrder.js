@@ -106,7 +106,7 @@ function buildOrderHtml(order) {
   h2 span { text-decoration: underline; font-weight: normal; }
   table { width: 100%; border-collapse: collapse; border: 1px solid #e5e5e5; margin-bottom: 30px; }
   .td { border: 1px solid #e5e5e5; padding: 12px; text-align: left; vertical-align: middle; color: #636363; }
-  thead .td, tfoot th.td { font-weight: bold; }
+  th.td { font-weight: bold; }
   .meta { margin: 6px 0 0; padding-left: 18px; font-size: 13px; }
   .meta li { margin: 2px 0; }
   .note { margin: 0 0 30px; }
@@ -115,6 +115,8 @@ function buildOrderHtml(order) {
   address { font-style: normal; border: 1px solid #e5e5e5; padding: 12px; }
   h3 { color: ${BASE_COLOR}; font-size: 16px; margin: 0 0 12px; }
   tr, li, address { page-break-inside: avoid; }
+  /* Međuzbir…Ukupno stay together on one page instead of splitting. */
+  .totals { break-inside: avoid; page-break-inside: avoid; }
 </style>
 </head>
 <body>
@@ -123,10 +125,15 @@ function buildOrderHtml(order) {
   <div class="body">
     <p>Primili ste sledeću narudžbinu od ${escapeHtml(customer || "kupca")}:</p>
     <h2><span>[Narudžbina #${escapeHtml(order.number || order.id)}]</span> (${formatDate(order.dateCreated)})</h2>
+    <!-- Plain rows only, no <thead>/<tfoot>: browsers repeat those on every
+         printed page, so a two-page order got the totals (and the column
+         header) printed on both pages instead of once. -->
     <table>
-      <thead><tr><th class="td">Proizvod</th><th class="td">Količina</th><th class="td">Cena</th></tr></thead>
-      <tbody>${itemRows}</tbody>
-      <tfoot>${totals}</tfoot>
+      <tbody>
+        <tr><th class="td">Proizvod</th><th class="td">Količina</th><th class="td">Cena</th></tr>
+        ${itemRows}
+      </tbody>
+      <tbody class="totals">${totals}</tbody>
     </table>
     ${
       order.customerNote
