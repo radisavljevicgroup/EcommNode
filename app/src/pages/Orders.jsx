@@ -19,7 +19,6 @@ import {
   PlusIcon,
   MinusIcon,
   PersonalizeIcon,
-  MailIcon,
 } from "../icons";
 import PersonalizationModal from "../components/PersonalizationModal";
 import { fetchCompletedPersonalizationOrders } from "../api/personalization";
@@ -270,6 +269,16 @@ function OrderCard({
 
   return (
     <div className={"order-card" + (order.unread ? " order-card-unread" : "")}>
+      {/* Outlook-style read strip: blue while unread (click = read without
+          opening); on a read order it shows grey on hover and a click brings
+          the blue back. */}
+      <button
+        type="button"
+        className="order-read-bar"
+        title={order.unread ? "Označi kao pročitano" : "Označi kao nepročitano"}
+        aria-label={order.unread ? "Označi kao pročitano" : "Označi kao nepročitano"}
+        onClick={onToggleRead}
+      />
       <div
         className="order-card-header"
         role="button"
@@ -306,18 +315,6 @@ function OrderCard({
           {order.isPickup && (
             <CallCounter order={order} onCountChange={(count) => onCallCountChange(order.id, count)} />
           )}
-          <button
-            type="button"
-            className="order-read-toggle"
-            title={order.unread ? "Označi kao pročitano" : "Označi kao nepročitano"}
-            aria-label={order.unread ? "Označi kao pročitano" : "Označi kao nepročitano"}
-            onClick={(e) => {
-              e.stopPropagation();
-              onToggleRead();
-            }}
-          >
-            <MailIcon />
-          </button>
           <StatusBadge status={order.status} />
           {order.platform !== "shopify" && <FiscalBadge fiscalized={order.fiscalized} />}
           <div className="order-card-total">

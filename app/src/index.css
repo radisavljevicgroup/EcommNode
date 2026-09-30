@@ -2402,49 +2402,48 @@ body {
 }
 
 .order-card {
+  position: relative;
   background: #ffffff;
   border: 1px solid var(--border);
   border-radius: 14px;
   overflow: hidden;
 }
 
-/* Not opened yet — blue bar on the left like an unread e-mail. An inset
-   shadow instead of border-left so the card's rounded corners and width
-   stay the same either way. */
-.order-card-unread {
-  box-shadow: inset 4px 0 0 #0f6cbd;
-}
-
-.order-card-unread .order-card-id {
-  color: #0f6cbd;
-}
-
-.order-read-toggle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
+/* Outlook-style read strip on the card's left edge, clipped to the rounded
+   corners by the card's overflow. Blue = not opened yet; on a read order
+   it's invisible until the card is hovered (grey), and clicking it either
+   way flips read/unread. */
+.order-read-bar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 1;
+  width: 6px;
   padding: 0;
   border: none;
-  border-radius: 8px;
-  background: none;
-  color: var(--text-muted);
+  background: transparent;
   cursor: pointer;
 }
 
-.order-read-toggle:hover {
-  background: var(--pill-bg);
-  color: #0f6cbd;
+.order-card:hover .order-read-bar {
+  background: #c8c8c8;
 }
 
-.order-read-toggle svg {
-  width: 17px;
-  height: 17px;
-  stroke: currentColor;
+.order-card:hover .order-read-bar:hover {
+  background: #a0a0a0;
 }
 
-.order-card-unread .order-read-toggle {
+.order-card-unread .order-read-bar,
+.order-card-unread:hover .order-read-bar {
+  background: #0f6cbd;
+}
+
+.order-card-unread:hover .order-read-bar:hover {
+  background: #0b5394;
+}
+
+.order-card-unread .order-card-id {
   color: #0f6cbd;
 }
 

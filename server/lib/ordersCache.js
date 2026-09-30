@@ -132,7 +132,7 @@ function getOrdersForConnections(connections) {
       connectionId: connections[i].id,
       sourceSiteUrl: tagSource ? connections[i].siteUrl : null,
       callCount: getCallCount(connections[i].id, o.id),
-      unread: isOrderUnread(connections[i].company, connections[i].id, o),
+      unread: isOrderUnread(connections[i].id, o.id),
       isPickup: isPickupOrder(o),
     }))
   );
@@ -151,7 +151,7 @@ function getOrdersForConnectionsTagged(connections) {
       connectionId: connections[i].id,
       sourceSiteUrl: connections[i].siteUrl,
       callCount: getCallCount(connections[i].id, o.id),
-      unread: isOrderUnread(connections[i].company, connections[i].id, o),
+      unread: isOrderUnread(connections[i].id, o.id),
       isPickup: isPickupOrder(o),
     }))
   );
