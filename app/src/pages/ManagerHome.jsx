@@ -159,6 +159,15 @@ export default function ManagerHome({ onNavigate }) {
   const alertsModule = entitledModules.find((mod) => mod.overview?.key === "automatski-alarmi");
   const showAlerts = alertsModule && enabledPremiumTools.includes(alertsModule.toolCard.key);
 
+  // "Učinak radnika" card below — filled by the premium Raspodela
+  // porudžbina tool once it's switched on; the placeholder text stays for
+  // everyone else.
+  const workerStatsModule = entitledModules.find(
+    (mod) => mod.overview?.key === "raspodela-porudzbina"
+  );
+  const showWorkerStats =
+    workerStatsModule && enabledPremiumTools.includes(workerStatsModule.toolCard.key);
+
   const salesFunnelModule = entitledModules.find((mod) => mod.overview?.key === "sales-funnel");
   const showSalesFunnel =
     salesFunnelModule && enabledPremiumTools.includes(salesFunnelModule.toolCard.key);
@@ -490,17 +499,49 @@ export default function ManagerHome({ onNavigate }) {
             )}
           </div>
 
-          <div className="chart-card">
-            <div className="chart-card-head">
-              <h3>Učinak radnika</h3>
-              <UsersIcon />
+          {showWorkerStats ? (
+            <div className="chart-card">
+              <div className="chart-card-head">
+                <h3>Učinak radnika</h3>
+                <button
+                  type="button"
+                  className="performance-link"
+                  onClick={() => onNavigate?.("analitika")}
+                >
+                  Kompletan izveštaj →
+                </button>
+              </div>
+              <p className="chart-subtitle">
+                Automatska raspodela porudžbina — radnici sa najviše bodova, broj raspoređenih
+                porudžbina i procenat fiskalizacije.
+              </p>
+              <workerStatsModule.overview.Component />
             </div>
-            <p className="chart-subtitle">
-              Praćenje broja obrađenih porudžbina i poziva po radniku je u pripremi — trenutno se ne
-              beleži koji radnik je obradio koju porudžbinu.
-            </p>
-            <div className="empty-hint">Uskoro dostupno.</div>
-          </div>
+          ) : (
+            <div className="chart-card">
+              <div className="chart-card-head">
+                <h3>Učinak radnika</h3>
+                <UsersIcon />
+              </div>
+              {workerStatsModule ? (
+                <>
+                  <p className="chart-subtitle">
+                    Praćenje broja obrađenih porudžbina po radniku — uključi alat „Raspodela
+                    porudžbina“ u Podešavanja → Svi alati.
+                  </p>
+                  <div className="empty-hint">Alat nije uključen.</div>
+                </>
+              ) : (
+                <>
+                  <p className="chart-subtitle">
+                    Praćenje broja obrađenih porudžbina i poziva po radniku je u pripremi — trenutno
+                    se ne beleži koji radnik je obradio koju porudžbinu.
+                  </p>
+                  <div className="empty-hint">Uskoro dostupno.</div>
+                </>
+              )}
+            </div>
+          )}
         </>
       )}
     </div>

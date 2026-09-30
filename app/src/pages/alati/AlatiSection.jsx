@@ -176,12 +176,18 @@ export default function AlatiSection() {
       .catch(() => {});
   };
 
-  const togglePremiumTool = (key, enabled) => {
+  // A toolCard may declare onToggle(enabled) for state the tool keeps on
+  // its own side (e.g. Raspodela porudžbina's is_active flag in Supabase,
+  // which is what actually starts/pauses its automation) — called once the
+  // shared on/off switch itself is saved.
+  const togglePremiumTool = (tool, enabled) => {
     const next = enabled
-      ? [...enabledPremiumTools, key]
-      : enabledPremiumTools.filter((k) => k !== key);
+      ? [...enabledPremiumTools, tool.key]
+      : enabledPremiumTools.filter((k) => k !== tool.key);
     setEnabledPremiumTools(next);
-    updateSettings({ enabledPremiumTools: next }).catch(() => {});
+    updateSettings({ enabledPremiumTools: next })
+      .then(() => tool.onToggle?.(enabled))
+      .catch(() => {});
   };
 
   const toggleHandlers = {
@@ -262,7 +268,7 @@ export default function AlatiSection() {
                 <button
                   className="integration-remove"
                   type="button"
-                  onClick={() => togglePremiumTool(t.key, false)}
+                  onClick={() => togglePremiumTool(t, false)}
                 >
                   Isključi
                 </button>
@@ -323,7 +329,7 @@ export default function AlatiSection() {
                       className="toggle"
                       type="checkbox"
                       checked={enabled}
-                      onChange={(e) => togglePremiumTool(t.key, e.target.checked)}
+                      onChange={(e) => togglePremiumTool(t, e.target.checked)}
                       disabled={loading || blockedByGa4}
                       aria-label={`Uključi/isključi: ${t.name}`}
                     />

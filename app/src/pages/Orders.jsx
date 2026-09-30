@@ -50,6 +50,13 @@ const ORDERS_RAIL_ITEMS = [
 // for why the toolCard-key check against enabledPremiumTools exists.
 const premiumOrdersModules = import.meta.glob("../premium/*/ordersTab.jsx", { eager: true });
 
+// Premium per-order badge (e.g. the assigned worker's icon from Raspodela
+// porudžbina) — a module's orderAssignee.jsx exports
+// fetchOrderAssignees(orders) → { "connectionId:orderId": assignee } and a
+// default component rendering one assignee. Not gated by the tool's on/off
+// switch: pausing distribution keeps showing who already has an order.
+const premiumAssigneeModules = import.meta.glob("../premium/*/orderAssignee.jsx", { eager: true });
+
 const PER_PAGE_OPTIONS = [10, 20, 30, 50];
 
 const FULFILLMENT_OPTIONS = [
@@ -263,6 +270,8 @@ function OrderCard({
   personalizationProductId,
   personalizationCompleted,
   onOpenPersonalization,
+  assignee,
+  AssigneeBadge,
 }) {
   const billingLine = formatAddress(order.billing);
   const shippingLine = formatAddress(order.shipping);
@@ -303,6 +312,7 @@ function OrderCard({
               </span>
             )}
             <FulfillmentIcon order={order} />
+            {assignee && AssigneeBadge && <AssigneeBadge assignee={assignee} />}
             {personalizationProductId && (
               <PersonalizationIcon
                 completed={personalizationCompleted}
@@ -461,6 +471,9 @@ export default function Orders() {
     ...premiumTabs.map(({ key, icon, label }) => ({ key, icon, label })),
   ];
   const activeTab = premiumTabs.find((t) => t.key === section);
+  const assigneeModule = filterEntitledModules(premiumAssigneeModules, enabledPremiumModules).map(
+    ([, mod]) => mod
+  )[0];
 
   return (
     <div className="orders-layout">
@@ -472,7 +485,7 @@ export default function Orders() {
           ) : section === "poruke" ? (
             <Messages />
           ) : (
-            <OrdersOverview />
+            <OrdersOverview assigneeModule={assigneeModule} />
           )}
         </div>
       </div>
@@ -480,8 +493,9 @@ export default function Orders() {
   );
 }
 
-function OrdersOverview() {
+function OrdersOverview({ assigneeModule }) {
   const [connections, setConnections] = useState([]);
+  const [assignees, setAssignees] = useState({});
   const [selectedId, setSelectedId] = useState("all");
   const [orders, setOrders] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, perPage: 10, total: 0, totalPages: 1 });
@@ -616,6 +630,14 @@ function OrdersOverview() {
         if (cancelled) return;
         setOrders(data.orders);
         setPagination(data.pagination);
+        // Fetched after the list itself so a slow/failed premium call never
+        // holds up or breaks the orders view — badges just pop in.
+        assigneeModule
+          ?.fetchOrderAssignees(data.orders)
+          .then((map) => {
+            if (!cancelled) setAssignees(map);
+          })
+          .catch(() => {});
       })
       .catch((err) => {
         if (!cancelled) setError(err.message);
@@ -893,6 +915,8 @@ function OrdersOverview() {
                 onOpenPersonalization={(productId) =>
                   setPersonalizationOrder({ order, productId })
                 }
+                assignee={assignees[`${order.connectionId}:${order.id}`]}
+                AssigneeBadge={assigneeModule?.default}
               />
             ))}
           </div>

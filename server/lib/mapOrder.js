@@ -65,6 +65,11 @@ function mapOrder(order, sourceSiteUrl) {
     number: order.number,
     status: order.status,
     dateCreated: order.date_created,
+    // date_created is the store's local time with no offset; the GMT copy
+    // (also offset-less, but always UTC) is what lets a real instant be
+    // compared against server timestamps (e.g. order-distribution's
+    // "only orders created after the tool was switched on").
+    dateCreatedGmt: order.date_created_gmt || null,
     dateCompleted: order.date_completed || null,
     fiscalized: isFiscalized(order),
     total: order.total,
