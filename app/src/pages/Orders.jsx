@@ -57,6 +57,12 @@ const premiumOrdersModules = import.meta.glob("../premium/*/ordersTab.jsx", { ea
 // switch: pausing distribution keeps showing who already has an order.
 const premiumAssigneeModules = import.meta.glob("../premium/*/orderAssignee.jsx", { eager: true });
 
+// Premium per-order status chips (e.g. Interni nalozi: waiting for / went
+// out in an internal order) — a module's orderInfo.jsx exports
+// fetchOrderInfo(orders) → { "connectionId:orderId": info } and a default
+// component rendering one info. Every entitled module gets its own chip.
+const premiumOrderInfoModules = import.meta.glob("../premium/*/orderInfo.jsx", { eager: true });
+
 const PER_PAGE_OPTIONS = [10, 20, 30, 50];
 
 const FULFILLMENT_OPTIONS = [
@@ -272,6 +278,7 @@ function OrderCard({
   onOpenPersonalization,
   assignee,
   AssigneeBadge,
+  infoChips,
 }) {
   const billingLine = formatAddress(order.billing);
   const shippingLine = formatAddress(order.shipping);
@@ -313,6 +320,7 @@ function OrderCard({
             )}
             <FulfillmentIcon order={order} />
             {assignee && AssigneeBadge && <AssigneeBadge assignee={assignee} />}
+            {infoChips}
             {personalizationProductId && (
               <PersonalizationIcon
                 completed={personalizationCompleted}
@@ -474,6 +482,9 @@ export default function Orders() {
   const assigneeModule = filterEntitledModules(premiumAssigneeModules, enabledPremiumModules).map(
     ([, mod]) => mod
   )[0];
+  const orderInfoModules = filterEntitledModules(premiumOrderInfoModules, enabledPremiumModules).map(
+    ([, mod]) => mod
+  );
 
   return (
     <div className="orders-layout">
@@ -485,7 +496,7 @@ export default function Orders() {
           ) : section === "poruke" ? (
             <Messages />
           ) : (
-            <OrdersOverview assigneeModule={assigneeModule} />
+            <OrdersOverview assigneeModule={assigneeModule} orderInfoModules={orderInfoModules} />
           )}
         </div>
       </div>
@@ -493,9 +504,11 @@ export default function Orders() {
   );
 }
 
-function OrdersOverview({ assigneeModule }) {
+function OrdersOverview({ assigneeModule, orderInfoModules }) {
   const [connections, setConnections] = useState([]);
   const [assignees, setAssignees] = useState({});
+  // One { "connectionId:orderId": info } map per orderInfoModules entry.
+  const [orderInfos, setOrderInfos] = useState([]);
   const [selectedId, setSelectedId] = useState("all");
   const [orders, setOrders] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, perPage: 10, total: 0, totalPages: 1 });
@@ -638,6 +651,11 @@ function OrdersOverview({ assigneeModule }) {
             if (!cancelled) setAssignees(map);
           })
           .catch(() => {});
+        Promise.all(
+          orderInfoModules.map((mod) => mod.fetchOrderInfo(data.orders).catch(() => ({})))
+        ).then((maps) => {
+          if (!cancelled) setOrderInfos(maps);
+        });
       })
       .catch((err) => {
         if (!cancelled) setError(err.message);
@@ -917,6 +935,11 @@ function OrdersOverview({ assigneeModule }) {
                 }
                 assignee={assignees[`${order.connectionId}:${order.id}`]}
                 AssigneeBadge={assigneeModule?.default}
+                infoChips={orderInfoModules.map((mod, i) => {
+                  const info = orderInfos[i]?.[`${order.connectionId}:${order.id}`];
+                  const Chip = mod.default;
+                  return info ? <Chip key={i} info={info} /> : null;
+                })}
               />
             ))}
           </div>
