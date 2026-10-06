@@ -53,8 +53,8 @@ const premiumOrdersModules = import.meta.glob("../premium/*/ordersTab.jsx", { ea
 // Premium per-order badge (e.g. the assigned worker's icon from Raspodela
 // porudžbina) — a module's orderAssignee.jsx exports
 // fetchOrderAssignees(orders) → { "connectionId:orderId": assignee } and a
-// default component rendering one assignee. Not gated by the tool's on/off
-// switch: pausing distribution keeps showing who already has an order.
+// default component rendering one assignee. The module's server decides
+// when there's anything to show (e.g. only while its tool is switched on).
 const premiumAssigneeModules = import.meta.glob("../premium/*/orderAssignee.jsx", { eager: true });
 
 // Premium per-order status chips (e.g. Interni nalozi: waiting for / went
