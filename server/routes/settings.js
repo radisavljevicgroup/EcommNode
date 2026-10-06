@@ -40,6 +40,18 @@ router.put("/settings", (req, res) => {
       return res.status(400).json({ error: "enabledPremiumTools mora biti niz stringova." });
     }
     patch.enabledPremiumTools = enabledPremiumTools;
+    // When each tool was last switched on — a tool can work only from that
+    // moment on (e.g. Interni nalozi picks up orders from then). Switching
+    // a tool off drops its timestamp, so switching it on again restarts it.
+    const current = getSettings(req.company);
+    const previous = new Set(current.enabledPremiumTools || []);
+    const enabledAt = {};
+    enabledPremiumTools.forEach((key) => {
+      enabledAt[key] = previous.has(key)
+        ? current.premiumToolsEnabledAt?.[key] || new Date().toISOString()
+        : new Date().toISOString();
+    });
+    patch.premiumToolsEnabledAt = enabledAt;
   }
   if (internalOrdersCount !== undefined) {
     const n = Number(internalOrdersCount);

@@ -8,6 +8,9 @@ const DEFAULT_SETTINGS = {
   // switched on — off by default. Today this is a manual toggle; later
   // it'll also be gated by an actual subscription/payment check.
   enabledPremiumTools: [],
+  // { [toolKey]: ISO time it was last switched on } — kept in step with
+  // enabledPremiumTools by routes/settings.js.
+  premiumToolsEnabledAt: {},
   // How many of the most recent orders (across every connected site) the
   // "Interni nalozi" premium tool shows — see server/premium/eurocom.
   internalOrdersCount: 10,
