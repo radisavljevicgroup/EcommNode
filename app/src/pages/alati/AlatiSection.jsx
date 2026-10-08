@@ -38,6 +38,10 @@ const premiumOrdersModules = import.meta.glob("../../premium/*/ordersTab.jsx", {
   eager: true,
 });
 
+// A toolCard with `free: true` lives in ecommnode-premium like the others
+// and is switched on the same way (enabledPremiumTools), but is free — it
+// renders without the "Premium" badge.
+//
 // Where a premium tool's "Otvori u ..." button sends the user, keyed by the
 // `origin` tag set above. Falls back to Analitika (the original, only
 // destination before it-administracija/porudzbine existed).
@@ -252,7 +256,11 @@ export default function AlatiSection() {
                 <div className="integration-info">
                   <p className="integration-name">
                     {t.name}
-                    <span className="status-pill premium">Premium</span>
+                    {t.free ? (
+                      <span className="status-pill">Uključeno</span>
+                    ) : (
+                      <span className="status-pill premium">Premium</span>
+                    )}
                   </p>
                   <p className="integration-site">{t.shortDesc}</p>
                 </div>
@@ -311,7 +319,7 @@ export default function AlatiSection() {
                   </span>
                   <p className="integration-grid-name">
                     {t.name}
-                    <span className="status-pill premium">Premium</span>
+                    {!t.free && <span className="status-pill premium">Premium</span>}
                   </p>
                 </div>
 
