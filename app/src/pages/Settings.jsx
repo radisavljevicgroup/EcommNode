@@ -643,6 +643,7 @@ export default function Settings({ onPhotoChange, initialSection, onSectionConsu
                                       {w.role}
                                       {w.phone ? ` · ${w.phone}` : ""}
                                     </p>
+                                    {w.email && <p className="settings-row-desc">{w.email}</p>}
                                   </div>
                                 </div>
                                 <button className="btn-save" type="button" onClick={() => startEditWorker(w)}>

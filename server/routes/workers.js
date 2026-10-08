@@ -90,11 +90,23 @@ router.get("/workers", async (req, res) => {
     return res.status(400).json({ error: "Nije moguće učitati radnike." });
   }
 
+  // Email isn't on public.users — it lives in Supabase Auth (auth.users),
+  // one admin lookup per worker. A failed lookup just leaves it blank.
+  const emails = await Promise.all(
+    data.map((w) =>
+      supabaseAdmin.auth.admin
+        .getUserById(w.id)
+        .then(({ data: authData }) => authData?.user?.email || "")
+        .catch(() => "")
+    )
+  );
+
   res.json({
-    workers: data.map((w) => ({
+    workers: data.map((w, i) => ({
       id: w.id,
       fullName: w.full_name,
       phone: w.phone,
+      email: emails[i],
       photo: w.photo,
       role: w.roles?.name || "",
     })),
