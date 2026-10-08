@@ -40,7 +40,15 @@ export default function ItInfrastruktura() {
   // check in Analytics.jsx for the analogous Analitika-page tabs.
   const premiumTabs = filterEntitledModules(premiumItInfraModules, enabledPremiumModules)
     .map(([, mod]) => mod)
-    .filter((mod) => !mod.toolCard?.key || enabledPremiumTools.includes(mod.toolCard.key))
+    // tabAlwaysVisible: the tab itself is free and the toolCard only
+    // unlocks a premium part inside it (e.g. Asortimani — taking a range
+    // is free, sharing your own is premium).
+    .filter(
+      (mod) =>
+        !mod.toolCard?.key ||
+        mod.toolCard.tabAlwaysVisible ||
+        enabledPremiumTools.includes(mod.toolCard.key)
+    )
     .flatMap((mod) => mod.tabs || []);
 
   const railItems = [
