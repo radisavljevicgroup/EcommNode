@@ -11,11 +11,9 @@ import {
   ServerIcon,
   MenuIcon,
   CloseIcon,
-  LayersIcon,
 } from "../icons";
 import { supabase } from "../lib/supabaseClient";
 import { RESTRICTED_ROLES, RESTRICTED_NAV_ROUTES, ROLE_HIDDEN_ROUTES } from "../lib/roles";
-import { HAS_ASORTIMANI } from "../pages/Asortimani";
 
 export const NAV_ITEMS = [
   { route: "home", label: "Početna", icon: HomeIcon },
@@ -23,8 +21,6 @@ export const NAV_ITEMS = [
   { route: "analitika", label: "Analitika", icon: ChartIcon },
   { route: "kalendar", label: "Kalendar", icon: CalendarIcon },
   { route: "it-infrastruktura", label: "IT Infrastruktura", icon: ServerIcon },
-  // Premium (ecommnode-premium) — only listed when that page is in the build.
-  ...(HAS_ASORTIMANI ? [{ route: "asortimani", label: "Asortimani", icon: LayersIcon }] : []),
   { route: "podesavanja", label: "Podešavanja", icon: GearIcon },
 ];
 
