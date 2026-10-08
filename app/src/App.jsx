@@ -8,6 +8,7 @@ import Orders from "./pages/Orders";
 import Calendar from "./pages/Calendar";
 import Analytics from "./pages/Analytics";
 import ItInfrastruktura from "./pages/ItInfrastruktura";
+import Asortimani from "./pages/Asortimani";
 import Settings from "./pages/Settings";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
@@ -176,6 +177,8 @@ export default function App() {
         <Analytics />
       ) : effectiveRoute === "it-infrastruktura" ? (
         <ItInfrastruktura />
+      ) : effectiveRoute === "asortimani" ? (
+        <Asortimani />
       ) : EMPTY_HOME_ROLES.has(roleName) ? (
         <EmptyHome />
       ) : MANAGER_HOME_ROLES.has(roleName) ? (
