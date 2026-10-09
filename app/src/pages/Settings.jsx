@@ -49,6 +49,7 @@ export default function Settings({ onPhotoChange, initialSection, onSectionConsu
   const [editingWorkerId, setEditingWorkerId] = useState(null);
   const [editFullName, setEditFullName] = useState("");
   const [editPhone, setEditPhone] = useState("");
+  const [editEmail, setEditEmail] = useState("");
   const [editRoleId, setEditRoleId] = useState("");
   const [editPhoto, setEditPhoto] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
@@ -254,6 +255,7 @@ export default function Settings({ onPhotoChange, initialSection, onSectionConsu
     setEditingWorkerId(w.id);
     setEditFullName(w.fullName);
     setEditPhone(w.phone || "");
+    setEditEmail(w.email || "");
     setEditRoleId(roles.find((r) => r.name === w.role)?.id || "");
     setEditPhoto("");
   };
@@ -281,6 +283,9 @@ export default function Settings({ onPhotoChange, initialSection, onSectionConsu
       await updateWorker(editingWorkerId, {
         fullName: editFullName.trim(),
         phone: editPhone.trim(),
+        // Left out when blank (e.g. the email couldn't be loaded) — the
+        // server then keeps the current one.
+        email: editEmail.trim() || undefined,
         roleId: editRoleId,
         photo: editPhoto || null,
       });
@@ -575,6 +580,13 @@ export default function Settings({ onPhotoChange, initialSection, onSectionConsu
                                   desc="Opciono"
                                   value={editPhone}
                                   onChange={setEditPhone}
+                                />
+                                <InputRow
+                                  label="Email"
+                                  desc="Radnik se ovim mejlom prijavljuje — menja se odmah, bez potvrde"
+                                  type="email"
+                                  value={editEmail}
+                                  onChange={setEditEmail}
                                 />
                                 <div className="settings-row">
                                   <div>

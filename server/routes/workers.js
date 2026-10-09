@@ -183,9 +183,13 @@ router.put("/workers/:id", async (req, res) => {
 
   const { id } = req.params;
   const { fullName, phone, roleId, photo } = req.body || {};
+  const email = typeof req.body?.email === "string" ? req.body.email.trim() : undefined;
 
   if (!fullName?.trim() || !roleId) {
     return res.status(400).json({ error: "Ime i rola su obavezni." });
+  }
+  if (email !== undefined && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res.status(400).json({ error: "Email nije ispravan." });
   }
 
   const { data: target, error: targetError } = await supabaseAdmin
@@ -200,6 +204,28 @@ router.put("/workers/:id", async (req, res) => {
 
   const roleError = await assertAssignableRole(supabaseAdmin, roleId);
   if (roleError) return res.status(400).json({ error: roleError });
+
+  // Email lives in Supabase Auth (it's the login), not public.users. Changed
+  // first and confirmed right away, same as createUser above — the manager
+  // sets it, the worker doesn't get a confirmation link. Nothing else is
+  // saved if it fails.
+  let savedEmail;
+  if (email !== undefined) {
+    const { data: current } = await supabaseAdmin.auth.admin.getUserById(id);
+    if (current?.user?.email?.toLowerCase() !== email.toLowerCase()) {
+      const { error: emailError } = await supabaseAdmin.auth.admin.updateUserById(id, {
+        email,
+        email_confirm: true,
+      });
+      if (emailError) {
+        const taken = /already (been )?registered|already exists/i.test(emailError.message || "");
+        return res.status(400).json({
+          error: taken ? "Nalog sa ovim mejlom već postoji." : "Nije moguće promeniti email.",
+        });
+      }
+    }
+    savedEmail = email;
+  }
 
   const patch = {
     full_name: fullName.trim(),
@@ -220,6 +246,7 @@ router.put("/workers/:id", async (req, res) => {
       id,
       fullName: patch.full_name,
       phone: patch.phone,
+      email: savedEmail,
       photo: photoUrl || null,
     },
   });
