@@ -93,7 +93,40 @@ export default function PersonalizationModal({
   }, [pendingFiles]);
 
   const addFiles = (fileList) => {
+    setError("");
     setPendingFiles((cur) => [...cur, ...Array.from(fileList)]);
+  };
+
+  // An image dragged from a web page (the store, another tab, the order's
+  // own product thumbnail) arrives as a link, not a file — dataTransfer.files
+  // is empty, and it used to be dropped without a word. Fetch it into a
+  // File instead; a site that doesn't allow that (CORS) gets a clear message.
+  const handleDrop = async (e) => {
+    e.preventDefault();
+    setDragOver(false);
+    if (e.dataTransfer.files?.length) {
+      addFiles(e.dataTransfer.files);
+      return;
+    }
+    const url = (e.dataTransfer.getData("text/uri-list") || e.dataTransfer.getData("text/plain") || "")
+      .split(/\r?\n/)
+      .find((line) => /^https?:\/\//i.test(line.trim()))
+      ?.trim();
+    if (!url) {
+      setError("Prevučeno nije fajl — prevuci fajl sa računara ili klikni „Izaberi fajlove“.");
+      return;
+    }
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      const name = decodeURIComponent(new URL(url).pathname.split("/").pop() || "") || "slika";
+      addFiles([new File([blob], name, { type: blob.type })]);
+    } catch {
+      setError(
+        "Sliku sa sajta nije moguće preuzeti direktno — sačuvaj je na računar (desni klik → Sačuvaj sliku kao…) pa je prevuci ili izaberi."
+      );
+    }
   };
 
   const removePendingFile = (index) => {
@@ -133,6 +166,7 @@ export default function PersonalizationModal({
         }))
       );
       const data = await uploadPersonalizationFiles(connectionId, order.id, productId, files);
+      if (!data.files?.length) throw new Error("Server nije potvrdio čuvanje fajlova — pokušaj ponovo.");
       setExistingFiles((cur) => [...cur, ...(data.files || [])]);
       setPendingFiles([]);
     } catch (err) {
@@ -180,11 +214,7 @@ export default function PersonalizationModal({
             setDragOver(true);
           }}
           onDragLeave={() => setDragOver(false)}
-          onDrop={(e) => {
-            e.preventDefault();
-            setDragOver(false);
-            if (e.dataTransfer.files?.length) addFiles(e.dataTransfer.files);
-          }}
+          onDrop={handleDrop}
         >
           <PersonalizeIcon />
           <p>Prevuci fajlove ovde ili</p>
