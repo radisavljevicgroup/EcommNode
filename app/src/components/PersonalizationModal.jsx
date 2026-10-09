@@ -92,9 +92,15 @@ export default function PersonalizationModal({
     return () => previews.forEach((url) => url && URL.revokeObjectURL(url));
   }, [pendingFiles]);
 
+  // Copied right away, NOT inside the state updater: React may run that
+  // later, and by then the FileList is empty — the input's is cleared right
+  // after (e.target.value = ""), a drop's is locked once the event ends.
+  // The file then just never showed up, with no error.
   const addFiles = (fileList) => {
+    const files = Array.from(fileList);
+    if (!files.length) return;
     setError("");
-    setPendingFiles((cur) => [...cur, ...Array.from(fileList)]);
+    setPendingFiles((cur) => [...cur, ...files]);
   };
 
   // An image dragged from a web page (the store, another tab, the order's
