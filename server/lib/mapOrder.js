@@ -47,7 +47,27 @@ function toPlainText(value) {
 // as WooCommerce shows them under the item in its own order e-mail —
 // "_"-prefixed keys are internal plugin data, and object/array values are
 // plugin payloads rather than something a person typed.
+// ThemeComplete "Extra Product Options" (engraving text, position, script,
+// font… on parkerolovke.rs) keeps every field in one hidden
+// _tmcartepo_data/_tmcartfee_data array instead of a meta row per field —
+// each entry { name, section_label, value, hidelabelinorder,
+// hidevalueinorder }. Fields hidden from the order ("Gravura na olovci:
+// Želim") stay out, same as in WooCommerce's own order e-mail.
+const EPO_META_KEYS = new Set(["_tmcartepo_data", "_tmcartfee_data"]);
+
+function mapEpoMeta(item) {
+  return (item.meta_data || [])
+    .filter((m) => EPO_META_KEYS.has(m.key) && Array.isArray(m.value))
+    .flatMap((m) => m.value)
+    .filter((f) => f && f.hidelabelinorder !== "hidden" && f.hidevalueinorder !== "hidden")
+    .map((f) => ({
+      label: toPlainText(f.section_label || f.name || ""),
+      value: toPlainText(Array.isArray(f.value) ? f.value.join(", ") : String(f.value ?? "")),
+    }));
+}
+
 function mapItemMeta(item) {
+  const epo = mapEpoMeta(item);
   return (item.meta_data || [])
     .filter((m) => !String(m.key || "").startsWith("_"))
     .filter((m) => typeof (m.display_value ?? m.value) !== "object")
@@ -55,6 +75,7 @@ function mapItemMeta(item) {
       label: toPlainText(m.display_key ?? m.key ?? ""),
       value: toPlainText(m.display_value ?? m.value ?? ""),
     }))
+    .concat(epo)
     .filter((m) => m.label && m.value);
 }
 

@@ -3173,6 +3173,17 @@ a.personalization-file-name {
   border-bottom: 2px solid var(--border);
 }
 
+.order-item-meta {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  font-size: 13px;
+  color: var(--text-muted, inherit);
+}
+
+.order-item-meta li {
+  margin: 2px 0;
+}
+
 .order-item-thumb {
   width: 36px;
   height: 36px;

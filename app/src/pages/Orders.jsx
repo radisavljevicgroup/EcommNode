@@ -437,6 +437,17 @@ function OrderCard({
                     </td>
                     <td data-label="Proizvod" className="order-item-name">
                       {item.name}
+                      {/* Customer-entered options (engraving text, font…) —
+                          see server/lib/mapOrder.js's mapItemMeta. */}
+                      {item.meta?.length > 0 && (
+                        <ul className="order-item-meta">
+                          {item.meta.map((m, i) => (
+                            <li key={i}>
+                              <strong>{m.label}:</strong> {m.value}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                     </td>
                     <td data-label="Šifra">{item.sku || "—"}</td>
                     <td data-label="Količina">{item.quantity}</td>
