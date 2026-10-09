@@ -18,12 +18,31 @@ const MAX_FILE_SIZE_BYTES = 8 * 1024 * 1024; // 8MB — comfortably under the
 // of MAX_FILES_PER_UPLOAD, accounting for base64's ~33% size overhead.
 const SIGNED_URL_TTL_SECONDS = 60 * 60;
 
-const DATA_URL_RE = /^data:([\w.+-]+\/[\w.+-]+);base64,(.+)$/;
+// The media type is optional: the browser's FileReader leaves it empty
+// ("data:;base64,…") for a file it doesn't recognise — exactly the
+// engraving formats (.cdr, .plt, .lbrn, .eps…) — and those were rejected as
+// "nije ispravan".
+const DATA_URL_RE = /^data:([^;,]*)(?:;[^;,]*)*;base64,([\s\S]*)$/;
+const FALLBACK_CONTENT_TYPE = "application/octet-stream";
 
 function sanitizeFileName(name) {
   return String(name || "fajl")
     .replace(/[/\\]/g, "_")
     .slice(-150);
+}
+
+// Supabase Storage refuses keys with non-ASCII characters ("Invalid key"),
+// so a customer-named file like "Tijana Trajković.png" failed to save. The
+// key gets an ASCII version; the original name stays in file_name for
+// display.
+function storageSafeName(name) {
+  const ascii = name
+    .replace(/[đĐ]/g, (c) => (c === "đ" ? "dj" : "Dj"))
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^A-Za-z0-9._-]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  return ascii || "fajl";
 }
 
 async function withSignedUrl(supabaseAdmin, row) {
@@ -142,23 +161,32 @@ router.post("/personalization/:connectionId/:orderId", async (req, res) => {
       return res.status(400).json({ error: `Fajl "${file?.fileName || ""}" nije ispravan.` });
     }
     const buffer = Buffer.from(match[2], "base64");
+    if (!buffer.length) {
+      return res.status(400).json({ error: `Fajl "${file.fileName}" je prazan.` });
+    }
     if (buffer.length > MAX_FILE_SIZE_BYTES) {
       return res
         .status(400)
         .json({ error: `Fajl "${file.fileName}" prelazi dozvoljenih ${MAX_FILE_SIZE_BYTES / (1024 * 1024)}MB.` });
     }
-    decoded.push({ fileName: sanitizeFileName(file.fileName), contentType: match[1], buffer });
+    decoded.push({
+      fileName: sanitizeFileName(file.fileName),
+      contentType: match[1] || FALLBACK_CONTENT_TYPE,
+      buffer,
+    });
   }
 
   const inserted = [];
   for (const file of decoded) {
-    const storagePath = `${req.company}/${connectionId}/${orderId}/${crypto.randomUUID()}-${file.fileName}`;
+    const storagePath = `${req.company}/${connectionId}/${orderId}/${crypto.randomUUID()}-${storageSafeName(file.fileName)}`;
     const { error: uploadError } = await supabaseAdmin.storage
       .from(BUCKET)
       .upload(storagePath, file.buffer, { contentType: file.contentType });
     if (uploadError) {
       console.error("[personalization] storage upload failed:", uploadError);
-      return res.status(400).json({ error: `Neuspešno čuvanje fajla "${file.fileName}".` });
+      return res.status(400).json({
+        error: `Neuspešno čuvanje fajla "${file.fileName}" (${uploadError.message || "Storage greška"}).`,
+      });
     }
 
     const { data: row, error: insertError } = await supabaseAdmin
