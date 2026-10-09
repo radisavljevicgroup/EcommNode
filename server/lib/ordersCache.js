@@ -10,6 +10,11 @@ const file = createJsonFile("orders-cache.json", {});
 let cache = file.read();
 
 const SYNC_MAX_AGE_MS = 60 * 60 * 1000; // 1h
+// Bump whenever mapOrder/mapShopifyOrder start producing something new
+// (e.g. 2 = engraving options in item.meta): orders cached by older code
+// don't have it, and without this they'd keep being served for up to an
+// hour after a deploy — the first read after a restart resyncs instead.
+const CACHE_FORMAT = 2;
 const WC_PAGE_SIZE = 100;
 // A single WooCommerce orders page (100 items) takes ~2s on these stores,
 // and some stores have 10,000+ orders in their full history — fetching
@@ -86,7 +91,7 @@ async function syncConnection(connection) {
       connection.platform === "shopify"
         ? mergeOrders(cache[connection.id]?.orders || [], fresh)
         : fresh;
-    cache[connection.id] = { syncedAt: new Date().toISOString(), orders };
+    cache[connection.id] = { syncedAt: new Date().toISOString(), format: CACHE_FORMAT, orders };
     file.write(cache);
   } catch (err) {
     syncErrors.set(connection.id, err?.message || "Sinhronizacija nije uspela.");
@@ -96,7 +101,7 @@ async function syncConnection(connection) {
 }
 
 function isStale(entry) {
-  if (!entry) return true;
+  if (!entry || entry.format !== CACHE_FORMAT) return true;
   return Date.now() - new Date(entry.syncedAt).getTime() > SYNC_MAX_AGE_MS;
 }
 
