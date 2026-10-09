@@ -245,7 +245,24 @@ function matchesSearch(order, needle) {
 // once) — this instead pages over the same local cache the stale/
 // unfiscalized/analytics views already use, so navigating pages is instant
 // and only touches the network in the background sync.
-function getOrdersPage(connections, { page, perPage, search, status, fulfillment, fiscal }) {
+// Whether an order has a product on the personalization allowlist — matched
+// by product ID or SKU, case-insensitively, same as Orders.jsx's
+// personalizableProductId (the icon on the order card).
+function hasPersonalizableItem(order, productIds) {
+  const ids = new Set(productIds.map((id) => String(id).trim().toLowerCase()));
+  return (order.items || []).some(
+    (item) =>
+      ids.has(String(item.productId ?? "").toLowerCase()) ||
+      ids.has(String(item.sku ?? "").toLowerCase())
+  );
+}
+
+// personalized: { mode: "yes" | "pending" | "done", productIds, completedKeys }
+// — "Personalizacija" filter on Porudžbine; null when not filtering.
+function getOrdersPage(
+  connections,
+  { page, perPage, search, status, fulfillment, fiscal, personalized }
+) {
   let orders = getOrdersForConnections(connections).sort(
     (a, b) => new Date(b.dateCreated) - new Date(a.dateCreated)
   );
@@ -262,6 +279,15 @@ function getOrdersPage(connections, { page, perPage, search, status, fulfillment
     orders = orders.filter((o) => o.fiscalized);
   } else if (fiscal === "no") {
     orders = orders.filter((o) => !o.fiscalized);
+  }
+  if (personalized) {
+    const { mode, productIds, completedKeys } = personalized;
+    orders = orders.filter((o) => {
+      if (!hasPersonalizableItem(o, productIds)) return false;
+      if (mode === "yes") return true;
+      const done = completedKeys.has(`${o.connectionId}:${o.id}`);
+      return mode === "done" ? done : !done;
+    });
   }
   if (search) {
     const needle = search.trim().toLowerCase();

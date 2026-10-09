@@ -77,6 +77,16 @@ const FISCAL_OPTIONS = [
   { value: "no", label: "Nefiskalizovano" },
 ];
 
+// Shown only while the "Personalizacija porudžbina" tool is on (server
+// ignores ?personalized= otherwise). Personalized = the order has a product
+// from that tool's list; izgravirano = marked done in its modal.
+const PERSONALIZED_OPTIONS = [
+  { value: "all", label: "Sve" },
+  { value: "yes", label: "Personalizovane" },
+  { value: "pending", label: "Nije izgravirano" },
+  { value: "done", label: "Izgravirano" },
+];
+
 const STATUS_META = {
   pending: { label: "Na čekanju", className: "pending" },
   processing: { label: "U obradi", className: "processing" },
@@ -521,6 +531,8 @@ function OrdersOverview({ assigneeModule, orderInfoModules }) {
   );
   const [fulfillmentFilter, setFulfillmentFilter] = useState("all");
   const [fiscalFilter, setFiscalFilter] = useState("all");
+  const [personalizedFilter, setPersonalizedFilter] = useState("all");
+  const [personalizationEnabled, setPersonalizationEnabled] = useState(false);
   // Never activated automatically — only the explicit button click below
   // (or the "Ukloni filter" button to undo it) changes these.
   const [staleOnly, setStaleOnly] = useState(false);
@@ -558,6 +570,7 @@ function OrdersOverview({ assigneeModule, orderInfoModules }) {
   useEffect(() => {
     fetchSettings()
       .then((data) => {
+        setPersonalizationEnabled(Boolean(data.personalizationEnabled));
         setPersonalizationProductIds(
           data.personalizationEnabled ? data.personalizationProductIds || [] : []
         );
@@ -638,6 +651,10 @@ function OrdersOverview({ assigneeModule, orderInfoModules }) {
           : selectedStatuses,
       fulfillment: otherFiltersActive || fulfillmentFilter === "all" ? undefined : fulfillmentFilter,
       fiscal: otherFiltersActive || fiscalFilter === "all" ? undefined : fiscalFilter,
+      personalized:
+        otherFiltersActive || !personalizationEnabled || personalizedFilter === "all"
+          ? undefined
+          : personalizedFilter,
     })
       .then((data) => {
         if (cancelled) return;
@@ -681,6 +698,8 @@ function OrdersOverview({ assigneeModule, orderInfoModules }) {
     statusesKey,
     fulfillmentFilter,
     fiscalFilter,
+    personalizedFilter,
+    personalizationEnabled,
   ]);
 
   const handlePerPageChange = (e) => {
@@ -705,6 +724,11 @@ function OrdersOverview({ assigneeModule, orderInfoModules }) {
 
   const handleFiscalChange = (e) => {
     setFiscalFilter(e.target.value);
+    setPage(1);
+  };
+
+  const handlePersonalizedChange = (e) => {
+    setPersonalizedFilter(e.target.value);
     setPage(1);
   };
 
@@ -882,6 +906,19 @@ function OrdersOverview({ assigneeModule, orderInfoModules }) {
             ))}
           </select>
         </label>
+
+        {personalizationEnabled && (
+          <label className="per-page-select">
+            Personalizacija:
+            <select value={personalizedFilter} onChange={handlePersonalizedChange}>
+              {PERSONALIZED_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
 
         <label className="per-page-select">
           Po stranici:

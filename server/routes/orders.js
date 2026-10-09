@@ -11,14 +11,21 @@ const {
   isStaleTrackingEnabled,
   isUnfiscalizedTrackingEnabled,
   isPersonalizationEnabled,
+  getPersonalizationProductIds,
 } = require("../lib/settingsStore");
 const { adjustCallCount } = require("../lib/orderCallsStore");
 const { setOrderRead, withReadState } = require("../lib/orderReadsStore");
-const { getPendingPersonalizationKeys } = require("../lib/personalizationStore");
+const {
+  getPendingPersonalizationKeys,
+  getCompletedOrderKeys,
+} = require("../lib/personalizationStore");
 
 const router = Router();
 
 const ALLOWED_PER_PAGE = [10, 20, 30, 50];
+// ?personalized= — yes: has a personalizable product, pending: not yet
+// marked izgravirano, done: marked izgravirano.
+const PERSONALIZED_MODES = new Set(["yes", "pending", "done"]);
 
 // undefined (param omitted) => null => no status filter (all statuses).
 // "" (param present but empty, i.e. every checkbox unchecked) => [] => caller
@@ -101,8 +108,28 @@ router.get("/orders", async (req, res) => {
   // prefix from every connected store on every page navigation. The cache
   // is kept warm by the same background sync the stale/unfiscalized/
   // analytics views already rely on.
+  // "Personalizacija" filter — only while that tool is on (Alati →
+  // Personalizacija porudžbina); ignored otherwise, like the UI hides it.
+  let personalized = null;
+  if (PERSONALIZED_MODES.has(req.query.personalized) && isPersonalizationEnabled(req.company)) {
+    personalized = {
+      mode: req.query.personalized,
+      productIds: getPersonalizationProductIds(req.company),
+      completedKeys:
+        req.query.personalized === "yes" ? new Set() : await getCompletedOrderKeys(req.company),
+    };
+  }
+
   try {
-    const result = getOrdersPage(targets, { page, perPage, search, status, fulfillment, fiscal });
+    const result = getOrdersPage(targets, {
+      page,
+      perPage,
+      search,
+      status,
+      fulfillment,
+      fiscal,
+      personalized,
+    });
     res.json(withReadState(result, req.userId));
   } catch {
     res.status(400).json({ error: "Ne mogu da učitam porudžbine." });

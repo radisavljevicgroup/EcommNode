@@ -44,6 +44,7 @@ export function fetchWooOrders(
     status,
     fulfillment,
     fiscal,
+    personalized,
   } = {}
 ) {
   const params = new URLSearchParams();
@@ -59,6 +60,7 @@ export function fetchWooOrders(
   if (status !== undefined) params.set("status", status.join(","));
   if (fulfillment) params.set("fulfillment", fulfillment);
   if (fiscal) params.set("fiscal", fiscal);
+  if (personalized) params.set("personalized", personalized);
   return request(`/orders?${params.toString()}`);
 }
 
