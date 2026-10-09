@@ -129,7 +129,12 @@ const LOGISTICS_METRICS = [
   },
 ];
 
-export default function ManagerHome({ onNavigate }) {
+// Učinak radnika is the E-commerce Manager's alone (same role as the
+// Porudžbine tab, premium order-distribution ordersTab.jsx) — Marketing
+// Manager shares this home but doesn't get that card.
+const WORKER_STATS_ROLES = new Set(["E-commerce Manager"]);
+
+export default function ManagerHome({ onNavigate, roleName }) {
   const [checkingStores, setCheckingStores] = useState(true);
   const [connections, setConnections] = useState([]);
   const [selectedIds, setSelectedIds] = useState([]);
@@ -161,12 +166,13 @@ export default function ManagerHome({ onNavigate }) {
 
   // "Učinak radnika" card below — filled by the premium Raspodela
   // porudžbina tool once it's switched on; the placeholder text stays for
-  // everyone else.
+  // everyone else. Only for WORKER_STATS_ROLES.
+  const canSeeWorkerStats = WORKER_STATS_ROLES.has(roleName);
   const workerStatsModule = entitledModules.find(
-    (mod) => mod.overview?.key === "raspodela-porudzbina"
+    (mod) => mod.homeSummary?.key === "raspodela-porudzbina"
   );
   const showWorkerStats =
-    workerStatsModule && enabledPremiumTools.includes(workerStatsModule.toolCard.key);
+    workerStatsModule && enabledPremiumTools.includes(workerStatsModule.homeSummary.key);
 
   const salesFunnelModule = entitledModules.find((mod) => mod.overview?.key === "sales-funnel");
   const showSalesFunnel =
@@ -499,14 +505,14 @@ export default function ManagerHome({ onNavigate }) {
             )}
           </div>
 
-          {showWorkerStats ? (
+          {!canSeeWorkerStats ? null : showWorkerStats ? (
             <div className="chart-card">
               <div className="chart-card-head">
                 <h3>Učinak radnika</h3>
                 <button
                   type="button"
                   className="performance-link"
-                  onClick={() => onNavigate?.("analitika")}
+                  onClick={() => onNavigate?.(workerStatsModule.homeSummary.navigateTo)}
                 >
                   Kompletan izveštaj →
                 </button>
@@ -515,7 +521,7 @@ export default function ManagerHome({ onNavigate }) {
                 Automatska raspodela porudžbina — radnici sa najviše bodova, broj raspoređenih
                 porudžbina i procenat fiskalizacije.
               </p>
-              <workerStatsModule.overview.Component />
+              <workerStatsModule.homeSummary.Component />
             </div>
           ) : (
             <div className="chart-card">

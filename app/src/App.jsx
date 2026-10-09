@@ -169,7 +169,7 @@ export default function App() {
           onSectionConsumed={() => setSettingsSection(null)}
         />
       ) : effectiveRoute === "porudzbine" ? (
-        <Orders />
+        <Orders roleName={roleName} />
       ) : effectiveRoute === "kalendar" ? (
         <Calendar />
       ) : effectiveRoute === "analitika" ? (
@@ -179,7 +179,7 @@ export default function App() {
       ) : EMPTY_HOME_ROLES.has(roleName) ? (
         <EmptyHome />
       ) : MANAGER_HOME_ROLES.has(roleName) ? (
-        <ManagerHome onNavigate={navigate} />
+        <ManagerHome onNavigate={navigate} roleName={roleName} />
       ) : RESTRICTED_HOME_ROLES[roleName] ? (
         <RestrictedHome secondChart={RESTRICTED_HOME_ROLES[roleName]} />
       ) : IT_ADMIN_HOME_ROLES.has(roleName) ? (

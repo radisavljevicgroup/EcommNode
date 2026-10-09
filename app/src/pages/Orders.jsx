@@ -479,8 +479,15 @@ function OrdersSkeleton() {
   );
 }
 
-export default function Orders() {
-  const [section, setSection] = useState("porudzbine");
+// "#/porudzbine?tab=ucinak-radnika" opens that tab (ManagerHome's
+// "Kompletan izveštaj" link).
+function initialSection() {
+  const query = window.location.hash.split("?")[1] || "";
+  return new URLSearchParams(query).get("tab") || "porudzbine";
+}
+
+export default function Orders({ roleName }) {
+  const [section, setSection] = useState(initialSection);
   const [enabledPremiumTools, setEnabledPremiumTools] = useState([]);
   const { enabledPremiumModules } = useEnabledPremiumModules();
 
@@ -493,7 +500,10 @@ export default function Orders() {
   const premiumTabs = filterEntitledModules(premiumOrdersModules, enabledPremiumModules)
     .map(([, mod]) => mod)
     .filter((mod) => !mod.toolCard?.key || enabledPremiumTools.includes(mod.toolCard.key))
-    .flatMap((mod) => mod.tabs || []);
+    .flatMap((mod) => mod.tabs || [])
+    // A tab can be limited to some roles (e.g. Učinak radnika → E-commerce
+    // Manager); the module's server checks the same role on its own.
+    .filter((tab) => !tab.roles || tab.roles.includes(roleName));
 
   const railItems = [
     ...ORDERS_RAIL_ITEMS,
