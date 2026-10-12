@@ -10,3 +10,15 @@ export const ORDER_STATUS_OPTIONS = [
   { id: "refunded", label: "Vraćeno" },
   { id: "failed", label: "Neuspešno" },
 ];
+
+// Labels for displaying an order's actual WooCommerce status (badges, table
+// cells). Use these — not ORDER_STATUS_OPTIONS — wherever a status is shown.
+export const ORDER_STATUS_LABELS = {
+  pending: "Na čekanju",
+  processing: "U obradi",
+  "on-hold": "Na čekanju",
+  completed: "Završeno",
+  cancelled: "Otkazano",
+  refunded: "Refundirano",
+  failed: "Neuspešno",
+};

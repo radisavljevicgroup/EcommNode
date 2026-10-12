@@ -30,7 +30,7 @@ import shopifyLogo from "../assets/shopify.png";
 import Pagination from "../components/Pagination";
 import MultiSelect from "../components/MultiSelect";
 import NoteTooltip from "../components/NoteTooltip";
-import { ORDER_STATUS_OPTIONS } from "../constants/orderStatuses";
+import { ORDER_STATUS_OPTIONS, ORDER_STATUS_LABELS } from "../constants/orderStatuses";
 import IconRail from "../components/IconRail";
 import Messages from "./Messages";
 import { fetchSettings } from "../api/settings";
@@ -88,13 +88,13 @@ const PERSONALIZED_OPTIONS = [
 ];
 
 const STATUS_META = {
-  pending: { label: "Na čekanju", className: "pending" },
-  processing: { label: "U obradi", className: "processing" },
-  "on-hold": { label: "Na čekanju", className: "onhold" },
-  completed: { label: "Završeno", className: "completed" },
-  cancelled: { label: "Otkazano", className: "cancelled" },
-  refunded: { label: "Refundirano", className: "refunded" },
-  failed: { label: "Neuspešno", className: "failed" },
+  pending: { label: ORDER_STATUS_LABELS.pending, className: "pending" },
+  processing: { label: ORDER_STATUS_LABELS.processing, className: "processing" },
+  "on-hold": { label: ORDER_STATUS_LABELS["on-hold"], className: "onhold" },
+  completed: { label: ORDER_STATUS_LABELS.completed, className: "completed" },
+  cancelled: { label: ORDER_STATUS_LABELS.cancelled, className: "cancelled" },
+  refunded: { label: ORDER_STATUS_LABELS.refunded, className: "refunded" },
+  failed: { label: ORDER_STATUS_LABELS.failed, className: "failed" },
 };
 
 const PLATFORM_LOGOS = {
