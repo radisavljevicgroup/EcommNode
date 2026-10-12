@@ -100,6 +100,65 @@ async function syncConnection(connection) {
   }
 }
 
+// Orders created or changed since the cache was last written, fetched live
+// and merged into it — for pages that can't show a list that's an hour (or
+// a whole night, if nobody opened anything) out of date, e.g. Interni
+// nalozi in ecommnode-premium, where an order missing from the list never
+// gets an internal order. readCache only refreshes in the background and
+// serves the stale copy meanwhile. Only what changed is fetched
+// (modified_after / updated_at_min), so it's one request per store, not a
+// full sync. A store that doesn't answer keeps its cached orders.
+const RECENT_MAX_PAGES = 5;
+// Overlap with the last fetch, so an order written while it ran isn't lost.
+const RECENT_OVERLAP_MS = 5 * 60 * 1000;
+
+async function fetchRecentWooOrders(connection, since) {
+  const client = createWooClient(connection);
+  const orders = [];
+  for (let page = 1; page <= RECENT_MAX_PAGES; page += 1) {
+    // eslint-disable-next-line no-await-in-loop
+    const response = await client.get("orders", {
+      page,
+      per_page: WC_PAGE_SIZE,
+      modified_after: since,
+      dates_are_gmt: true,
+      orderby: "date",
+      order: "desc",
+    });
+    orders.push(...response.data.map((o) => mapOrder(o, null)));
+    const totalPages = Number(response.headers?.["x-wp-totalpages"] || 1);
+    if (page >= totalPages || response.data.length === 0) break;
+  }
+  return orders;
+}
+
+async function refreshRecentOrders(connections) {
+  await Promise.all(
+    connections.map(async (connection) => {
+      const entry = cache[connection.id];
+      // Nothing cached yet — the full sync readCache starts covers it.
+      if (!entry || entry.format !== CACHE_FORMAT || !entry.syncedAt) return;
+      const base = Math.max(Date.parse(entry.syncedAt) || 0, Date.parse(entry.recentAt) || 0);
+      const since = new Date(base - RECENT_OVERLAP_MS).toISOString();
+      const startedAt = new Date().toISOString();
+      try {
+        const fresh =
+          connection.platform === "shopify"
+            ? (await fetchAllShopifyOrdersRaw(connection, { updatedAtMin: since })).map((o) =>
+                mapShopifyOrder(o, null)
+              )
+            : await fetchRecentWooOrders(connection, since);
+        // A full sync may have replaced the entry meanwhile — merge into that.
+        const current = cache[connection.id] || entry;
+        cache[connection.id] = { ...current, recentAt: startedAt, orders: mergeOrders(current.orders, fresh) };
+        file.write(cache);
+      } catch (err) {
+        console.error(`[orders-cache] nove porudžbine (${connection.siteUrl}):`, err?.message);
+      }
+    })
+  );
+}
+
 function isStale(entry) {
   if (!entry || entry.format !== CACHE_FORMAT) return true;
   return Date.now() - new Date(entry.syncedAt).getTime() > SYNC_MAX_AGE_MS;
@@ -324,6 +383,7 @@ function getSyncStatus(connections) {
 
 module.exports = {
   syncConnection,
+  refreshRecentOrders,
   getOrdersForConnections,
   getOrdersForConnectionsTagged,
   getOrdersPage,

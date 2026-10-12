@@ -145,15 +145,14 @@ async function fetchAllPages(connection, resource, params, key) {
   return items;
 }
 
-async function fetchAllShopifyOrdersRaw(connection, { sinceMonths } = {}) {
+// updatedAtMin (ISO) narrows it to orders created or changed since then —
+// ordersCache.js's refreshRecentOrders.
+async function fetchAllShopifyOrdersRaw(connection, { sinceMonths, updatedAtMin } = {}) {
   const createdAtMin = new Date();
   createdAtMin.setMonth(createdAtMin.getMonth() - (sinceMonths || 14));
-  return fetchAllPages(
-    connection,
-    "orders",
-    { status: "any", limit: PAGE_LIMIT, created_at_min: createdAtMin.toISOString() },
-    "orders"
-  );
+  const params = { status: "any", limit: PAGE_LIMIT, created_at_min: createdAtMin.toISOString() };
+  if (updatedAtMin) params.updated_at_min = updatedAtMin;
+  return fetchAllPages(connection, "orders", params, "orders");
 }
 
 async function fetchAllShopifyProductsRaw(connection) {
