@@ -44,7 +44,9 @@ function addressLines(address, extra = []) {
   ].filter(Boolean);
 }
 
-function buildOrderHtml(order) {
+// One order's sheet (header + body), without the surrounding document —
+// buildOrdersHtml puts one or more of them into a printable page.
+function buildOrderSheet(order) {
   const currency = order.currency;
   const customer = [order.billing?.firstName, order.billing?.lastName].filter(Boolean).join(" ");
   const subtotal = order.items.reduce((sum, item) => sum + (Number(item.subtotal ?? item.total) || 0), 0);
@@ -86,41 +88,7 @@ function buildOrderHtml(order) {
   const billing = addressLines(order.billing, [order.billing?.phone, order.billing?.email]);
   const shippingAddress = addressLines(order.shipping);
 
-  return `<!doctype html>
-<html lang="sr">
-<head>
-<meta charset="utf-8">
-<title>Narudžbina #${escapeHtml(order.number || order.id)}</title>
-<style>
-  @page { margin: 12mm; }
-  * { box-sizing: border-box; }
-  /* Always a white sheet — never the viewer's dark mode. */
-  :root { color-scheme: light; }
-  html, body { background: #fff; }
-  body { margin: 0; font-family: "Helvetica Neue", Helvetica, Roboto, Arial, sans-serif; color: #636363; font-size: 14px; line-height: 1.5; }
-  .wrap { max-width: 600px; margin: 0 auto; }
-  .header { background: ${BASE_COLOR}; color: #fff; padding: 36px 48px; font-size: 30px; font-weight: 300; line-height: 1.2;
-    -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  .body { padding: 36px 48px 24px; }
-  h2 { color: ${BASE_COLOR}; font-size: 18px; font-weight: bold; margin: 18px 0 18px; }
-  h2 span { text-decoration: underline; font-weight: normal; }
-  table { width: 100%; border-collapse: collapse; border: 1px solid #e5e5e5; margin-bottom: 30px; }
-  .td { border: 1px solid #e5e5e5; padding: 12px; text-align: left; vertical-align: middle; color: #636363; }
-  th.td { font-weight: bold; }
-  .meta { margin: 6px 0 0; padding-left: 18px; font-size: 13px; }
-  .meta li { margin: 2px 0; }
-  .note { margin: 0 0 30px; }
-  .addresses { display: flex; gap: 20px; }
-  .addresses > div { flex: 1; }
-  address { font-style: normal; border: 1px solid #e5e5e5; padding: 12px; }
-  h3 { color: ${BASE_COLOR}; font-size: 16px; margin: 0 0 12px; }
-  tr, li, address { page-break-inside: avoid; }
-  /* Međuzbir…Ukupno stay together on one page instead of splitting. */
-  .totals { break-inside: avoid; page-break-inside: avoid; }
-</style>
-</head>
-<body>
-<div class="wrap">
+  return `<div class="wrap">
   <div class="header">Nova narudžbina: #${escapeHtml(order.number || order.id)}</div>
   <div class="body">
     <p>Primili ste sledeću narudžbinu od ${escapeHtml(customer || "kupca")}:</p>
@@ -149,12 +117,59 @@ function buildOrderHtml(order) {
       }
     </div>
   </div>
-</div>
+</div>`;
+}
+
+// A printable document with every given order, each starting on a new page.
+function buildOrdersHtml(orders) {
+  const title =
+    orders.length === 1
+      ? `Narudžbina #${escapeHtml(orders[0].number || orders[0].id)}`
+      : `Narudžbine (${orders.length})`;
+  return `<!doctype html>
+<html lang="sr">
+<head>
+<meta charset="utf-8">
+<title>${title}</title>
+<style>
+  @page { margin: 12mm; }
+  * { box-sizing: border-box; }
+  /* Always a white sheet — never the viewer's dark mode. */
+  :root { color-scheme: light; }
+  html, body { background: #fff; }
+  body { margin: 0; font-family: "Helvetica Neue", Helvetica, Roboto, Arial, sans-serif; color: #636363; font-size: 14px; line-height: 1.5; }
+  .wrap { max-width: 600px; margin: 0 auto; }
+  .header { background: ${BASE_COLOR}; color: #fff; padding: 36px 48px; font-size: 30px; font-weight: 300; line-height: 1.2;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .body { padding: 36px 48px 24px; }
+  h2 { color: ${BASE_COLOR}; font-size: 18px; font-weight: bold; margin: 18px 0 18px; }
+  h2 span { text-decoration: underline; font-weight: normal; }
+  table { width: 100%; border-collapse: collapse; border: 1px solid #e5e5e5; margin-bottom: 30px; }
+  .td { border: 1px solid #e5e5e5; padding: 12px; text-align: left; vertical-align: middle; color: #636363; }
+  th.td { font-weight: bold; }
+  .meta { margin: 6px 0 0; padding-left: 18px; font-size: 13px; }
+  .meta li { margin: 2px 0; }
+  .note { margin: 0 0 30px; }
+  .addresses { display: flex; gap: 20px; }
+  .addresses > div { flex: 1; }
+  address { font-style: normal; border: 1px solid #e5e5e5; padding: 12px; }
+  h3 { color: ${BASE_COLOR}; font-size: 16px; margin: 0 0 12px; }
+  tr, li, address { page-break-inside: avoid; }
+  /* Međuzbir…Ukupno stay together on one page instead of splitting. */
+  .totals { break-inside: avoid; page-break-inside: avoid; }
+  .wrap + .wrap { break-before: page; page-break-before: always; }
+</style>
+</head>
+<body>
+${orders.map(buildOrderSheet).join("\n")}
 </body>
 </html>`;
 }
 
-export function printOrder(order) {
+// Several orders in one print dialog — e.g. every order of an internal
+// order that just went to the ERP (Interni nalozi, ecommnode-premium).
+export function printOrders(orders) {
+  if (!orders?.length) return;
   const iframe = document.createElement("iframe");
   iframe.setAttribute("aria-hidden", "true");
   iframe.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden";
@@ -162,7 +177,7 @@ export function printOrder(order) {
 
   const doc = iframe.contentWindow.document;
   doc.open();
-  doc.write(buildOrderHtml(order));
+  doc.write(buildOrdersHtml(orders));
   doc.close();
 
   const cleanup = () => setTimeout(() => iframe.remove(), 500);
@@ -174,6 +189,14 @@ export function printOrder(order) {
     // Browsers that don't fire afterprint still get the iframe removed.
     setTimeout(cleanup, 60000);
   }, 150);
+}
+
+export function printOrder(order) {
+  printOrders([order]);
+}
+
+function buildOrderHtml(order) {
+  return buildOrdersHtml([order]);
 }
 
 export { buildOrderHtml };
