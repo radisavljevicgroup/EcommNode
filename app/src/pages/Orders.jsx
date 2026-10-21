@@ -681,19 +681,6 @@ function OrdersOverview({ assigneeModule, orderInfoModules }) {
         if (cancelled) return;
         setOrders(data.orders);
         setPagination(data.pagination);
-        // Fetched after the list itself so a slow/failed premium call never
-        // holds up or breaks the orders view — badges just pop in.
-        assigneeModule
-          ?.fetchOrderAssignees(data.orders)
-          .then((map) => {
-            if (!cancelled) setAssignees(map);
-          })
-          .catch(() => {});
-        Promise.all(
-          orderInfoModules.map((mod) => mod.fetchOrderInfo(data.orders).catch(() => ({})))
-        ).then((maps) => {
-          if (!cancelled) setOrderInfos(maps);
-        });
       })
       .catch((err) => {
         if (!cancelled) setError(err.message);
@@ -722,6 +709,36 @@ function OrdersOverview({ assigneeModule, orderInfoModules }) {
     personalizedFilter,
     personalizationEnabled,
   ]);
+
+  // Fetched after the list itself so a slow/failed premium call never holds
+  // up or breaks the orders view — badges just pop in. Its own effect, not
+  // part of the list fetch above: a restricted module's orderInfo (Eurocom's
+  // Interni nalozi chip) only shows up in orderInfoModules once
+  // useEnabledPremiumModules' fetchFirma() resolves, which is usually after
+  // the first list fetch — so it has to refetch when the modules arrive, not
+  // just when the list changes. Keyed on order ids so markRead's unread
+  // toggle doesn't refetch every badge.
+  const orderKeys = orders.map((o) => `${o.connectionId}:${o.id}`).join(",");
+  const orderInfoModulesKey = orderInfoModules.length;
+  useEffect(() => {
+    if (orders.length === 0) return;
+    let cancelled = false;
+    assigneeModule
+      ?.fetchOrderAssignees(orders)
+      .then((map) => {
+        if (!cancelled) setAssignees(map);
+      })
+      .catch(() => {});
+    Promise.all(
+      orderInfoModules.map((mod) => mod.fetchOrderInfo(orders).catch(() => ({})))
+    ).then((maps) => {
+      if (!cancelled) setOrderInfos(maps);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orderKeys, assigneeModule, orderInfoModulesKey]);
 
   const handlePerPageChange = (e) => {
     setPerPage(Number(e.target.value));
