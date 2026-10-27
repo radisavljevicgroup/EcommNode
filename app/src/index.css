@@ -2006,6 +2006,28 @@ body {
   border-radius: 8px;
 }
 
+/* Messages hide themselves after 5s (MESSAGE_VISIBLE_MS in Toast.jsx,
+   which does the same for toasts) — errors, "Sačuvano", sync/create
+   results. The timer starts when the element mounts, and these are all
+   rendered conditionally, so each new message gets a fresh 5s. Not the
+   auth pages (auth-error / auth-notice) and not static explanations that
+   only reuse a message style (turnover-dead-hint). */
+.woo-error:not(.turnover-dead-hint),
+.erc-result,
+.asm-notice.error,
+.cal-category-error,
+.stale-saved-hint {
+  animation: message-auto-hide 0.3s ease 5s forwards;
+}
+
+@keyframes message-auto-hide {
+  to {
+    opacity: 0;
+    visibility: hidden;
+    display: none;
+  }
+}
+
 /* Heads-up shown before an OAuth login button while that provider's app
    is still in "test/development" mode — Google/Meta only let pre-approved
    accounts sign in, so the merchant needs to know to ask for access before

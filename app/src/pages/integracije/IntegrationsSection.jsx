@@ -686,7 +686,7 @@ export default function IntegrationsSection() {
         />
       )}
 
-      <Toast type={toast?.type} message={toast?.message} />
+      <Toast type={toast?.type} message={toast?.message} trigger={toast} />
     </>
   );
 }

@@ -689,7 +689,7 @@ export default function Settings({ onPhotoChange, initialSection, onSectionConsu
         </div>
       </div>
 
-      <Toast type={toast?.type} message={toast?.message} />
+      <Toast type={toast?.type} message={toast?.message} trigger={toast} />
     </div>
   );
 }
