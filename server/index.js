@@ -19,6 +19,7 @@ const dashboardRouter = require("./routes/dashboard");
 const calendarRouter = require("./routes/calendar");
 const firmaRouter = require("./routes/firma");
 const personalizationRouter = require("./routes/personalization");
+const supabaseProxyRouter = require("./routes/supabaseProxy");
 const { requireAuth, requirePremiumModule } = require("./lib/auth");
 
 dotenv.config();
@@ -47,6 +48,10 @@ app.use(
     },
   })
 );
+// Before express.json(): the proxy forwards the raw request body as-is
+// (see routes/supabaseProxy.js).
+app.use("/supabase", supabaseProxyRouter);
+
 // Captures the exact request bytes alongside the parsed body — the Meta
 // inbox webhook (routes/inbox.js) needs the raw payload to verify
 // X-Hub-Signature-256, since re-serializing the parsed JSON isn't
