@@ -132,31 +132,70 @@ async function fetchRecentWooOrders(connection, since) {
   return orders;
 }
 
-async function refreshRecentOrders(connections) {
+// Everything else that reads this cache (Porudžbine, order-distribution,
+// dashboard...) used to see a new order only after the hourly full sync —
+// which itself only starts on the first read after the hour is up, serves
+// the stale copy to that read, and takes minutes on big stores, so an
+// order regularly showed up 2-3h late. Those reads now refresh recent
+// orders too, at most once per RECENT_MIN_INTERVAL_MS per store (a failed
+// attempt counts, so a store that's down isn't hit on every request).
+const RECENT_MIN_INTERVAL_MS = 60 * 1000;
+// How long a request waits for that refresh before answering from the
+// cache anyway (the refresh still lands for the next read).
+const RECENT_WAIT_MS = 8000;
+
+const recentRefreshing = new Map(); // connectionId -> in-flight promise
+const recentAttemptAt = new Map(); // connectionId -> ms of last attempt
+
+async function refreshRecentConnection(connection) {
+  const entry = cache[connection.id];
+  // Nothing cached yet — the full sync readCache starts covers it.
+  if (!entry || entry.format !== CACHE_FORMAT || !entry.syncedAt) return;
+  const base = Math.max(Date.parse(entry.syncedAt) || 0, Date.parse(entry.recentAt) || 0);
+  const since = new Date(base - RECENT_OVERLAP_MS).toISOString();
+  const startedAt = new Date().toISOString();
+  recentAttemptAt.set(connection.id, Date.now());
+  try {
+    const fresh =
+      connection.platform === "shopify"
+        ? (await fetchAllShopifyOrdersRaw(connection, { updatedAtMin: since })).map((o) =>
+            mapShopifyOrder(o, null)
+          )
+        : await fetchRecentWooOrders(connection, since);
+    // A full sync may have replaced the entry meanwhile — merge into that.
+    const current = cache[connection.id] || entry;
+    cache[connection.id] = { ...current, recentAt: startedAt, orders: mergeOrders(current.orders, fresh) };
+    file.write(cache);
+  } catch (err) {
+    console.error(`[orders-cache] nove porudžbine (${connection.siteUrl}):`, err?.message);
+  }
+}
+
+// minIntervalMs: skip a store refreshed (or attempted) that recently. 0 —
+// what Interni nalozi uses — always fetches, so an order that arrived
+// seconds ago still makes it into the internal order.
+async function refreshRecentOrders(connections, { minIntervalMs = 0 } = {}) {
   await Promise.all(
-    connections.map(async (connection) => {
-      const entry = cache[connection.id];
-      // Nothing cached yet — the full sync readCache starts covers it.
-      if (!entry || entry.format !== CACHE_FORMAT || !entry.syncedAt) return;
-      const base = Math.max(Date.parse(entry.syncedAt) || 0, Date.parse(entry.recentAt) || 0);
-      const since = new Date(base - RECENT_OVERLAP_MS).toISOString();
-      const startedAt = new Date().toISOString();
-      try {
-        const fresh =
-          connection.platform === "shopify"
-            ? (await fetchAllShopifyOrdersRaw(connection, { updatedAtMin: since })).map((o) =>
-                mapShopifyOrder(o, null)
-              )
-            : await fetchRecentWooOrders(connection, since);
-        // A full sync may have replaced the entry meanwhile — merge into that.
-        const current = cache[connection.id] || entry;
-        cache[connection.id] = { ...current, recentAt: startedAt, orders: mergeOrders(current.orders, fresh) };
-        file.write(cache);
-      } catch (err) {
-        console.error(`[orders-cache] nove porudžbine (${connection.siteUrl}):`, err?.message);
-      }
+    connections.map((connection) => {
+      const inFlight = recentRefreshing.get(connection.id);
+      if (inFlight) return inFlight;
+      if (Date.now() - (recentAttemptAt.get(connection.id) || 0) < minIntervalMs) return null;
+      const promise = refreshRecentConnection(connection).finally(() =>
+        recentRefreshing.delete(connection.id)
+      );
+      recentRefreshing.set(connection.id, promise);
+      return promise;
     })
   );
+}
+
+// For request handlers: refresh recent orders (throttled), but don't hold
+// the response longer than RECENT_WAIT_MS on a slow store.
+function freshenOrders(connections) {
+  return Promise.race([
+    refreshRecentOrders(connections, { minIntervalMs: RECENT_MIN_INTERVAL_MS }),
+    new Promise((resolve) => setTimeout(resolve, RECENT_WAIT_MS)),
+  ]);
 }
 
 function isStale(entry) {
@@ -166,12 +205,15 @@ function isStale(entry) {
 
 // Non-blocking: returns whatever is cached right now (possibly empty on
 // the very first call for a connection) and kicks off a background sync
-// if the cache is missing/stale, without waiting for it to finish.
+// if the cache is missing/stale, without waiting for it to finish — plus a
+// throttled recent-orders refresh, so callers that don't await
+// freshenOrders still pick new orders up on their next read.
 function readCache(connection) {
   const entry = cache[connection.id];
   if (isStale(entry) && !syncing.has(connection.id)) {
     syncConnection(connection);
   }
+  refreshRecentOrders([connection], { minIntervalMs: RECENT_MIN_INTERVAL_MS });
   return entry || { syncedAt: null, orders: [] };
 }
 
@@ -384,6 +426,7 @@ function getSyncStatus(connections) {
 module.exports = {
   syncConnection,
   refreshRecentOrders,
+  freshenOrders,
   getOrdersForConnections,
   getOrdersForConnectionsTagged,
   getOrdersPage,

@@ -64,6 +64,9 @@ const premiumAssigneeModules = import.meta.glob("../premium/*/orderAssignee.jsx"
 const premiumOrderInfoModules = import.meta.glob("../premium/*/orderInfo.jsx", { eager: true });
 
 const PER_PAGE_OPTIONS = [10, 20, 30, 50];
+// The server pulls new orders from each store at most once a minute
+// (ordersCache.js's freshenOrders), so polling faster gains nothing.
+const ORDERS_POLL_MS = 60 * 1000;
 
 const FULFILLMENT_OPTIONS = [
   { value: "all", label: "Sve" },
@@ -587,6 +590,21 @@ function OrdersOverview({ assigneeModule, orderInfoModules }) {
   // list itself drop that order right away instead of waiting for a page
   // change or reload.
   const [personalizationRefreshTick, setPersonalizationRefreshTick] = useState(0);
+  // Bumped every ORDERS_POLL_MS while the tab is visible, so new orders show
+  // up on an open page without a reload. Such a refetch is silent (no
+  // spinner, no error banner) — pollingRef tells the list effect which kind
+  // of run it is.
+  const [pollTick, setPollTick] = useState(0);
+  const pollingRef = useRef(false);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      pollingRef.current = true;
+      setPollTick((t) => t + 1);
+    }, ORDERS_POLL_MS);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     fetchSettings()
@@ -653,8 +671,12 @@ function OrdersOverview({ assigneeModule, orderInfoModules }) {
   useEffect(() => {
     if (connections.length === 0) return;
     let cancelled = false;
-    setLoadingOrders(true);
-    setError("");
+    const silent = pollingRef.current;
+    pollingRef.current = false;
+    if (!silent) {
+      setLoadingOrders(true);
+      setError("");
+    }
 
     // The stale/unfiscalized/personalization banner views have their own
     // fixed status/fiscal semantics — don't cross them with these filters.
@@ -683,10 +705,10 @@ function OrdersOverview({ assigneeModule, orderInfoModules }) {
         setPagination(data.pagination);
       })
       .catch((err) => {
-        if (!cancelled) setError(err.message);
+        if (!cancelled && !silent) setError(err.message);
       })
       .finally(() => {
-        if (!cancelled) setLoadingOrders(false);
+        if (!cancelled && !silent) setLoadingOrders(false);
       });
 
     return () => {
@@ -694,6 +716,7 @@ function OrdersOverview({ assigneeModule, orderInfoModules }) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
+    pollTick,
     connections,
     selectedId,
     page,
