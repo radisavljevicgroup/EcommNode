@@ -9,6 +9,11 @@ import MultiSelect from "../components/MultiSelect";
 import DateRangePicker, { PRESETS } from "../components/DateRangePicker";
 import GeoDistributionChart from "../components/charts/GeoDistributionChart";
 import RevenueOrdersTrendChart from "../components/charts/RevenueOrdersTrendChart";
+import { fetchSettings } from "../api/settings";
+import { filterEntitledModules, useEnabledPremiumModules } from "../lib/premiumModules";
+import { MY_STATS_ROLES } from "../lib/roles";
+
+const premiumAnalyticsModules = import.meta.glob("../premium/*/analyticsTab.jsx", { eager: true });
 
 const YEAR_PRESET = PRESETS.find((p) => p.key === "year");
 
@@ -71,7 +76,7 @@ const LOGISTICS_METRICS = [
 // chart: "geo" (Warehouse worker) shows where orders ship to instead, since
 // last-year revenue comparison isn't their job but delivery destinations
 // are; "yoy" (E-commerce Operations Manager) keeps the trend comparison.
-export default function RestrictedHome({ secondChart = "yoy" }) {
+export default function RestrictedHome({ secondChart = "yoy", roleName }) {
   const [checkingStores, setCheckingStores] = useState(true);
   const [connections, setConnections] = useState([]);
   const [selectedIds, setSelectedIds] = useState([]);
@@ -82,6 +87,25 @@ export default function RestrictedHome({ secondChart = "yoy" }) {
   const [loading, setLoading] = useState(true);
 
   const [from, to] = range;
+
+  // "Moj učinak" card — only for MY_STATS_ROLES, and only once the premium
+  // Raspodela porudžbina tool is entitled + switched on (it's what records
+  // who handled which order).
+  const [enabledPremiumTools, setEnabledPremiumTools] = useState([]);
+  const { enabledPremiumModules } = useEnabledPremiumModules();
+  const myStatsModule = filterEntitledModules(premiumAnalyticsModules, enabledPremiumModules)
+    .map(([, mod]) => mod)
+    .find((mod) => mod.mySummary);
+  const canSeeMyStats = MY_STATS_ROLES.has(roleName);
+  const showMyStats =
+    canSeeMyStats && myStatsModule && enabledPremiumTools.includes(myStatsModule.mySummary.key);
+
+  useEffect(() => {
+    if (!canSeeMyStats) return;
+    fetchSettings()
+      .then((data) => setEnabledPremiumTools(data.enabledPremiumTools || []))
+      .catch(() => {});
+  }, [canSeeMyStats]);
 
   useEffect(() => {
     Promise.all([fetchWooStatus(), fetchShopifyStatus()])
@@ -188,6 +212,17 @@ export default function RestrictedHome({ secondChart = "yoy" }) {
               loading={loading}
             />
           </div>
+
+          {showMyStats && (
+            <div className="chart-card">
+              <h3>Moj učinak</h3>
+              <p className="chart-subtitle">
+                Porudžbine koje su tebi dodeljene u izabranom periodu i koliko je od njih imalo
+                personalizaciju (priložene fajlove za graviranje).
+              </p>
+              <myStatsModule.mySummary.Component storeOptions={storeOptions} />
+            </div>
+          )}
 
           {trends && (
             <RevenueOrdersTrendChart

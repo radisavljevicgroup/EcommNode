@@ -181,7 +181,7 @@ export default function App() {
       ) : MANAGER_HOME_ROLES.has(roleName) ? (
         <ManagerHome onNavigate={navigate} roleName={roleName} />
       ) : RESTRICTED_HOME_ROLES[roleName] ? (
-        <RestrictedHome secondChart={RESTRICTED_HOME_ROLES[roleName]} />
+        <RestrictedHome secondChart={RESTRICTED_HOME_ROLES[roleName]} roleName={roleName} />
       ) : IT_ADMIN_HOME_ROLES.has(roleName) ? (
         <ItAdminHome />
       ) : (

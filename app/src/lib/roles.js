@@ -34,6 +34,12 @@ export const RESTRICTED_HOME_ROLES = {
   "Warehouse worker": "geo",
 };
 
+// RestrictedHome roles that also get the "Moj učinak" card (own processed
+// orders + how many were personalized, from the premium Raspodela
+// porudžbina tool). Warehouse worker packs rather than handles orders, so
+// those counts aren't theirs.
+export const MY_STATS_ROLES = new Set(["E-commerce Operations Manager"]);
+
 // Nav routes hidden for one specific (non-restricted) role, on top of the
 // restricted-role rules above.
 export const ROLE_HIDDEN_ROUTES = {
