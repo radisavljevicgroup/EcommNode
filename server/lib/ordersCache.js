@@ -434,4 +434,5 @@ module.exports = {
   getUnfiscalizedOrders,
   getPersonalizationOrders,
   getSyncStatus,
+  hasPersonalizableItem,
 };

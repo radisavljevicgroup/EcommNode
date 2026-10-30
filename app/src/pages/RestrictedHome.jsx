@@ -218,7 +218,7 @@ export default function RestrictedHome({ secondChart = "yoy", roleName }) {
               <h3>Moj učinak</h3>
               <p className="chart-subtitle">
                 Porudžbine koje su tebi dodeljene u izabranom periodu i koliko je od njih imalo
-                personalizaciju (priložene fajlove za graviranje).
+                proizvod za personalizaciju.
               </p>
               <myStatsModule.mySummary.Component storeOptions={storeOptions} />
             </div>
