@@ -85,13 +85,21 @@ async function syncConnection(connection) {
   if (syncing.has(connection.id)) return;
   syncing.add(connection.id);
   syncErrors.delete(connection.id);
+  // When the fetch started, not when it finished: a big store takes minutes
+  // (40+ pages), and the newest orders are on page 1, read first. An order
+  // changed meanwhile (e.g. cancelled) is in this snapshot with its old
+  // status, and this replace also wipes what refreshRecentConnection merged
+  // during the fetch — stamping the finish time put that change before
+  // refreshRecentConnection's next modified_after, so it stayed wrong until
+  // the next full sync an hour later.
+  const startedAt = new Date().toISOString();
   try {
     const fresh = await fetchAllOrders(connection);
     const orders =
       connection.platform === "shopify"
         ? mergeOrders(cache[connection.id]?.orders || [], fresh)
         : fresh;
-    cache[connection.id] = { syncedAt: new Date().toISOString(), format: CACHE_FORMAT, orders };
+    cache[connection.id] = { syncedAt: startedAt, format: CACHE_FORMAT, orders };
     file.write(cache);
   } catch (err) {
     syncErrors.set(connection.id, err?.message || "Sinhronizacija nije uspela.");
