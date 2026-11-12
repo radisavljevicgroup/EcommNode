@@ -181,7 +181,7 @@ async function getPerformance(connection, { from, to } = {}) {
     { name: "engagementRate" },
   ];
 
-  const [dateReport, pageReport, channelReport] = await Promise.all([
+  const [dateReport, pageReport, channelReport, totalsReport] = await Promise.all([
     runReport(connection, token, {
       dateRanges: [dateRange],
       dimensions: [{ name: "date" }],
@@ -204,6 +204,14 @@ async function getPerformance(connection, { from, to } = {}) {
       // drop some, undercounting the total conversions total below it.
       limit: 20,
     }),
+    // No dimensions = one row of period-wide totals. activeUsers is a
+    // unique count, so summing the per-day rows (what totals used to do)
+    // counts a returning user once per day they visited — over "Ova
+    // godina" that inflated Aktivni korisnici several times over.
+    runReport(connection, token, {
+      dateRanges: [dateRange],
+      metrics: trendMetrics,
+    }),
   ]);
 
   const dateRows = (dateReport.rows || []).map((r) => ({
@@ -221,12 +229,20 @@ async function getPerformance(connection, { from, to } = {}) {
   const totalConversions = dateRows.reduce((s, r) => s + r.conversions, 0);
   const weightedEngagement = dateRows.reduce((s, r) => s + r.engagementRate * r.sessions, 0);
 
-  const totals = {
-    sessions: totalSessions,
-    activeUsers: totalUsers,
-    conversions: totalConversions,
-    engagementRate: totalSessions > 0 ? (weightedEngagement / totalSessions) * 100 : 0,
-  };
+  const totalsRow = totalsReport.rows?.[0];
+  const totals = totalsRow
+    ? {
+        sessions: metricValue(totalsRow, 0),
+        activeUsers: metricValue(totalsRow, 1),
+        conversions: metricValue(totalsRow, 2),
+        engagementRate: metricValue(totalsRow, 3) * 100,
+      }
+    : {
+        sessions: totalSessions,
+        activeUsers: totalUsers,
+        conversions: totalConversions,
+        engagementRate: totalSessions > 0 ? (weightedEngagement / totalSessions) * 100 : 0,
+      };
 
   const topPages = (pageReport.rows || []).map((r) => ({
     page: r.dimensionValues[0].value,
