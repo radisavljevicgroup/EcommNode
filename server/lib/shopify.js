@@ -85,6 +85,29 @@ async function resolveAccessToken(connection) {
   return exchangeClientCredentials(connection);
 }
 
+// Admin GraphQL — for what REST doesn't cover (e.g. web pixels and app
+// metafields, used by the "Put kupca" premium module). Returns the raw
+// { data, errors } body; GraphQL reports most failures with HTTP 200.
+async function shopifyGraphql(connection, query, variables = {}) {
+  const accessToken = await resolveAccessToken(connection);
+  const res = await fetch(`https://${connection.shopDomain}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
+    method: "POST",
+    headers: {
+      "X-Shopify-Access-Token": accessToken,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ query, variables }),
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error(`Shopify GraphQL returned ${res.status}`);
+    err.status = res.status;
+    throw err;
+  }
+  return body;
+}
+
 async function shopifyFetch(url, connection) {
   const accessToken = await resolveAccessToken(connection);
   const res = await fetch(url, {
@@ -191,4 +214,5 @@ module.exports = {
   fetchAllShopifyOrdersRaw,
   fetchAllShopifyProductsRaw,
   updateShopifyProduct,
+  shopifyGraphql,
 };
