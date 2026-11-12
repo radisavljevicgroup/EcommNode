@@ -146,6 +146,52 @@ async function fetchAdMetaByIds(adAccountId, adIds, accessToken) {
   return map;
 }
 
+// /insights only returns rows for ads that actually delivered (had
+// impressions) in the range — a freshly created ad that is still in
+// review, scheduled for later, or simply hasn't served yet never shows up
+// there, so the "Sve kampanje" table silently missed exactly the newest
+// ads. This pulls the ads themselves (bounded by a status filter, not the
+// whole account history) so they can be merged in with zero metrics.
+const LISTED_STATUSES = [
+  "ACTIVE",
+  "PENDING_REVIEW",
+  "IN_PROCESS",
+  "PREAPPROVED",
+  "WITH_ISSUES",
+  "DISAPPROVED",
+  "PENDING_BILLING_INFO",
+  "PAUSED",
+  "ADSET_PAUSED",
+  "CAMPAIGN_PAUSED",
+];
+// Ads in these states are "current" regardless of when they were created;
+// paused ones only count if they were created inside the requested range
+// (otherwise every long-paused, never-delivered ad from 2025 would appear).
+const ALWAYS_SHOWN_STATUSES = new Set(LISTED_STATUSES.filter((s) => !s.endsWith("PAUSED")));
+
+async function fetchAccountAds(adAccountId, accessToken) {
+  const url = new URL(`${GRAPH_API_BASE}/act_${adAccountId}/ads`);
+  url.searchParams.set(
+    "fields",
+    "id,name,created_time,effective_status,campaign{name},adset{daily_budget,lifetime_budget,start_time,end_time},creative{object_type}"
+  );
+  url.searchParams.set(
+    "filtering",
+    JSON.stringify([{ field: "effective_status", operator: "IN", value: LISTED_STATUSES }])
+  );
+  url.searchParams.set("limit", "200");
+  url.searchParams.set("access_token", accessToken);
+
+  let rows = [];
+  let nextUrl = url.toString();
+  while (nextUrl) {
+    const data = await graphFetch(nextUrl);
+    rows = rows.concat(data.data || []);
+    nextUrl = data.paging?.next || null;
+  }
+  return rows;
+}
+
 // Same reasoning as ga4.js's cache — this is called on every "Analiza
 // prodaje" / dashboard load and involves several real Graph API round
 // trips per connection, so a short cache absorbs repeated loads of the
@@ -164,7 +210,7 @@ async function getPerformance(connection, { from, to } = {}) {
   const startDate = from ? new Date(from) : new Date(endDate.getTime() - DEFAULT_DAYS * DAY_MS);
   const timeRange = JSON.stringify({ since: isoDate(startDate), until: isoDate(endDate) });
 
-  const [dailyRows, campaignRows, adRows] = await Promise.all([
+  const [dailyRows, campaignRows, insightAdRows, accountAds] = await Promise.all([
     fetchInsights(adAccountId, accessToken, {
       time_range: timeRange,
       time_increment: 1,
@@ -182,10 +228,47 @@ async function getPerformance(connection, { from, to } = {}) {
       fields: "ad_id,ad_name,campaign_name,spend,impressions,clicks,reach,actions,action_values",
       level: "ad",
     }),
+    // Non-fatal: if this extra lookup fails, still show what insights has
+    // rather than failing the whole page.
+    fetchAccountAds(adAccountId, accessToken).catch((err) => {
+      console.warn("[meta] fetchAccountAds failed:", err.message);
+      return [];
+    }),
   ]);
 
-  const adIds = [...new Set(adRows.map((r) => r.ad_id).filter(Boolean))];
+  const insightIds = new Set(insightAdRows.map((r) => r.ad_id).filter(Boolean));
+  const rangeStartMs = new Date(isoDate(startDate)).getTime();
+  const rangeEndMs = new Date(isoDate(endDate)).getTime() + DAY_MS;
+  const undeliveredAds = accountAds.filter((ad) => {
+    if (insightIds.has(ad.id)) return false;
+    const created = ad.created_time ? new Date(ad.created_time).getTime() : null;
+    if (created != null && created >= rangeEndMs) return false;
+    if (ALWAYS_SHOWN_STATUSES.has(ad.effective_status)) return true;
+    return created != null && created >= rangeStartMs;
+  });
+
+  const adRows = insightAdRows.concat(
+    undeliveredAds.map((ad) => ({
+      ad_id: ad.id,
+      ad_name: ad.name,
+      campaign_name: ad.campaign?.name || null,
+      spend: 0,
+      impressions: 0,
+      clicks: 0,
+      reach: 0,
+      actions: [],
+      action_values: [],
+    }))
+  );
+
+  const adIds = [...insightIds];
   const adMetaById = await fetchAdMetaByIds(adAccountId, adIds, accessToken);
+  // The /ads lookup already carries status/adset/creative — reuse it so
+  // undelivered ads (and any delivered ad the ID-filter lookup missed)
+  // still get Status / Početak / Cena po danu filled in.
+  accountAds.forEach((ad) => {
+    if (!adMetaById.has(ad.id)) adMetaById.set(ad.id, ad);
+  });
 
   const trend = dailyRows
     .map((r) => ({
