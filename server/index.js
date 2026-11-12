@@ -35,6 +35,21 @@ const PORT = process.env.PORT || 4000;
 const LOCALHOST_ORIGIN = /^http:\/\/localhost:\d+$/;
 const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN;
 
+// Premium modules can also ship a PUBLIC router (server/premium/<name>/
+// public.js) for endpoints called from outside the dashboard — e.g.
+// customer-journey's POST /collect, which receives events from trackers on
+// merchants' own stores. Mounted before the CORS middleware below (it only
+// allows CLIENT_ORIGIN, while these callers come from every store's own
+// domain) and before express.json()/requireAuth: each public router does
+// its own origin check, body parsing, size and rate limits.
+const premiumDir = path.join(__dirname, "premium");
+if (fs.existsSync(premiumDir)) {
+  fs.readdirSync(premiumDir).forEach((name) => {
+    const entry = path.join(premiumDir, name, "public.js");
+    if (fs.existsSync(entry)) app.use(require(entry));
+  });
+}
+
 app.use(
   cors({
     origin(origin, callback) {
@@ -99,7 +114,6 @@ app.use("/api", requireAuth, personalizationRouter);
 // open-source repo — each one is a self-contained router at
 // server/premium/<name>/index.js. That folder is gitignored, so a public
 // checkout simply has none of them and this loop mounts nothing.
-const premiumDir = path.join(__dirname, "premium");
 if (fs.existsSync(premiumDir)) {
   fs.readdirSync(premiumDir).forEach((name) => {
     const entry = path.join(premiumDir, name, "index.js");
