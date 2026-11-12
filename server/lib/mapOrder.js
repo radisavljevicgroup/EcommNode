@@ -79,6 +79,14 @@ function mapItemMeta(item) {
     .filter((m) => m.label && m.value);
 }
 
+// Anonymous visit id written by the "Put kupca" WordPress plugin
+// (ecommnode-premium, plugins/wordpress/ecommnode-journey) at checkout —
+// only present when the visitor consented. Links the order to its events.
+function journeySessionId(order) {
+  const value = (order.meta_data || []).find((m) => m.key === "_journey_session_id")?.value;
+  return typeof value === "string" && value ? value.toLowerCase() : null;
+}
+
 function mapOrder(order, sourceSiteUrl) {
   return {
     id: order.id,
@@ -104,6 +112,7 @@ function mapOrder(order, sourceSiteUrl) {
     shippingTotal: order.shipping_total || "0",
     discountTotal: order.discount_total || "0",
     sourceSiteUrl: sourceSiteUrl || null,
+    journeySessionId: journeySessionId(order),
     billing: {
       ...mapAddress(order.billing),
       email: order.billing?.email || "",

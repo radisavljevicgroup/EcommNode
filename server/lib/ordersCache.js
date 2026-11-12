@@ -14,7 +14,8 @@ const SYNC_MAX_AGE_MS = 60 * 60 * 1000; // 1h
 // (e.g. 2 = engraving options in item.meta): orders cached by older code
 // don't have it, and without this they'd keep being served for up to an
 // hour after a deploy — the first read after a restart resyncs instead.
-const CACHE_FORMAT = 2;
+// 3 = journeySessionId ("Put kupca").
+const CACHE_FORMAT = 3;
 const WC_PAGE_SIZE = 100;
 // A single WooCommerce orders page (100 items) takes ~2s on these stores,
 // and some stores have 10,000+ orders in their full history — fetching

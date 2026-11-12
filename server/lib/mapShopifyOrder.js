@@ -67,6 +67,12 @@ function mapShopifyOrder(order, sourceSiteUrl) {
     shippingTotal: order.total_shipping_price_set?.shop_money?.amount || "0",
     discountTotal: order.total_discounts || "0",
     sourceSiteUrl: sourceSiteUrl || null,
+    // Set as a cart attribute by the "Put kupca" theme app embed, which
+    // Shopify copies onto the order as a note attribute.
+    journeySessionId:
+      (order.note_attributes || [])
+        .find((a) => a.name === "_journey_session_id")
+        ?.value?.toLowerCase() || null,
     billing: {
       ...mapAddress(order.billing_address),
       email: order.email || order.contact_email || "",
