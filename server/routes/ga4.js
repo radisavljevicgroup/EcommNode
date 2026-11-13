@@ -128,4 +128,16 @@ router.get("/ga4/performance", async (req, res) => {
   }
 });
 
+router.get("/ga4/insights", async (req, res) => {
+  const { id, from, to } = req.query;
+  const connection = getConnection(id, req.company);
+  if (!connection) return res.status(404).json({ error: "Integracija nije pronađena." });
+
+  try {
+    res.json(await ga4.getInsights(connection, { from, to }));
+  } catch (err) {
+    res.status(400).json({ error: connectionError(err, connection) });
+  }
+});
+
 module.exports = router;

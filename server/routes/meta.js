@@ -12,6 +12,7 @@ const {
 const { getConnections: getWooConnections } = require("../lib/store");
 const { getOrdersForConnections } = require("../lib/ordersCache");
 const analytics = require("../lib/analytics");
+const fx = require("../lib/currency");
 const { startScheduler: startTokenRefreshScheduler } = require("../lib/metaAdsTokenRefresh");
 
 const router = Router();
@@ -191,6 +192,21 @@ router.get("/meta/performance", async (req, res) => {
       revenueCurrency,
       profit: revenueCurrency && revenueCurrency === data.currency ? ad.revenue - ad.total : null,
     }));
+
+    // ROAS per campaign: revenue converted into the ad account's currency
+    // first (same reasoning as dashboard.js — EUR spend vs RSD revenue),
+    // skipped when the conversion isn't supported.
+    const rate =
+      revenueCurrency && data.currency ? await fx.convert(1, revenueCurrency, data.currency).catch(() => null) : null;
+    data.topCampaigns = (data.topCampaigns || []).map((c) => {
+      const revenueConverted = rate != null ? c.revenue * rate : null;
+      return {
+        ...c,
+        revenueCurrency,
+        roas: revenueConverted != null && c.spend > 0 ? revenueConverted / c.spend : null,
+        profit: revenueConverted != null ? revenueConverted - c.spend : null,
+      };
+    });
 
     res.json(data);
   } catch (err) {

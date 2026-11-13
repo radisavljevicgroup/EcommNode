@@ -153,13 +153,7 @@ function aggregateTrend(dateRows, unit) {
 const performanceCache = new Map();
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
-async function getPerformance(connection, { from, to } = {}) {
-  const cacheKey = `${connection.id}::${from || ""}::${to || ""}`;
-  const cached = performanceCache.get(cacheKey);
-  if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.data;
-
-  const token = await getToken(connection);
-
+function resolveRange({ from, to } = {}) {
   const latestAvailable = new Date();
   latestAvailable.setDate(latestAvailable.getDate() - REPORTING_LAG_DAYS);
 
@@ -169,6 +163,18 @@ async function getPerformance(connection, { from, to } = {}) {
   let startDate = from ? new Date(from) : new Date(endDate);
   if (!from) startDate.setDate(startDate.getDate() - DEFAULT_DAYS);
   if (startDate > endDate) startDate = new Date(endDate);
+
+  return { startDate, endDate };
+}
+
+async function getPerformance(connection, { from, to } = {}) {
+  const cacheKey = `${connection.id}::${from || ""}::${to || ""}`;
+  const cached = performanceCache.get(cacheKey);
+  if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.data;
+
+  const token = await getToken(connection);
+
+  const { startDate, endDate } = resolveRange({ from, to });
 
   const dateRange = { startDate: isoDate(startDate), endDate: isoDate(endDate) };
   const spanDays = Math.max((endDate - startDate) / DAY_MS, 1);
@@ -262,4 +268,192 @@ async function getPerformance(connection, { from, to } = {}) {
   return result;
 }
 
-module.exports = { testConnection, getPerformance, listProperties, weekStart };
+// ---- Insights: products (views vs. sales) and devices ----------------------
+//
+// Separate from getPerformance on purpose: both reports rely on GA4
+// e-commerce events (view_item, add_to_cart, purchase with items[]), which
+// not every property has set up — if they're missing, only these sections
+// come back empty instead of the whole GA4 page failing.
+
+// A product needs at least this many item views before its view→purchase
+// rate is trusted; below it, one or two sales swing the rate wildly.
+const MIN_VIEWS_FOR_RATE = 30;
+// "Many views, weak sales": in the top quarter by views, converting at less
+// than half the store's average rate.
+const WEAK_RATE_FACTOR = 0.5;
+// "Hidden winners": converting at 1.5× the store average or better, with at
+// least 2 purchases, but in the bottom half by views — under-exposed.
+const STRONG_RATE_FACTOR = 1.5;
+const MIN_PURCHASES_FOR_WINNER = 2;
+const PRODUCT_LIST_LIMIT = 15;
+
+function quantile(sortedAsc, q) {
+  if (!sortedAsc.length) return 0;
+  const idx = Math.min(sortedAsc.length - 1, Math.max(0, Math.floor(q * (sortedAsc.length - 1))));
+  return sortedAsc[idx];
+}
+
+function buildProductInsights(rows) {
+  const products = rows
+    .map((r) => ({
+      name: r.dimensionValues[0].value,
+      views: metricValue(r, 0),
+      addedToCart: metricValue(r, 1),
+      purchased: metricValue(r, 2),
+      revenue: metricValue(r, 3),
+    }))
+    // GA4 reports items with no name as "(not set)" — nothing actionable.
+    .filter((p) => p.name && p.name !== "(not set)");
+
+  const totalViews = products.reduce((s, p) => s + p.views, 0);
+  const totalPurchased = products.reduce((s, p) => s + p.purchased, 0);
+  const avgRate = totalViews > 0 ? totalPurchased / totalViews : 0;
+
+  const withRate = products.map((p) => ({
+    ...p,
+    viewToPurchaseRate: p.views > 0 ? (p.purchased / p.views) * 100 : null,
+    viewToCartRate: p.views > 0 ? (p.addedToCart / p.views) * 100 : null,
+  }));
+
+  const rated = withRate.filter((p) => p.views >= MIN_VIEWS_FOR_RATE);
+  const viewsAsc = rated.map((p) => p.views).sort((a, b) => a - b);
+  const highViews = quantile(viewsAsc, 0.75);
+  const medianViews = quantile(viewsAsc, 0.5);
+
+  const weakSellers =
+    avgRate > 0
+      ? rated
+          .filter((p) => p.views >= highViews && p.purchased / p.views < avgRate * WEAK_RATE_FACTOR)
+          .sort((a, b) => b.views - a.views)
+          .slice(0, PRODUCT_LIST_LIMIT)
+      : [];
+
+  const hiddenWinners =
+    avgRate > 0
+      ? rated
+          .filter(
+            (p) =>
+              p.views <= medianViews &&
+              p.purchased >= MIN_PURCHASES_FOR_WINNER &&
+              p.purchased / p.views >= avgRate * STRONG_RATE_FACTOR
+          )
+          .sort((a, b) => b.viewToPurchaseRate - a.viewToPurchaseRate)
+          .slice(0, PRODUCT_LIST_LIMIT)
+      : [];
+
+  return {
+    averageViewToPurchaseRate: avgRate * 100,
+    totalViews,
+    totalPurchased,
+    productCount: products.length,
+    minViewsForRate: MIN_VIEWS_FOR_RATE,
+    weakSellers,
+    hiddenWinners,
+    topViewed: withRate.slice(0, PRODUCT_LIST_LIMIT),
+  };
+}
+
+const DEVICE_LABELS = { mobile: "Mobilni", desktop: "Desktop", tablet: "Tablet" };
+
+function buildDeviceInsights(rows) {
+  // Two dateRanges → GA4 appends a "dateRange" dimension (date_range_0 =
+  // current, date_range_1 = previous) after the requested dimension.
+  const byDevice = new Map();
+  rows.forEach((r) => {
+    const device = r.dimensionValues[0].value;
+    const which = r.dimensionValues[1]?.value === "date_range_1" ? "previous" : "current";
+    if (!byDevice.has(device)) byDevice.set(device, { current: null, previous: null });
+    byDevice.get(device)[which] = {
+      sessions: metricValue(r, 0),
+      purchases: metricValue(r, 1),
+      conversions: metricValue(r, 2),
+      revenue: metricValue(r, 3),
+    };
+  });
+
+  // Purchases (e-commerce purchase events) when the property tracks them,
+  // otherwise GA4 key events — so the rate still means something on a
+  // property without e-commerce tracking.
+  const anyPurchases = [...byDevice.values()].some((d) => (d.current?.purchases || 0) > 0);
+  const basis = anyPurchases ? "purchases" : "conversions";
+
+  const rate = (p) => (p && p.sessions > 0 ? (p[basis] / p.sessions) * 100 : null);
+  const totalSessions = [...byDevice.values()].reduce((s, d) => s + (d.current?.sessions || 0), 0);
+
+  const devices = [...byDevice.entries()]
+    .filter(([, d]) => d.current)
+    .map(([device, d]) => {
+      const conversionRate = rate(d.current);
+      const previousConversionRate = rate(d.previous);
+      return {
+        device,
+        label: DEVICE_LABELS[device] || device,
+        sessions: d.current.sessions,
+        sessionShare: totalSessions > 0 ? (d.current.sessions / totalSessions) * 100 : 0,
+        orders: d.current[basis],
+        revenue: d.current.revenue,
+        conversionRate,
+        previousConversionRate,
+        changePercent:
+          conversionRate != null && previousConversionRate
+            ? ((conversionRate - previousConversionRate) / previousConversionRate) * 100
+            : null,
+      };
+    })
+    .sort((a, b) => b.sessions - a.sessions);
+
+  return { basis, devices };
+}
+
+const insightsCache = new Map();
+
+async function getInsights(connection, { from, to } = {}) {
+  const cacheKey = `${connection.id}::${from || ""}::${to || ""}`;
+  const cached = insightsCache.get(cacheKey);
+  if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.data;
+
+  const token = await getToken(connection);
+  const { startDate, endDate } = resolveRange({ from, to });
+  const dateRange = { startDate: isoDate(startDate), endDate: isoDate(endDate) };
+
+  const spanMs = endDate - startDate + DAY_MS;
+  const prevEnd = new Date(startDate.getTime() - DAY_MS);
+  const prevStart = new Date(prevEnd.getTime() - spanMs + DAY_MS);
+  const previousRange = { startDate: isoDate(prevStart), endDate: isoDate(prevEnd) };
+
+  const [productReport, deviceReport] = await Promise.all([
+    runReport(connection, token, {
+      dateRanges: [dateRange],
+      dimensions: [{ name: "itemName" }],
+      metrics: [
+        { name: "itemsViewed" },
+        { name: "itemsAddedToCart" },
+        { name: "itemsPurchased" },
+        { name: "itemRevenue" },
+      ],
+      orderBys: [{ metric: { metricName: "itemsViewed" }, desc: true }],
+      limit: 1000,
+    }).catch((err) => ({ error: err.message })),
+    runReport(connection, token, {
+      dateRanges: [dateRange, previousRange],
+      dimensions: [{ name: "deviceCategory" }],
+      metrics: [
+        { name: "sessions" },
+        { name: "ecommercePurchases" },
+        { name: "conversions" },
+        { name: "purchaseRevenue" },
+      ],
+    }).catch((err) => ({ error: err.message })),
+  ]);
+
+  const result = {
+    dateRange,
+    previousRange,
+    products: productReport.error ? { error: productReport.error } : buildProductInsights(productReport.rows || []),
+    devices: deviceReport.error ? { error: deviceReport.error } : buildDeviceInsights(deviceReport.rows || []),
+  };
+  insightsCache.set(cacheKey, { data: result, at: Date.now() });
+  return result;
+}
+
+module.exports = { testConnection, getPerformance, getInsights, listProperties, weekStart };

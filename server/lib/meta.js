@@ -219,9 +219,9 @@ async function getPerformance(connection, { from, to } = {}) {
     }),
     fetchInsights(adAccountId, accessToken, {
       time_range: timeRange,
-      fields: "campaign_name,spend,impressions,clicks,actions",
+      fields: "campaign_id,campaign_name,spend,impressions,clicks,actions,action_values",
       level: "campaign",
-      limit: 50,
+      limit: 100,
     }),
     fetchInsights(adAccountId, accessToken, {
       time_range: timeRange,
@@ -295,16 +295,27 @@ async function getPerformance(connection, { from, to } = {}) {
     cpa: totalPurchases > 0 ? totalSpend / totalPurchases : 0,
   };
 
+  // Every campaign that spent in the period (not just a top 10) so the page
+  // can compare them side by side when moving budget. Revenue is in the
+  // store's currency, like the per-ad revenue below; ROAS is computed by
+  // the caller, which can convert it into the ad account's currency.
   const topCampaigns = campaignRows
-    .map((r) => ({
-      campaign: r.campaign_name,
-      spend: toNumber(r.spend),
-      impressions: toNumber(r.impressions),
-      clicks: toNumber(r.clicks),
-      purchases: extractPurchases(r.actions),
-    }))
-    .sort((a, b) => b.spend - a.spend)
-    .slice(0, 10);
+    .map((r) => {
+      const spend = toNumber(r.spend);
+      const purchases = extractPurchases(r.actions);
+      return {
+        campaignId: r.campaign_id || null,
+        campaign: r.campaign_name,
+        spend,
+        impressions: toNumber(r.impressions),
+        clicks: toNumber(r.clicks),
+        purchases,
+        revenue: extractPurchaseRevenue(r.action_values),
+        cpa: purchases > 0 ? spend / purchases : null,
+      };
+    })
+    .filter((c) => c.spend > 0)
+    .sort((a, b) => b.spend - a.spend);
 
   const allAds = adRows
     .map((r) => {

@@ -61,38 +61,95 @@ const METRICS = [
   },
 ];
 
+// ROAS below 1 = the campaign brought back less than it cost (by Meta's own
+// attribution); 1–2 is break-even territory once product cost and shipping
+// are counted; above 3 is clearly profitable. Same tiers color the cell.
+function roasStyle(roas) {
+  if (roas == null) return undefined;
+  if (roas < 1) return { color: "#c0392b", fontWeight: 600 };
+  if (roas < 2) return { color: "#92650a", fontWeight: 600 };
+  if (roas >= 3) return { color: "#2f7d55", fontWeight: 600 };
+  return { fontWeight: 600 };
+}
+
+const CAMPAIGN_SORTS = {
+  spend: (a, b) => b.spend - a.spend,
+  roas: (a, b) => (b.roas ?? -1) - (a.roas ?? -1),
+  profit: (a, b) => (b.profit ?? -Infinity) - (a.profit ?? -Infinity),
+};
+
 function TopCampaignsTable({ rows, loading, currency }) {
+  const [sortKey, setSortKey] = useState("spend");
+  const [showAll, setShowAll] = useState(false);
+  const sorted = [...rows].sort(CAMPAIGN_SORTS[sortKey]);
+  const visible = showAll ? sorted : sorted.slice(0, 10);
+  const revenueCurrency = rows.find((r) => r.revenueCurrency)?.revenueCurrency || currency;
+
   return (
     <div className="chart-card">
-      <h3>Top kampanje</h3>
-      <p className="chart-subtitle">Deset kampanja sa najvećom potrošnjom u periodu</p>
+      <div className="chart-card-head">
+        <div>
+          <h3>Kampanje</h3>
+          <p className="chart-subtitle">
+            Potrošnja, prihod i ROAS po kampanji (prihod i kupovine po Meta atribuciji) — za
+            prebacivanje budžeta sa kampanja koje jedva preživljavaju na one koje donose profit
+          </p>
+        </div>
+        {rows.length > 0 && (
+          <div className="table-toolbar">
+            <label className="per-page-select">
+              Sortiraj
+              <select value={sortKey} onChange={(e) => setSortKey(e.target.value)}>
+                <option value="spend">Po potrošnji</option>
+                <option value="roas">Po ROAS-u</option>
+                <option value="profit">Po profitu</option>
+              </select>
+            </label>
+          </div>
+        )}
+      </div>
       {rows.length === 0 ? (
         <div className="empty-hint">{loading ? "Učitavanje…" : "Nema podataka."}</div>
       ) : (
-        <div className="orders-items-table-wrap">
-          <table className="orders-items-table">
-            <thead>
-              <tr>
-                <th>Kampanja</th>
-                <th>Potrošnja</th>
-                <th>Klikovi</th>
-                <th>Kupovine</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row, i) => (
-                <tr key={i}>
-                  <td className="gsc-key-cell">{row.campaign}</td>
-                  <td>
-                    {Math.round(row.spend).toLocaleString("sr-RS")} {currency}
-                  </td>
-                  <td>{row.clicks.toLocaleString("sr-RS")}</td>
-                  <td>{row.purchases.toLocaleString("sr-RS")}</td>
+        <>
+          <div className="orders-items-table-wrap">
+            <table className="orders-items-table">
+              <thead>
+                <tr>
+                  <th>Kampanja</th>
+                  <th>Potrošnja</th>
+                  <th>Klikovi</th>
+                  <th>Kupovine</th>
+                  <th>CPA</th>
+                  <th>Prihod</th>
+                  <th>ROAS</th>
+                  <th>Profit</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {visible.map((row, i) => (
+                  <tr key={row.campaignId || i}>
+                    <td className="gsc-key-cell">{row.campaign}</td>
+                    <td>{formatKpiValue("currency", row.spend, currency)}</td>
+                    <td>{formatKpiValue("integer", row.clicks)}</td>
+                    <td>{formatKpiValue("integer", row.purchases)}</td>
+                    <td>{formatKpiValue("currency", row.cpa, currency)}</td>
+                    <td>{formatKpiValue("currency", row.revenue, revenueCurrency)}</td>
+                    <td style={roasStyle(row.roas)}>
+                      {row.roas == null ? "—" : `${row.roas.toFixed(2).replace(".", ",")}×`}
+                    </td>
+                    <td>{formatKpiValue("currency", row.profit, currency)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {rows.length > 10 && (
+            <button type="button" className="btn-cancel" style={{ marginTop: 12 }} onClick={() => setShowAll((v) => !v)}>
+              {showAll ? "Prikaži samo prvih 10" : `Prikaži sve (${rows.length})`}
+            </button>
+          )}
+        </>
       )}
     </div>
   );
