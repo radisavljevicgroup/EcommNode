@@ -12,45 +12,76 @@ let cache = file.read();
 const SYNC_MAX_AGE_MS = 60 * 60 * 1000; // 1h
 // Bump whenever mapOrder/mapShopifyOrder start producing something new
 // (e.g. 2 = engraving options in item.meta): orders cached by older code
-// don't have it, and without this they'd keep being served for up to an
-// hour after a deploy — the first read after a restart resyncs instead.
+// don't have it. A bump makes the next sync re-read every order (WooCommerce:
+// a new backfill from the newest order down), overwriting the old copies by
+// id as it goes — the old ones keep being served until then.
 // 3 = journeySessionId ("Put kupca").
 const CACHE_FORMAT = 3;
 const WC_PAGE_SIZE = 100;
-// A single WooCommerce orders page (100 items) takes ~2s on these stores,
-// and some stores have 10,000+ orders in their full history — fetching
-// everything would take many minutes. Analytics only needs a recent
-// rolling window, so bound the sync and always run it in the background
-// rather than blocking a request on it. 14 months (not 12) so the YoY
-// trend comparison has a full same-months-last-year range available.
+// Shopify only: how far back a full sync asks for. Without read_all_orders
+// Shopify returns just the last 60 days anyway; mergeOrders keeps whatever
+// aged out of that.
 const SYNC_WINDOW_MONTHS = 14;
-const MAX_SYNC_PAGES = 50; // hard safety cap (~5,000 orders per store)
+// WooCommerce orders are kept forever, not as a rolling window: the old
+// "last 14 months, max 50 pages" full sync replaced the cache every hour, so
+// a store with more than 5,000 orders in 14 months silently lost everything
+// past the 5,000th (~10 months on the bigger stores). Instead, each hourly
+// sync now:
+//   1. fetches only orders created/changed since the last sync
+//      (modified_after) and merges them in, and
+//   2. while the history isn't complete yet, keeps walking backwards
+//      (before = oldest cached order) BACKFILL_CHUNK_PAGES pages at a time,
+//      writing the cache after each chunk so a restart resumes where it
+//      stopped, until WooCommerce has nothing older.
+// A page of 100 orders takes ~2s, so a 20,000-order store needs ~7 minutes
+// once, in the background; after that a sync is one or two requests.
+const BACKFILL_CHUNK_PAGES = 10;
+// Overlap with the last fetch, so an order written while it ran isn't lost.
+const RECENT_OVERLAP_MS = 5 * 60 * 1000;
 
 const syncing = new Set();
 const syncErrors = new Map();
 
-async function fetchAllWooOrders(connection) {
+async function fetchWooPages(connection, params, maxPages = Infinity) {
   const client = createWooClient(connection);
-  const after = new Date();
-  after.setMonth(after.getMonth() - SYNC_WINDOW_MONTHS);
-
   const orders = [];
-  let page = 1;
-  // eslint-disable-next-line no-constant-condition
-  while (true) {
+  let reachedEnd = false;
+  for (let page = 1; page <= maxPages; page += 1) {
+    // eslint-disable-next-line no-await-in-loop
     const response = await client.get("orders", {
+      ...params,
       page,
       per_page: WC_PAGE_SIZE,
-      after: after.toISOString(),
+      dates_are_gmt: true,
       orderby: "date",
       order: "desc",
     });
     orders.push(...response.data.map((o) => mapOrder(o, null)));
     const totalPages = Number(response.headers?.["x-wp-totalpages"] || 1);
-    if (page >= totalPages || response.data.length === 0 || page >= MAX_SYNC_PAGES) break;
-    page += 1;
+    if (page >= totalPages || response.data.length === 0) {
+      reachedEnd = true;
+      break;
+    }
   }
-  return orders;
+  return { orders, reachedEnd };
+}
+
+function orderCreatedMs(o) {
+  // dateCreatedGmt has no offset ("2025-01-31T10:00:00") but is UTC.
+  if (o.dateCreatedGmt) return Date.parse(`${o.dateCreatedGmt}Z`);
+  return Date.parse(o.dateCreated);
+}
+
+// `before` for the next backfill chunk: the oldest order we have, +1s
+// because WooCommerce's before is strict and several orders can share that
+// second — the ones already cached just get merged again.
+function backfillCursor(orders) {
+  let oldest = Infinity;
+  for (const o of orders) {
+    const ms = orderCreatedMs(o);
+    if (Number.isFinite(ms) && ms < oldest) oldest = ms;
+  }
+  return Number.isFinite(oldest) ? new Date(oldest + 1000).toISOString() : null;
 }
 
 async function fetchAllShopifyOrders(connection) {
@@ -58,51 +89,94 @@ async function fetchAllShopifyOrders(connection) {
   return orders.map((o) => mapShopifyOrder(o, null));
 }
 
-function fetchAllOrders(connection) {
-  return connection.platform === "shopify"
-    ? fetchAllShopifyOrders(connection)
-    : fetchAllWooOrders(connection);
-}
-
-// Without the (Shopify-approval-gated) read_all_orders scope, Shopify's API
-// only ever returns orders from the last 60 days, no matter what date range
-// we ask for — so a plain replace here would silently delete every Shopify
-// order we'd already captured once it aged out of that 60-day window, on
-// the very next hourly resync. Merge the fresh fetch over whatever we
-// already have by id instead: an order still inside the 60-day window gets
-// its latest status/total, one that has aged out keeps whatever we last
-// saw for it. WooCommerce doesn't need this — its API actually returns the
-// full SYNC_WINDOW_MONTHS range every time, so replace already behaves
-// like a merge there.
+// Fresh orders overwrite cached ones by id (latest status/total); cached
+// orders the fetch didn't return are kept — nothing is ever dropped here.
+// Shopify needs this because without read_all_orders its API only returns
+// the last 60 days; WooCommerce because its syncs are incremental (above).
 function mergeOrders(existing, fresh) {
   const byId = new Map(existing.map((o) => [o.id, o]));
   for (const o of fresh) byId.set(o.id, o);
-  const cutoff = new Date();
-  cutoff.setMonth(cutoff.getMonth() - SYNC_WINDOW_MONTHS);
-  return [...byId.values()].filter((o) => new Date(o.dateCreated) >= cutoff);
+  return [...byId.values()];
+}
+
+// Always merges into cache[connectionId] as it is *now*, not a copy taken
+// before an await — refreshRecentConnection may have merged meanwhile.
+function mergeIntoCache(connectionId, fresh, patch = {}) {
+  const current = cache[connectionId] || { orders: [] };
+  cache[connectionId] = { ...current, ...patch, orders: mergeOrders(current.orders || [], fresh) };
+  file.write(cache);
+  return cache[connectionId];
+}
+
+async function syncWooConnection(connection, startedAt) {
+  const id = connection.id;
+  let entry = cache[id];
+  if (!entry || entry.format !== CACHE_FORMAT) {
+    // New store, or a CACHE_FORMAT bump: re-read everything from the newest
+    // order down. Old copies stay (and are served) until overwritten.
+    entry = mergeIntoCache(id, [], {
+      syncedAt: null,
+      format: CACHE_FORMAT,
+      backfill: { done: false, before: null },
+    });
+  } else if (!entry.backfill) {
+    // Cache written by the old 14-month windowed sync: it holds everything
+    // from its syncedAt down to its oldest order, so continue from there.
+    entry = mergeIntoCache(id, [], {
+      backfill: { done: false, before: backfillCursor(entry.orders || []) },
+    });
+  }
+
+  // 1. Whatever was created or changed since the last sync.
+  if (entry.syncedAt) {
+    const base = Math.max(Date.parse(entry.syncedAt) || 0, Date.parse(entry.recentAt) || 0);
+    const since = new Date(base - RECENT_OVERLAP_MS).toISOString();
+    const { orders } = await fetchWooPages(connection, { modified_after: since });
+    entry = mergeIntoCache(id, orders, { syncedAt: startedAt });
+  }
+
+  // 2. Older history, chunk by chunk, until there's none left.
+  while (!entry.backfill?.done) {
+    const before = entry.backfill.before;
+    // eslint-disable-next-line no-await-in-loop
+    const { orders, reachedEnd } = await fetchWooPages(
+      connection,
+      before ? { before } : {},
+      BACKFILL_CHUNK_PAGES
+    );
+    const nextBefore = backfillCursor(orders) || before;
+    entry = mergeIntoCache(id, orders, {
+      // The first chunk of a from-scratch backfill starts at the newest
+      // order, so from here on step 1 covers anything newer.
+      syncedAt: entry.syncedAt || startedAt,
+      // A chunk that didn't move the cursor (e.g. 1,000+ orders in one
+      // second) would loop forever — treat it as the end.
+      backfill: { done: reachedEnd || nextBefore === before, before: nextBefore },
+    });
+  }
+}
+
+async function syncShopifyConnection(connection, startedAt) {
+  const fresh = await fetchAllShopifyOrders(connection);
+  mergeIntoCache(connection.id, fresh, { syncedAt: startedAt, format: CACHE_FORMAT });
 }
 
 async function syncConnection(connection) {
   if (syncing.has(connection.id)) return;
   syncing.add(connection.id);
   syncErrors.delete(connection.id);
-  // When the fetch started, not when it finished: a big store takes minutes
-  // (40+ pages), and the newest orders are on page 1, read first. An order
-  // changed meanwhile (e.g. cancelled) is in this snapshot with its old
-  // status, and this replace also wipes what refreshRecentConnection merged
-  // during the fetch — stamping the finish time put that change before
-  // refreshRecentConnection's next modified_after, so it stayed wrong until
-  // the next full sync an hour later.
+  // When the sync started, not when it finished: a backfill takes minutes,
+  // and an order changed meanwhile must still be after the next
+  // modified_after.
   const startedAt = new Date().toISOString();
   try {
-    const fresh = await fetchAllOrders(connection);
-    const orders =
-      connection.platform === "shopify"
-        ? mergeOrders(cache[connection.id]?.orders || [], fresh)
-        : fresh;
-    cache[connection.id] = { syncedAt: startedAt, format: CACHE_FORMAT, orders };
-    file.write(cache);
+    if (connection.platform === "shopify") {
+      await syncShopifyConnection(connection, startedAt);
+    } else {
+      await syncWooConnection(connection, startedAt);
+    }
   } catch (err) {
+    // Backfill progress already written stays; the next sync resumes.
     syncErrors.set(connection.id, err?.message || "Sinhronizacija nije uspela.");
   } finally {
     syncing.delete(connection.id);
@@ -118,26 +192,9 @@ async function syncConnection(connection) {
 // (modified_after / updated_at_min), so it's one request per store, not a
 // full sync. A store that doesn't answer keeps its cached orders.
 const RECENT_MAX_PAGES = 5;
-// Overlap with the last fetch, so an order written while it ran isn't lost.
-const RECENT_OVERLAP_MS = 5 * 60 * 1000;
 
 async function fetchRecentWooOrders(connection, since) {
-  const client = createWooClient(connection);
-  const orders = [];
-  for (let page = 1; page <= RECENT_MAX_PAGES; page += 1) {
-    // eslint-disable-next-line no-await-in-loop
-    const response = await client.get("orders", {
-      page,
-      per_page: WC_PAGE_SIZE,
-      modified_after: since,
-      dates_are_gmt: true,
-      orderby: "date",
-      order: "desc",
-    });
-    orders.push(...response.data.map((o) => mapOrder(o, null)));
-    const totalPages = Number(response.headers?.["x-wp-totalpages"] || 1);
-    if (page >= totalPages || response.data.length === 0) break;
-  }
+  const { orders } = await fetchWooPages(connection, { modified_after: since }, RECENT_MAX_PAGES);
   return orders;
 }
 
@@ -171,10 +228,7 @@ async function refreshRecentConnection(connection) {
             mapShopifyOrder(o, null)
           )
         : await fetchRecentWooOrders(connection, since);
-    // A full sync may have replaced the entry meanwhile — merge into that.
-    const current = cache[connection.id] || entry;
-    cache[connection.id] = { ...current, recentAt: startedAt, orders: mergeOrders(current.orders, fresh) };
-    file.write(cache);
+    mergeIntoCache(connection.id, fresh, { recentAt: startedAt });
   } catch (err) {
     console.error(`[orders-cache] nove porudžbine (${connection.siteUrl}):`, err?.message);
   }
@@ -209,6 +263,9 @@ function freshenOrders(connections) {
 
 function isStale(entry) {
   if (!entry || entry.format !== CACHE_FORMAT) return true;
+  // A WooCommerce backfill cut short (restart, store error) resumes on the
+  // next read instead of waiting out the hour.
+  if (entry.backfill && !entry.backfill.done) return true;
   return Date.now() - new Date(entry.syncedAt).getTime() > SYNC_MAX_AGE_MS;
 }
 
@@ -428,6 +485,8 @@ function getSyncStatus(connections) {
     syncedAt: cache[c.id]?.syncedAt || null,
     orderCount: cache[c.id]?.orders?.length || 0,
     syncing: syncing.has(c.id),
+    // WooCommerce: older history still being downloaded.
+    backfilling: Boolean(cache[c.id]?.backfill && !cache[c.id].backfill.done),
     error: syncErrors.get(c.id) || null,
   }));
 }
