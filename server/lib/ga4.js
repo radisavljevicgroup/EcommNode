@@ -536,4 +536,119 @@ async function fetchInsights(connection, { from, to }, cacheKey) {
   return result;
 }
 
-module.exports = { testConnection, getPerformance, getInsights, listProperties, weekStart };
+// ---- Sessions per day, stored on disk ----------------------------------------
+//
+// CR (orders / sessions) is shown on the home page, Analitika and alerts, for
+// every store filter and period — each used to run getPerformance's four
+// reports for its own range. On 2026-11-13 GA4 answered "Exhausted concurrent
+// requests quota" for casiosrbija.rs and timed out for papagaj.rs, and CR
+// silently showed "—". Sessions per day are now kept per property in
+// server/data/ga4-sessions.json: GA4 is asked once for days never fetched,
+// and for the last SESSIONS_RECENT_DAYS days at most every
+// SESSIONS_RECENT_REFRESH_MS (GA4 keeps processing them for a day or two).
+// When GA4 fails, whatever is stored is used.
+const { createJsonFile } = require("./jsonFile");
+
+const sessionsFile = createJsonFile("ga4-sessions.json", {});
+const sessionsStore = sessionsFile.read();
+const SESSIONS_RECENT_DAYS = 3;
+const SESSIONS_RECENT_REFRESH_MS = 60 * 60 * 1000;
+const SESSIONS_RECENT_WAIT_MS = 8000;
+
+function addDaysIso(dateStr, n) {
+  const d = new Date(`${dateStr}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return isoDate(d);
+}
+
+function propertyEntry(connection) {
+  const id = String(connection.propertyId);
+  if (!sessionsStore[id]) sessionsStore[id] = { from: null, to: null, recentAt: null, days: {} };
+  return sessionsStore[id];
+}
+
+// One fetch at a time per property.
+const sessionLocks = new Map();
+function withSessionLock(connection, fn) {
+  const id = String(connection.propertyId);
+  const run = (sessionLocks.get(id) || Promise.resolve()).catch(() => {}).then(fn);
+  sessionLocks.set(id, run.catch(() => {}));
+  return run;
+}
+
+async function fetchSessionDays(connection, since, until) {
+  const token = await getToken(connection);
+  const report = await runReport(connection, token, {
+    dateRanges: [{ startDate: since, endDate: until }],
+    dimensions: [{ name: "date" }],
+    metrics: [{ name: "sessions" }],
+    limit: 10000,
+  });
+  const entry = propertyEntry(connection);
+  // Days GA4 doesn't return had no sessions — store them as 0 ("fetched").
+  for (let d = since; d <= until; d = addDaysIso(d, 1)) entry.days[d] = 0;
+  (report.rows || []).forEach((row) => {
+    entry.days[ga4DateToIso(row.dimensionValues[0].value)] = metricValue(row, 0);
+  });
+  if (!entry.from || since < entry.from) entry.from = since;
+  if (!entry.to || until > entry.to) entry.to = until;
+  if (until >= addDaysIso(isoDate(new Date()), -SESSIONS_RECENT_DAYS)) entry.recentAt = new Date().toISOString();
+  sessionsFile.write(sessionsStore);
+}
+
+function missingSessionSpans(entry, since, until) {
+  if (since > until) return [];
+  if (!entry.from) return [[since, until]];
+  const spans = [];
+  if (since < entry.from) spans.push([since, addDaysIso(entry.from, -1) < until ? addDaysIso(entry.from, -1) : until]);
+  if (until > entry.to) spans.push([addDaysIso(entry.to, 1) > since ? addDaysIso(entry.to, 1) : since, until]);
+  return spans;
+}
+
+// { sessions, totals, trend } for [from, to] (clamped to what GA4 has processed, like
+// getPerformance). Throws only when GA4 failed and nothing is stored for
+// the range.
+async function getDailySessions(connection, range = {}) {
+  const { startDate, endDate } = resolveRange(range);
+  const since = isoDate(startDate);
+  const until = isoDate(endDate);
+  const entry = propertyEntry(connection);
+
+  if (missingSessionSpans(entry, since, until).length) {
+    try {
+      await withSessionLock(connection, async () => {
+        for (const [s, e] of missingSessionSpans(propertyEntry(connection), since, until)) {
+          // eslint-disable-next-line no-await-in-loop
+          await fetchSessionDays(connection, s, e);
+        }
+      });
+    } catch (err) {
+      const anyStored = entry.from && entry.from <= until && entry.to >= since;
+      if (!anyStored) throw err;
+      console.warn(`[ga4] sessions from store (${connection.propertyId}):`, err.message);
+    }
+  }
+
+  const recentFrom = addDaysIso(isoDate(new Date()), -SESSIONS_RECENT_DAYS);
+  if (until >= recentFrom && (!entry.recentAt || Date.now() - Date.parse(entry.recentAt) > SESSIONS_RECENT_REFRESH_MS)) {
+    const refresh = withSessionLock(connection, async () => {
+      const e = propertyEntry(connection);
+      if (e.recentAt && Date.now() - Date.parse(e.recentAt) < SESSIONS_RECENT_REFRESH_MS) return;
+      const latest = isoDate(resolveRange({}).endDate);
+      await fetchSessionDays(connection, recentFrom, latest);
+    }).catch((err) => console.warn(`[ga4] recent sessions refresh failed (${connection.propertyId}):`, err.message));
+    await Promise.race([refresh, new Promise((resolve) => setTimeout(resolve, SESSIONS_RECENT_WAIT_MS))]);
+  }
+
+  // Same shapes as getPerformance where callers overlap: totals.sessions,
+  // trend[] per day ({ date, sessions }).
+  const trend = [];
+  for (let d = since; d <= until; d = addDaysIso(d, 1)) {
+    const v = propertyEntry(connection).days[d];
+    if (v !== undefined) trend.push({ date: d, sessions: v });
+  }
+  const sessions = trend.reduce((sum, r) => sum + r.sessions, 0);
+  return { sessions, days: trend.length, totals: { sessions }, trend };
+}
+
+module.exports = { testConnection, getPerformance, getInsights, listProperties, weekStart, getDailySessions };

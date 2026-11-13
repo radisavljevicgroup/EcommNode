@@ -47,8 +47,9 @@ async function detectConversionDrops({ from, to, prevFrom, prevTo, storeConnecti
       try {
         const [orders, perfCurr, perfPrev] = await Promise.all([
           getOrdersForConnections([wooConn]),
-          ga4.getPerformance(g, { from, to }),
-          ga4.getPerformance(g, { from: prevFrom, to: prevTo }),
+          // Sessions only — from the local daily store, not 4 reports each.
+          ga4.getDailySessions(g, { from, to }),
+          ga4.getDailySessions(g, { from: prevFrom, to: prevTo }),
         ]);
 
         const ordersCurr = analytics.realized(analytics.filterByRange(orders, from, to));

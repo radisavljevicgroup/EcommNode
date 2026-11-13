@@ -48,12 +48,15 @@ async function computeCrTrend(connections, { from, to }) {
       const wooConn = connections.find((c) => c.id === g.targetConnectionId);
       if (!wooConn) return;
       try {
-        const [orders, perf] = await Promise.all([
+        // Daily sessions from the local store (ga4.getDailySessions),
+        // bucketed here the same way getPerformance's trend was.
+        const [orders, ga] = await Promise.all([
           getOrdersForConnections([wooConn]),
-          ga4.getPerformance(g, { from, to }),
+          ga4.getDailySessions(g, { from, to }),
         ]);
-        perf.trend.forEach((row) => {
-          sessionsByLabel.set(row.date, (sessionsByLabel.get(row.date) || 0) + row.sessions);
+        ga.trend.forEach((row) => {
+          const label = unit === "day" ? row.date : unit === "week" ? ga4.weekStart(row.date) : row.date.slice(0, 7);
+          sessionsByLabel.set(label, (sessionsByLabel.get(label) || 0) + row.sessions);
         });
         analytics.realized(analytics.filterByRange(orders, from, to)).forEach((o) => {
           const key = crBucketKey(o.dateCreated, unit);

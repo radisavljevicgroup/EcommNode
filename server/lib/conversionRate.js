@@ -29,16 +29,19 @@ async function computeConversionRate(connections, { from, to }) {
       const wooConn = connections.find((c) => c.id === g.targetConnectionId);
       if (!wooConn) return;
       try {
-        const [orders, perf] = await Promise.all([
+        // Sessions per day from the local store (ga4.getDailySessions) — GA4
+        // is only asked for days not stored yet, not for every period.
+        const [orders, ga] = await Promise.all([
           getOrdersForConnections([wooConn]),
-          ga4.getPerformance(g, { from, to }),
+          ga4.getDailySessions(g, { from, to }),
         ]);
         const periodOrders = analytics.realized(analytics.filterByRange(orders, from, to));
         totalOrders += periodOrders.length;
-        totalSessions += perf.totals.sessions;
-      } catch {
-        // this store's GA4 fetch failed (auth/quota) — skip it rather than
-        // fail the whole summary over one bad connection
+        totalSessions += ga.sessions;
+      } catch (err) {
+        // GA4 failed and nothing is stored for this range — skip this store
+        // rather than fail the whole summary over one bad connection.
+        console.warn(`[cr] ${g.propertyId}:`, err?.message);
       }
     })
   );
