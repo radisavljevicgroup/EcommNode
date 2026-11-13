@@ -191,6 +191,13 @@ export default function Dashboard() {
               changePercent={summary?.conversionRate.changePercent}
               hint={hint}
             />
+
+            <KpiCard
+              label="MER (ukupan prihod / Meta potrošnja)"
+              value={loading ? "…" : summary?.mer?.current == null ? "—" : formatKpiValue("multiplier", summary.mer.current)}
+              changePercent={summary?.mer?.changePercent}
+              hint={hint}
+            />
           </div>
 
           <div className="settings-header home-anomalies-header">

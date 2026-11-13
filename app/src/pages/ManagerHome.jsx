@@ -102,6 +102,14 @@ const META_METRICS = [
     definition: "Return On Ad Spend — prihod pripisan oglasima podeljen potrošnjom na njih.",
     goodDirection: "up",
   },
+  {
+    key: "mer",
+    label: "MER",
+    format: "multiplier",
+    definition:
+      "Marketing Efficiency Ratio — ukupan prihod izabranih sajtova (svi kanali) podeljen potrošnjom na Meta oglase koji vode na te sajtove. Ne zavisi od Meta atribucije ni piksela.",
+    goodDirection: "up",
+  },
 ];
 
 const LOGISTICS_METRICS = [
@@ -277,6 +285,7 @@ export default function ManagerHome({ onNavigate, roleName }) {
     adSpend: summary.adSpend.current,
     adSpendCurrency: summary.metaCurrency || summary.currency,
     roas: summary.roas.current,
+    mer: summary.mer?.current ?? null,
     shippedOrders: summary.shippedOrders.current,
     deliveredOrders: summary.deliveredOrders.current,
     returnedOrders: summary.returnedOrders.current,
@@ -287,6 +296,7 @@ export default function ManagerHome({ onNavigate, roleName }) {
       revenue: summary.revenue.changePercent,
       adSpend: summary.adSpend.changePercent,
       roas: summary.roas.changePercent,
+      mer: summary.mer?.changePercent ?? null,
       shippedOrders: summary.shippedOrders.changePercent,
       deliveredOrders: summary.deliveredOrders.changePercent,
       returnedOrders: summary.returnedOrders.changePercent,

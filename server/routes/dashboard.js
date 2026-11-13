@@ -6,6 +6,7 @@ const { getOrdersForConnections } = require("../lib/ordersCache");
 const { computeConversionRate } = require("../lib/conversionRate");
 const { detectAnomalies } = require("../lib/anomalies");
 const meta = require("../lib/meta");
+const fx = require("../lib/currency");
 const analytics = require("../lib/analytics");
 
 const router = Router();
@@ -103,17 +104,39 @@ router.get("/dashboard/summary", async (req, res) => {
     const prev = periodRevenueOrders(allOrders, prevFrom, prevTo);
 
     const metaConnections = linkedMetaConnections(storeConnections, req.company);
-    let spendCurr = 0;
-    let spendPrev = 0;
-    // Pixel-tracked purchase value attributed to the ads themselves
-    // (per-ad "revenue" from Meta's insights, in the store's own
-    // currency) — not the store's total revenue, which also includes
-    // organic/direct/other-channel sales the ads had nothing to do with.
-    // Dividing total store revenue by ad spend is a much bigger number
-    // than ROAS and not what that word means.
-    let adRevenueCurr = 0;
-    let adRevenuePrev = 0;
+    const selectedIds = new Set(storeConnections.map((c) => c.id));
+    const allStores = [...getWooConnections(req.company), ...getShopifyConnections(req.company)];
     let metaCurrency = null;
+
+    // One Meta ad account often advertises several stores (papagaj.rs,
+    // parkerolovke.rs...) — a dashboard filtered to one store must count
+    // only that store's ads, not the whole account. Each ad is assigned to
+    // a store by its website link (meta.adStoreId). Ads that can't be
+    // assigned (no website link: profile visits, messages...) count only
+    // when every store the Meta connection targets is selected — then it's
+    // the whole account anyway; otherwise they're reported as unattributed.
+    //
+    // revenue = pixel-tracked purchase value of those ads, already in the
+    // ad account's currency ad by ad (withRevenueCurrency in lib/meta.js) —
+    // not the store's total revenue (that's MER, below).
+    function metaTotals(perf, connection) {
+      const coversAll = (connection.targetConnectionIds || []).every((id) => selectedIds.has(id));
+      const t = { spend: 0, revenue: 0, unattributedSpend: 0 };
+      for (const ad of perf.allAds || []) {
+        const storeId = meta.adStoreId(ad, connection, allStores);
+        const counts = storeId ? selectedIds.has(storeId) : coversAll;
+        if (counts) {
+          t.spend += ad.total || 0;
+          t.revenue += ad.revenueInAccount || 0;
+        } else if (!storeId) {
+          t.unattributedSpend += ad.total || 0;
+        }
+      }
+      return t;
+    }
+
+    const metaCurr = { spend: 0, revenue: 0, unattributedSpend: 0 };
+    const metaPrev = { spend: 0, revenue: 0, unattributedSpend: 0 };
     await Promise.all(
       metaConnections.map(async (m) => {
         try {
@@ -121,19 +144,22 @@ router.get("/dashboard/summary", async (req, res) => {
             meta.getPerformance(m, { from, to }),
             meta.getPerformance(m, { from: prevFrom, to: prevTo }),
           ]);
-          spendCurr += pc.totals.spend;
-          spendPrev += pp.totals.spend;
-          // Already in the ad account's currency, ad by ad — the pixel's
-          // purchase value isn't in one currency for every ad (see
-          // withRevenueCurrency in lib/meta.js).
-          adRevenueCurr += pc.allAds.reduce((s, ad) => s + (ad.revenueInAccount || 0), 0);
-          adRevenuePrev += pp.allAds.reduce((s, ad) => s + (ad.revenueInAccount || 0), 0);
+          for (const [acc, t] of [
+            [metaCurr, metaTotals(pc, m)],
+            [metaPrev, metaTotals(pp, m)],
+          ]) {
+            acc.spend += t.spend;
+            acc.revenue += t.revenue;
+            acc.unattributedSpend += t.unattributedSpend;
+          }
           if (!metaCurrency) metaCurrency = pc.currency;
         } catch {
           // this Meta connection's fetch failed — skip it, don't fail the summary
         }
       })
     );
+    const spendCurr = metaCurr.spend;
+    const spendPrev = metaPrev.spend;
 
     const [crCurr, crPrev] = storeConnections.length
       ? await Promise.all([
@@ -143,15 +169,23 @@ router.get("/dashboard/summary", async (req, res) => {
       : [null, null];
 
     // Meta reports spend in the ad account's billing currency, which is
-    // often not the store's own currency (EUR ad spend vs RSD ad revenue,
-    // here) — dividing one by the other without converting isn't a
-    // rounding quirk, it's a meaningless number. adRevenue above is already
-    // in Meta's currency (revenueInAccount, converted ad by ad), so both
-    // sides of the ratio match.
-    let roasCurr = null;
-    let roasPrev = null;
-    if (metaCurrency && spendCurr > 0) roasCurr = adRevenueCurr / spendCurr;
-    if (metaCurrency && spendPrev > 0) roasPrev = adRevenuePrev / spendPrev;
+    // often not the store's own currency (EUR ad spend vs RSD revenue) —
+    // both ratios below are computed in Meta's currency.
+    // ROAS: ad-attributed revenue (already in Meta's currency) / spend.
+    const roasCurr = metaCurrency && spendCurr > 0 ? metaCurr.revenue / spendCurr : null;
+    const roasPrev = metaCurrency && spendPrev > 0 ? metaPrev.revenue / spendPrev : null;
+    // MER (Marketing Efficiency Ratio): the selected stores' total revenue
+    // (all channels) / the spend on those same stores' ads.
+    const storeCurrency = String(currency || "RSD").toUpperCase();
+    async function mer(revenue, spend) {
+      if (!metaCurrency || !(spend > 0)) return null;
+      const converted = await fx.convert(revenue, storeCurrency, metaCurrency).catch(() => null);
+      return converted == null ? null : converted / spend;
+    }
+    const [merCurr, merPrev] = await Promise.all([
+      mer(curr.revenue, spendCurr),
+      mer(prev.revenue, spendPrev),
+    ]);
 
     res.json({
       currency,
@@ -182,6 +216,10 @@ router.get("/dashboard/summary", async (req, res) => {
       },
       adSpend: { current: spendCurr, previous: spendPrev, changePercent: changePercent(spendCurr, spendPrev) },
       roas: { current: roasCurr, previous: roasPrev, changePercent: changePercent(roasCurr, roasPrev) },
+      mer: { current: merCurr, previous: merPrev, changePercent: changePercent(merCurr, merPrev) },
+      // Meta spend on ads that couldn't be tied to a selected store (no
+      // website link) and so was left out of adSpend/ROAS/MER.
+      adSpendUnattributed: metaCurr.unattributedSpend,
       conversionRate: { current: crCurr, previous: crPrev, changePercent: changePercent(crCurr, crPrev) },
     });
   } catch (err) {

@@ -164,9 +164,63 @@ async function fetchInsights(adAccountId, accessToken, params) {
 // versions) rather than paginating the account's entire ad history, which
 // for an account running since 2025 could be hundreds of old ads and made
 // this page take unreasonably long to load.
+// object_type plus every place a creative can keep its website link —
+// destinationHost() below reads them to tell which store an ad sells for.
+const CREATIVE_FIELDS =
+  "creative{object_type,link_url,object_url,object_story_spec{link_data{link},video_data{call_to_action{value{link}}},template_data{link}},asset_feed_spec{link_urls{website_url}}}";
+
+function normalizeHost(url) {
+  try {
+    return new URL(url).hostname.toLowerCase().replace(/^www\./, "");
+  } catch {
+    return null;
+  }
+}
+
+// The website an ad sends people to (e.g. "papagaj.rs"), or null for ads
+// with no website link (profile visits, messages, page likes...).
+function destinationHost(creative) {
+  if (!creative) return null;
+  const spec = creative.object_story_spec || {};
+  const candidates = [
+    spec.link_data?.link,
+    spec.video_data?.call_to_action?.value?.link,
+    spec.template_data?.link,
+    ...(creative.asset_feed_spec?.link_urls || []).map((l) => l.website_url),
+    creative.link_url,
+    creative.object_url,
+  ];
+  for (const url of candidates) {
+    const host = url && normalizeHost(url);
+    // object_url is often the Facebook/Instagram post itself, not a store.
+    if (host && !/(^|\.)(facebook|instagram|fb)\.(com|me)$/.test(host)) return host;
+  }
+  return null;
+}
+
+function hostsMatch(a, b) {
+  return a === b || a.endsWith(`.${b}`) || b.endsWith(`.${a}`);
+}
+
+// Which of a Meta connection's target stores an ad belongs to — so one ad
+// account running ads for several stores (papagaj.rs, parkerolovke.rs...)
+// can be split per store for ROAS/MER. A connection that targets a single
+// store gets every ad; otherwise the ad's website link decides, and an ad
+// whose link matches none of them (or has none) returns null.
+// `stores` = the company's store connections ({ id, siteUrl }).
+function adStoreId(ad, connection, stores) {
+  const targets = connection.targetConnectionIds || [];
+  if (targets.length === 1) return targets[0];
+  if (!ad.destinationHost) return null;
+  const match = stores.find(
+    (s) => targets.includes(s.id) && normalizeHost(s.siteUrl) && hostsMatch(normalizeHost(s.siteUrl), ad.destinationHost)
+  );
+  return match ? match.id : null;
+}
+
 async function fetchAdMetaByIds(adAccountId, adIds, accessToken) {
   if (!adIds.length) return new Map();
-  const fields = "id,effective_status,adset{daily_budget,lifetime_budget,start_time,end_time},creative{object_type}";
+  const fields = `id,effective_status,adset{daily_budget,lifetime_budget,start_time,end_time},${CREATIVE_FIELDS}`;
 
   const chunks = [];
   for (let i = 0; i < adIds.length; i += 50) chunks.push(adIds.slice(i, i + 50));
@@ -216,7 +270,7 @@ async function fetchAccountAds(adAccountId, accessToken) {
   const url = new URL(`${GRAPH_API_BASE}/act_${adAccountId}/ads`);
   url.searchParams.set(
     "fields",
-    "id,name,created_time,effective_status,campaign{name},adset{daily_budget,lifetime_budget,start_time,end_time},creative{object_type}"
+    `id,name,created_time,effective_status,campaign{name},adset{daily_budget,lifetime_budget,start_time,end_time},${CREATIVE_FIELDS}`
   );
   url.searchParams.set(
     "filtering",
@@ -393,6 +447,8 @@ async function getPerformance(connection, { from, to } = {}) {
             : null;
 
       return {
+        adId: r.ad_id || null,
+        destinationHost: destinationHost(meta.creative),
         adName: r.ad_name,
         campaign: r.campaign_name,
         status: meta.effective_status === "ACTIVE" ? "active" : "inactive",
@@ -433,4 +489,4 @@ async function getPerformance(connection, { from, to } = {}) {
   return result;
 }
 
-module.exports = { listAdAccounts, testConnection, getPerformance };
+module.exports = { listAdAccounts, testConnection, getPerformance, adStoreId };
