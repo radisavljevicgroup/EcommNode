@@ -59,6 +59,13 @@ const METRICS = [
     definition:
       "Customer Acquisition Cost — prosečna cena akvizicije novog kupca (Potrošnja / Broj novih kupaca u periodu — kupac čija je prva ikad porudžbina u WooCommerce prodavnicama povezanim sa ovim oglasnim nalogom baš u ovom periodu).",
   },
+  {
+    key: "mer",
+    label: "MER",
+    format: "multiplier",
+    definition:
+      "Marketing Efficiency Ratio — ukupan prihod sajtova povezanih sa ovim oglasnim nalogom (svi kanali, ne samo Meta) podeljen ukupnom potrošnjom naloga. Ne zavisi od Meta atribucije ni piksela. Po sajtu: tabela „MER po sajtu”.",
+  },
 ];
 
 // ROAS below 1 = the campaign brought back less than it cost (by Meta's own
@@ -147,6 +154,66 @@ function TopCampaignsTable({ rows, loading, currency }) {
             <button type="button" className="btn-cancel" style={{ marginTop: 12 }} onClick={() => setShowAll((v) => !v)}>
               {showAll ? "Prikaži samo prvih 10" : `Prikaži sve (${rows.length})`}
             </button>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// MER per store: one ad account often advertises several stores — each
+// ad is tied to a store by its website link (server: meta.adStoreId), so
+// papagaj.rs' row only has papagaj.rs' revenue and ads.
+function MerByStoreTable({ rows, unattributedSpend, loading, currency }) {
+  if (rows.length < 2 && !loading) return null;
+  return (
+    <div className="chart-card">
+      <div className="chart-card-head">
+        <div>
+          <h3>MER po sajtu</h3>
+          <p className="chart-subtitle">
+            Ukupan prihod sajta (svi kanali) / potrošnja na oglase koji vode na taj sajt. ROAS = prihod koji
+            Meta pripisuje tim oglasima / ista potrošnja.
+          </p>
+        </div>
+      </div>
+      {rows.length === 0 ? (
+        <div className="empty-hint">{loading ? "Učitavanje…" : "Nema podataka."}</div>
+      ) : (
+        <>
+          <div className="orders-items-table-wrap">
+            <table className="orders-items-table">
+              <thead>
+                <tr>
+                  <th>Sajt</th>
+                  <th>Ukupan prihod</th>
+                  <th>Potrošnja</th>
+                  <th>MER</th>
+                  <th>ROAS</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  <tr key={row.connectionId}>
+                    <td className="gsc-key-cell">{siteLabel(row.siteUrl)}</td>
+                    <td>{formatKpiValue("currency", row.revenue, row.currency)}</td>
+                    <td>{formatKpiValue("currency", row.spend, currency)}</td>
+                    <td style={roasStyle(row.mer)}>
+                      {row.mer == null ? "—" : `${row.mer.toFixed(2).replace(".", ",")}×`}
+                    </td>
+                    <td style={roasStyle(row.roas)}>
+                      {row.roas == null ? "—" : `${row.roas.toFixed(2).replace(".", ",")}×`}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {unattributedSpend > 0 && (
+            <p className="chart-subtitle" style={{ marginTop: 10 }}>
+              {formatKpiValue("currency", unattributedSpend, currency)} potrošnje je na oglasima bez linka ka
+              sajtu (posete profilu, poruke…) — nije pripisano nijednom sajtu, ali ulazi u ukupan MER naloga.
+            </p>
           )}
         </>
       )}
@@ -362,6 +429,13 @@ export default function MetaAds() {
             loading={loading}
             currency={currency}
             wide
+          />
+
+          <MerByStoreTable
+            rows={data?.merByStore || []}
+            unattributedSpend={data?.unattributedSpend || 0}
+            loading={loading}
+            currency={currency}
           />
 
           <MetaTrendChart series={data?.trend || []} currency={currency} />

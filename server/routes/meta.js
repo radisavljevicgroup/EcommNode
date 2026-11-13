@@ -10,6 +10,8 @@ const {
   updateConnection,
 } = require("../lib/metaStore");
 const { getConnections: getWooConnections } = require("../lib/store");
+const { getConnections: getShopifyConnections } = require("../lib/shopifyStore");
+const fx = require("../lib/currency");
 const { getOrdersForConnections } = require("../lib/ordersCache");
 const analytics = require("../lib/analytics");
 const { startScheduler: startTokenRefreshScheduler } = require("../lib/metaAdsTokenRefresh");
@@ -178,6 +180,59 @@ router.get("/meta/performance", async (req, res) => {
     } else {
       data.totals.newCustomers = null;
       data.totals.cac = null;
+    }
+
+    // MER (Marketing Efficiency Ratio) — total revenue of the stores this
+    // ad account advertises (all channels, not just Meta-attributed) / its
+    // spend. Overall for the account, plus per store: each ad is assigned
+    // to a store by its website link (meta.adStoreId), so papagaj.rs' MER
+    // only counts papagaj.rs' ads. Ads with no website link (profile
+    // visits, messages...) only count toward the account-wide MER.
+    const targetIds = new Set(connection.targetConnectionIds || []);
+    const allStores = [...getWooConnections(req.company), ...getShopifyConnections(req.company)];
+    const targetStores = allStores.filter((c) => targetIds.has(c.id));
+    data.totals.mer = null;
+    data.merByStore = [];
+    if (targetStores.length && data.currency) {
+      const orders = await getOrdersForConnections(targetStores);
+      const periodOrders = analytics.realized(analytics.filterByRange(orders, from, to));
+      const toAccount = async (amount, currency) =>
+        fx.convert(amount, String(currency || "RSD").toUpperCase(), data.currency).catch(() => null);
+
+      const byStore = new Map(
+        targetStores.map((s) => [s.id, { connectionId: s.id, siteUrl: s.siteUrl, revenue: 0, currency: null, spend: 0, adRevenue: 0 }])
+      );
+      for (const o of periodOrders) {
+        const row = byStore.get(o.connectionId);
+        if (!row) continue;
+        row.revenue += parseFloat(o.total || 0);
+        if (!row.currency && o.currency) row.currency = String(o.currency).toUpperCase();
+      }
+      let unattributedSpend = 0;
+      for (const ad of data.allAds || []) {
+        const row = byStore.get(meta.adStoreId(ad, connection, allStores));
+        if (row) {
+          row.spend += ad.total || 0;
+          row.adRevenue += ad.revenueInAccount || 0;
+        } else {
+          unattributedSpend += ad.total || 0;
+        }
+      }
+
+      let revenueTotal = 0;
+      let revenueKnown = true;
+      for (const row of byStore.values()) {
+        // eslint-disable-next-line no-await-in-loop
+        row.revenueInAccount = await toAccount(row.revenue, row.currency);
+        if (row.revenueInAccount == null) revenueKnown = false;
+        else revenueTotal += row.revenueInAccount;
+        row.currency = row.currency || "RSD";
+        row.mer = row.revenueInAccount != null && row.spend > 0 ? row.revenueInAccount / row.spend : null;
+        row.roas = row.spend > 0 ? row.adRevenue / row.spend : null;
+      }
+      data.totals.mer = revenueKnown && data.totals.spend > 0 ? revenueTotal / data.totals.spend : null;
+      data.merByStore = [...byStore.values()].sort((a, b) => b.spend - a.spend);
+      data.unattributedSpend = unattributedSpend;
     }
 
     // Per-campaign/per-ad revenueCurrency, roas and profit come from
