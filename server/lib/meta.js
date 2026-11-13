@@ -94,7 +94,58 @@ function extractFollows(actions) {
 // call can't hold a whole page (or the home cards) open indefinitely.
 const GRAPH_TIMEOUT_MS = 30 * 1000;
 
+// Meta throttles per ad account ("There have been too many calls to this
+// ad-account", code 17 / 80004...). Seen on production 2026-11-13: every
+// call kept failing, the home page's catch swallowed it and showed 0 spend,
+// and every page load kept hitting Meta again, which keeps the limit going.
+// Once Meta says so, stop calling that account until it should have
+// recovered (Meta's own estimate when it sends one) and fail fast instead.
+const RATE_LIMIT_CODES = new Set([4, 17, 32, 613]);
+const DEFAULT_RATE_LIMIT_PAUSE_MS = 15 * 60 * 1000;
+const rateLimitedUntil = new Map(); // ad account id -> ms
+
+function accountIdFromUrl(url) {
+  const m = String(url).match(/act_(\d+)/);
+  return m ? m[1] : null;
+}
+
+function isRateLimitError(error) {
+  if (!error) return false;
+  const code = Number(error.code);
+  return RATE_LIMIT_CODES.has(code) || (code >= 80000 && code <= 80014) || /too many calls/i.test(error.message || "");
+}
+
+// Meta's estimate (minutes) from x-business-use-case-usage, if it sent one.
+function regainAccessMs(res) {
+  try {
+    const usage = JSON.parse(res.headers.get("x-business-use-case-usage") || "{}");
+    const minutes = Math.max(
+      0,
+      ...Object.values(usage)
+        .flat()
+        .map((u) => Number(u?.estimated_time_to_regain_access) || 0)
+    );
+    return minutes > 0 ? minutes * 60 * 1000 : null;
+  } catch {
+    return null;
+  }
+}
+
+function rateLimitedError(untilMs) {
+  const minutes = Math.max(1, Math.ceil((untilMs - Date.now()) / 60000));
+  const e = new Error(
+    `Meta je privremeno ograničila broj upita za ovaj oglasni nalog — podaci će se ponovo učitati za ~${minutes} min.`
+  );
+  e.status = 429;
+  e.rateLimited = true;
+  return e;
+}
+
 async function graphFetch(url) {
+  const accountId = accountIdFromUrl(url);
+  const pausedUntil = accountId ? rateLimitedUntil.get(accountId) : null;
+  if (pausedUntil && pausedUntil > Date.now()) throw rateLimitedError(pausedUntil);
+
   let res;
   try {
     res = await fetch(url, { signal: AbortSignal.timeout(GRAPH_TIMEOUT_MS) });
@@ -108,6 +159,12 @@ async function graphFetch(url) {
   }
   const data = await res.json().catch(() => ({}));
   if (!res.ok || data.error) {
+    if (accountId && isRateLimitError(data.error)) {
+      const until = Date.now() + (regainAccessMs(res) || DEFAULT_RATE_LIMIT_PAUSE_MS);
+      rateLimitedUntil.set(accountId, until);
+      console.warn(`[meta] ad account ${accountId} rate-limited until ${new Date(until).toISOString()}`);
+      throw rateLimitedError(until);
+    }
     const err = new Error(data.error?.message || `Meta API greška (HTTP ${res.status}).`);
     err.status = data.error?.code === 190 ? 401 : res.status;
     throw err;
@@ -324,6 +381,8 @@ function resolveRange({ from, to } = {}) {
 // for finished ranges, and concurrent identical calls share one promise.
 const inflight = new Map();
 
+const STALE_FALLBACK_MS = 24 * 60 * 60 * 1000;
+
 function cachedFetch(cache, kind, connection, range, fn) {
   const { since, until } = resolveRange(range);
   const key = `${kind}::${connection.id}::${since}::${until}`;
@@ -335,6 +394,12 @@ function cachedFetch(cache, kind, connection, range, fn) {
     .then((data) => {
       cache.set(key, { data, at: Date.now() });
       return data;
+    })
+    // Meta down or throttling: an expired copy of the same range beats an
+    // error (or a 0 on the home page) — kept up to STALE_FALLBACK_MS.
+    .catch((err) => {
+      if (cached && Date.now() - cached.at < STALE_FALLBACK_MS) return { ...cached.data, stale: true };
+      throw err;
     })
     .finally(() => inflight.delete(key));
   inflight.set(key, p);

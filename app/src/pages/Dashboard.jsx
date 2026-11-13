@@ -163,7 +163,7 @@ export default function Dashboard() {
             />
 
             <ComboKpiCard
-              label="Trošak oglašavanja (Meta)"
+              label={summary?.metaError ? "Trošak oglašavanja (Meta) — nedostupno" : "Trošak oglašavanja (Meta)"}
               primary={{
                 label: "Potrošnja",
                 value: loading

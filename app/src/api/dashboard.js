@@ -50,6 +50,7 @@ export async function fetchDashboardSummaryProgressive(filters, onCore) {
     roas: adsData.roas,
     mer: adsData.mer,
     adSpendUnattributed: adsData.adSpendUnattributed,
+    metaError: adsData.metaError || null,
     conversionRate: adsData.conversionRate,
   };
 }

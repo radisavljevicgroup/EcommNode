@@ -366,7 +366,11 @@ export default function ManagerHome({ onNavigate, roleName }) {
               currency={summary?.currency || "RSD"}
             />
             <QuadrantCard
-              title="Trošak oglašavanja (Meta)"
+              title={
+                summary?.metaError
+                  ? "Trošak oglašavanja (Meta) — Meta trenutno ne odgovara"
+                  : "Trošak oglašavanja (Meta)"
+              }
               metrics={META_METRICS}
               values={quadrantValues}
               loading={adsLoading}

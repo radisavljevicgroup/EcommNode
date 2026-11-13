@@ -146,6 +146,8 @@ router.get("/dashboard/summary", async (req, res) => {
       return t;
     }
 
+    let metaOk = 0;
+    let metaError = null;
     const metaCurr = { spend: 0, revenue: 0, unattributedSpend: 0 };
     const metaPrev = { spend: 0, revenue: 0, unattributedSpend: 0 };
     await Promise.all(
@@ -166,8 +168,12 @@ router.get("/dashboard/summary", async (req, res) => {
             acc.unattributedSpend += t.unattributedSpend;
           }
           if (!metaCurrency) metaCurrency = pc.currency;
-        } catch {
-          // this Meta connection's fetch failed — skip it, don't fail the summary
+          metaOk += 1;
+        } catch (err) {
+          // This Meta connection failed — skip it, don't fail the summary,
+          // but say so instead of showing 0 spend (e.g. Meta's rate limit).
+          metaError = err?.message || "Meta trenutno ne odgovara.";
+          console.warn("[dashboard] Meta:", metaError);
         }
       })
     );
@@ -266,9 +272,15 @@ router.get("/dashboard/summary", async (req, res) => {
         previous: prev.statusCounts.returned,
         changePercent: changePercent(curr.statusCounts.returned, prev.statusCounts.returned),
       },
-      adSpend: { current: spendCurr, previous: spendPrev, changePercent: changePercent(spendCurr, spendPrev) },
-      roas: { current: roasCurr, previous: roasPrev, changePercent: changePercent(roasCurr, roasPrev) },
-      mer: { current: merCurr, previous: merPrev, changePercent: changePercent(merCurr, merPrev) },
+      // Every linked Meta connection failed: no numbers rather than a 0.
+      ...(metaConnections.length && !metaOk
+        ? { adSpend: EMPTY_CHANGE, roas: EMPTY_CHANGE, mer: EMPTY_CHANGE }
+        : {
+            adSpend: { current: spendCurr, previous: spendPrev, changePercent: changePercent(spendCurr, spendPrev) },
+            roas: { current: roasCurr, previous: roasPrev, changePercent: changePercent(roasCurr, roasPrev) },
+            mer: { current: merCurr, previous: merPrev, changePercent: changePercent(merCurr, merPrev) },
+          }),
+      metaError,
       // Meta spend on ads that couldn't be tied to a selected store (no
       // website link) and so was left out of adSpend/ROAS/MER.
       adSpendUnattributed: metaCurr.unattributedSpend,
