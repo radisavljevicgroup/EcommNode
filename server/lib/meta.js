@@ -360,14 +360,258 @@ async function fetchAccountAds(adAccountId, accessToken) {
   return rows;
 }
 
-// Same reasoning as ga4.js's cache — this is called on every "Analiza
-// prodaje" / dashboard load and involves several real Graph API round
-// trips per connection, so a short cache absorbs repeated loads of the
-// same range.
-const performanceCache = new Map();
-const CACHE_TTL_MS = 5 * 60 * 1000;
-// A range that ended at least two days ago won't change any more (Meta's
-// attribution settles within a day or so) — keep it for hours, not minutes.
+// ---- Local daily store ------------------------------------------------------
+//
+// Every page used to ask Meta for its own range: the Meta Ads page (4 calls +
+// lookups), the home cards (current + previous period), anomalies, CAC, the
+// LTV/CAC alert — again for every store filter, date preset and quarter, and
+// again after every restart (in-memory cache). On 2026-11-13 that kept the ad
+// account at Meta's rate limit ("too many calls to this ad-account") for most
+// of the day.
+//
+// Now ad-level insights are kept per day on disk (server/data/
+// meta-insights.json, like orders-cache.json), and every range is computed
+// locally from them. Meta is only asked for:
+//   - days never fetched yet (once — a range older than what's stored), and
+//   - the last RECENT_DAYS days, at most every RECENT_REFRESH_MS (Meta's
+//     attribution keeps changing for a day or two),
+// plus ad details (status/budget: hourly, Meta Ads page only; website link:
+// once per ad) and unique reach for the Meta Ads page's range (cached).
+// While Meta is throttling, everything is served from what's stored.
+
+const { createJsonFile } = require("./jsonFile");
+
+const insightsFile = createJsonFile("meta-insights.json", {});
+let store = insightsFile.read();
+
+const RECENT_DAYS = 3;
+const RECENT_REFRESH_MS = 30 * 60 * 1000;
+// A request for a period whose recent days are stale waits this long for the
+// refresh, then answers from what's stored (the refresh still lands).
+const RECENT_WAIT_MS = 8000;
+// Longest window asked for in one call — a year of daily ad rows in one go is
+// what Meta answers slowest.
+const FETCH_CHUNK_DAYS = 92;
+const AD_DETAILS_TTL_MS = 60 * 60 * 1000;
+
+let writeTimer = null;
+function saveStore() {
+  // Several chunks/refreshes can land within moments — write once.
+  if (writeTimer) return;
+  writeTimer = setTimeout(() => {
+    writeTimer = null;
+    insightsFile.write(store);
+  }, 500);
+}
+
+function account(connection) {
+  const id = String(connection.adAccountId);
+  if (!store[id]) store[id] = { from: null, to: null, recentAt: null, days: {}, ads: {} };
+  return store[id];
+}
+
+function addDays(dateStr, n) {
+  const d = new Date(`${dateStr}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return isoDate(d);
+}
+
+function eachDay(since, until, fn) {
+  for (let d = since; d <= until; d = addDays(d, 1)) fn(d);
+}
+
+// One request at a time per ad account, in order — several pages loading at
+// once otherwise fire their calls in parallel bursts.
+const accountLocks = new Map();
+function withAccountLock(connection, fn) {
+  const id = String(connection.adAccountId);
+  const prev = accountLocks.get(id) || Promise.resolve();
+  const run = prev.catch(() => {}).then(fn);
+  accountLocks.set(id, run.catch(() => {}));
+  return run;
+}
+
+function compactRow(r) {
+  return {
+    ad: r.ad_id || null,
+    name: r.ad_name || null,
+    cid: r.campaign_id || null,
+    campaign: r.campaign_name || null,
+    spend: toNumber(r.spend),
+    impr: toNumber(r.impressions),
+    clicks: toNumber(r.clicks),
+    purch: extractPurchases(r.actions),
+    value: extractPurchaseRevenue(r.action_values),
+    follows: extractFollows(r.actions),
+  };
+}
+
+// Fetches [since, until] day by day at ad level and replaces those days in
+// the store (a day with no rows is stored as [] — "fetched, nothing ran").
+async function fetchDays(connection, since, until) {
+  const acct = account(connection);
+  for (let start = since; start <= until; start = addDays(start, FETCH_CHUNK_DAYS)) {
+    const end = addDays(start, FETCH_CHUNK_DAYS - 1) < until ? addDays(start, FETCH_CHUNK_DAYS - 1) : until;
+    // eslint-disable-next-line no-await-in-loop
+    const rows = await fetchInsights(connection.adAccountId, connection.accessToken, {
+      time_range: JSON.stringify({ since: start, until: end }),
+      time_increment: 1,
+      fields: "ad_id,ad_name,campaign_id,campaign_name,spend,impressions,clicks,actions,action_values",
+      level: "ad",
+    });
+    const byDay = {};
+    eachDay(start, end, (d) => {
+      byDay[d] = [];
+    });
+    rows.forEach((r) => {
+      if (byDay[r.date_start]) byDay[r.date_start].push(compactRow(r));
+    });
+    Object.assign(acct.days, byDay);
+    if (!acct.from || start < acct.from) acct.from = start;
+    if (!acct.to || end > acct.to) acct.to = end;
+    // A fetch that reached today already is a fresh recent refresh.
+    if (end >= todayStr() && start <= addDays(todayStr(), -(RECENT_DAYS - 1))) acct.recentAt = new Date().toISOString();
+    saveStore();
+  }
+}
+
+function todayStr() {
+  return isoDate(new Date());
+}
+
+// Days of [since, until] never fetched — at most two spans (before and after
+// what's stored), since the store always grows as one contiguous range.
+function missingSpans(acct, since, until) {
+  const today = todayStr();
+  const end = until > today ? today : until;
+  if (since > end) return [];
+  if (!acct.from) return [[since, end]];
+  const spans = [];
+  if (since < acct.from) spans.push([since, addDays(acct.from, -1) < end ? addDays(acct.from, -1) : end]);
+  if (end > acct.to) spans.push([addDays(acct.to, 1) > since ? addDays(acct.to, 1) : since, end]);
+  return spans;
+}
+
+const recentInflight = new Map();
+function refreshRecent(connection) {
+  const id = String(connection.adAccountId);
+  if (recentInflight.has(id)) return recentInflight.get(id);
+  const p = withAccountLock(connection, async () => {
+    const acct = account(connection);
+    if (acct.recentAt && Date.now() - Date.parse(acct.recentAt) < RECENT_REFRESH_MS) return;
+    const today = todayStr();
+    await fetchDays(connection, addDays(today, -(RECENT_DAYS - 1)), today);
+    acct.recentAt = new Date().toISOString();
+    saveStore();
+  }).finally(() => recentInflight.delete(id));
+  recentInflight.set(id, p);
+  return p;
+}
+
+// Stored ad rows for [since, until] (one entry per ad per day). Fetches only
+// what isn't stored; a failed fetch (rate limit...) still answers from the
+// store if it has anything for the range, otherwise throws.
+async function dailyRows(connection, range) {
+  const { since, until } = resolveRange(range);
+  const acct = account(connection);
+
+  const spans = missingSpans(acct, since, until);
+  if (spans.length) {
+    try {
+      await withAccountLock(connection, async () => {
+        // Re-check inside the lock: another request may have just fetched them.
+        for (const [s, e] of missingSpans(account(connection), since, until)) {
+          // eslint-disable-next-line no-await-in-loop
+          await fetchDays(connection, s, e);
+        }
+      });
+    } catch (err) {
+      const anyStored = acct.from && acct.from <= until && acct.to >= since;
+      if (!anyStored) throw err;
+      console.warn("[meta] serving stored insights, fetch failed:", err.message);
+    }
+  }
+
+  if (until >= addDays(todayStr(), -(RECENT_DAYS - 1))) {
+    const refresh = refreshRecent(connection).catch((err) =>
+      console.warn("[meta] recent insights refresh failed:", err.message)
+    );
+    await Promise.race([refresh, new Promise((resolve) => setTimeout(resolve, RECENT_WAIT_MS))]);
+  }
+
+  const out = [];
+  eachDay(since, until, (d) => {
+    (account(connection).days[d] || []).forEach((row) => out.push({ date: d, ...row }));
+  });
+  return out;
+}
+
+// Ad details: website link (never changes — fetched once per ad) and, for
+// the Meta Ads page, status / adset budget & schedule / creative type, plus
+// every listed-status ad of the account (the not-yet-delivered ones), at most
+// hourly. Stored with the insights so a restart doesn't refetch them.
+async function adDetails(connection, adIds, { full = false } = {}) {
+  const acct = account(connection);
+  const ads = acct.ads || (acct.ads = {});
+  try {
+    await withAccountLock(connection, async () => {
+      if (full && (!acct.adsListAt || Date.now() - Date.parse(acct.adsListAt) > AD_DETAILS_TTL_MS)) {
+        const listed = await fetchAccountAds(connection.adAccountId, connection.accessToken);
+        const at = new Date().toISOString();
+        listed.forEach((ad) => {
+          ads[ad.id] = { ...ads[ad.id], ...ad, at };
+        });
+        acct.listedAdIds = listed.map((ad) => ad.id);
+        acct.adsListAt = at;
+        saveStore();
+      }
+      const missing = adIds.filter((id) => {
+        const a = ads[id];
+        if (!a || a.creative === undefined) return true;
+        return full && (!a.at || Date.now() - Date.parse(a.at) > AD_DETAILS_TTL_MS);
+      });
+      if (missing.length) {
+        const fetched = await fetchAdMetaByIds(connection.adAccountId, missing, connection.accessToken);
+        const at = new Date().toISOString();
+        missing.forEach((id) => {
+          // Not returned (deleted ad) — remember that, so it isn't asked again.
+          ads[id] = { ...ads[id], ...(fetched.get(id) || {}), creative: fetched.get(id)?.creative || ads[id]?.creative || null, at };
+        });
+        saveStore();
+      }
+    });
+  } catch (err) {
+    console.warn("[meta] ad details from store, fetch failed:", err.message);
+  }
+  return ads;
+}
+
+// Unique reach per ad can't be summed from days — the Meta Ads page asks for
+// its range once and keeps it (finished ranges for hours).
+const reachCache = new Map();
+async function reachByAd(connection, range) {
+  const { since, until } = resolveRange(range);
+  const key = `${connection.adAccountId}::${since}::${until}`;
+  const ttl = until < addDays(todayStr(), -2) ? PAST_RANGE_CACHE_TTL_MS : RECENT_REFRESH_MS;
+  const cached = reachCache.get(key);
+  if (cached && Date.now() - cached.at < ttl) return cached.map;
+  try {
+    const rows = await withAccountLock(connection, () =>
+      fetchInsights(connection.adAccountId, connection.accessToken, {
+        time_range: JSON.stringify({ since, until }),
+        fields: "ad_id,reach",
+        level: "ad",
+      })
+    );
+    const map = new Map(rows.map((r) => [r.ad_id, toNumber(r.reach)]));
+    reachCache.set(key, { map, at: Date.now() });
+    return map;
+  } catch (err) {
+    console.warn("[meta] reach unavailable:", err.message);
+    return cached?.map || null;
+  }
+}
+
 const PAST_RANGE_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 
 function resolveRange({ from, to } = {}) {
@@ -376,121 +620,37 @@ function resolveRange({ from, to } = {}) {
   return { startDate, endDate, since: isoDate(startDate), until: isoDate(endDate) };
 }
 
-// Shared by every Meta fetch below: cache keyed by calendar dates (callers
-// pass "now" with milliseconds, which made every call a miss), longer TTL
-// for finished ranges, and concurrent identical calls share one promise.
-const inflight = new Map();
-
-const STALE_FALLBACK_MS = 24 * 60 * 60 * 1000;
-
-function cachedFetch(cache, kind, connection, range, fn) {
-  const { since, until } = resolveRange(range);
-  const key = `${kind}::${connection.id}::${since}::${until}`;
-  const ttl = until < isoDate(new Date(Date.now() - 2 * DAY_MS)) ? PAST_RANGE_CACHE_TTL_MS : CACHE_TTL_MS;
-  const cached = cache.get(key);
-  if (cached && Date.now() - cached.at < ttl) return Promise.resolve(cached.data);
-  if (inflight.has(key)) return inflight.get(key);
-  const p = fn()
-    .then((data) => {
-      cache.set(key, { data, at: Date.now() });
-      return data;
-    })
-    // Meta down or throttling: an expired copy of the same range beats an
-    // error (or a 0 on the home page) — kept up to STALE_FALLBACK_MS.
-    .catch((err) => {
-      if (cached && Date.now() - cached.at < STALE_FALLBACK_MS) return { ...cached.data, stale: true };
-      throw err;
-    })
-    .finally(() => inflight.delete(key));
-  inflight.set(key, p);
-  return p;
+function sumBy(rows, keyFn) {
+  const map = new Map();
+  rows.forEach((r) => {
+    const key = keyFn(r);
+    const acc = map.get(key) || { spend: 0, impr: 0, clicks: 0, purch: 0, value: 0, follows: 0, first: r };
+    acc.spend += r.spend;
+    acc.impr += r.impr;
+    acc.clicks += r.clicks;
+    acc.purch += r.purch;
+    acc.value += r.value;
+    acc.follows += r.follows;
+    map.set(key, acc);
+  });
+  return map;
 }
 
-function getPerformance(connection, range = {}) {
-  return cachedFetch(performanceCache, "perf", connection, range, () => fetchPerformance(connection, range));
-}
+async function getPerformance(connection, range = {}) {
+  const { startDate, endDate, since, until } = resolveRange(range);
+  const rows = await dailyRows(connection, range);
 
-async function fetchPerformance(connection, { from, to } = {}) {
-  const { accessToken, adAccountId } = connection;
-
-  const { startDate, endDate } = resolveRange({ from, to });
-  const timeRange = JSON.stringify({ since: isoDate(startDate), until: isoDate(endDate) });
-
-  const [dailyRows, campaignRows, insightAdRows, accountAds] = await Promise.all([
-    fetchInsights(adAccountId, accessToken, {
-      time_range: timeRange,
-      time_increment: 1,
-      fields: "spend,impressions,clicks,actions",
-      level: "account",
-    }),
-    fetchInsights(adAccountId, accessToken, {
-      time_range: timeRange,
-      fields: "campaign_id,campaign_name,spend,impressions,clicks,actions,action_values",
-      level: "campaign",
-      limit: 100,
-    }),
-    fetchInsights(adAccountId, accessToken, {
-      time_range: timeRange,
-      fields: "ad_id,ad_name,campaign_name,spend,impressions,clicks,reach,actions,action_values",
-      level: "ad",
-    }),
-    // Non-fatal: if this extra lookup fails, still show what insights has
-    // rather than failing the whole page.
-    fetchAccountAds(adAccountId, accessToken).catch((err) => {
-      console.warn("[meta] fetchAccountAds failed:", err.message);
-      return [];
-    }),
-  ]);
-
-  const insightIds = new Set(insightAdRows.map((r) => r.ad_id).filter(Boolean));
-  const rangeStartMs = new Date(isoDate(startDate)).getTime();
-  const rangeEndMs = new Date(isoDate(endDate)).getTime() + DAY_MS;
-  const undeliveredAds = accountAds.filter((ad) => {
-    if (insightIds.has(ad.id)) return false;
-    const created = ad.created_time ? new Date(ad.created_time).getTime() : null;
-    if (created != null && created >= rangeEndMs) return false;
-    if (ALWAYS_SHOWN_STATUSES.has(ad.effective_status)) return true;
-    return created != null && created >= rangeStartMs;
+  const byDay = sumBy(rows, (r) => r.date);
+  const trend = [];
+  eachDay(since, until > todayStr() ? todayStr() : until, (d) => {
+    const t = byDay.get(d);
+    if (t) trend.push({ date: d, spend: t.spend, impressions: t.impr, clicks: t.clicks, purchases: t.purch });
   });
-
-  const adRows = insightAdRows.concat(
-    undeliveredAds.map((ad) => ({
-      ad_id: ad.id,
-      ad_name: ad.name,
-      campaign_name: ad.campaign?.name || null,
-      spend: 0,
-      impressions: 0,
-      clicks: 0,
-      reach: 0,
-      actions: [],
-      action_values: [],
-    }))
-  );
-
-  const adIds = [...insightIds];
-  const adMetaById = await fetchAdMetaByIds(adAccountId, adIds, accessToken);
-  // The /ads lookup already carries status/adset/creative — reuse it so
-  // undelivered ads (and any delivered ad the ID-filter lookup missed)
-  // still get Status / Početak / Cena po danu filled in.
-  accountAds.forEach((ad) => {
-    if (!adMetaById.has(ad.id)) adMetaById.set(ad.id, ad);
-  });
-
-  const trend = dailyRows
-    .map((r) => ({
-      date: r.date_start,
-      spend: toNumber(r.spend),
-      impressions: toNumber(r.impressions),
-      clicks: toNumber(r.clicks),
-      purchases: extractPurchases(r.actions),
-    }))
-    .sort((a, b) => (a.date < b.date ? -1 : 1));
 
   const totalSpend = trend.reduce((s, r) => s + r.spend, 0);
   const totalImpressions = trend.reduce((s, r) => s + r.impressions, 0);
   const totalClicks = trend.reduce((s, r) => s + r.clicks, 0);
   const totalPurchases = trend.reduce((s, r) => s + r.purchases, 0);
-
   const totals = {
     spend: totalSpend,
     impressions: totalImpressions,
@@ -501,222 +661,180 @@ async function fetchPerformance(connection, { from, to } = {}) {
     cpa: totalPurchases > 0 ? totalSpend / totalPurchases : 0,
   };
 
-  // Every campaign that spent in the period (not just a top 10) so the page
-  // can compare them side by side when moving budget. Revenue is in the
-  // store's currency, like the per-ad revenue below; ROAS is computed by
-  // the caller, which can convert it into the ad account's currency.
-  const topCampaigns = campaignRows
-    .map((r) => {
-      const spend = toNumber(r.spend);
-      const purchases = extractPurchases(r.actions);
-      return {
-        campaignId: r.campaign_id || null,
-        campaign: r.campaign_name,
-        spend,
-        impressions: toNumber(r.impressions),
-        clicks: toNumber(r.clicks),
-        purchases,
-        revenue: extractPurchaseRevenue(r.action_values),
-        cpa: purchases > 0 ? spend / purchases : null,
-      };
-    })
+  const currency = connection.currency || null;
+  const rsdPerEur = await fx.getRsdPerEur();
+
+  // Every campaign that spent in the period, so the page can compare them
+  // side by side when moving budget.
+  const topCampaigns = [...sumBy(rows, (r) => r.cid || r.campaign || "").values()]
+    .map((c) => ({
+      campaignId: c.first.cid,
+      campaign: c.first.campaign,
+      spend: c.spend,
+      impressions: c.impr,
+      clicks: c.clicks,
+      purchases: c.purch,
+      revenue: c.value,
+      cpa: c.purch > 0 ? c.spend / c.purch : null,
+    }))
     .filter((c) => c.spend > 0)
-    .sort((a, b) => b.spend - a.spend);
+    .sort((a, b) => b.spend - a.spend)
+    .map((c) => withRevenueCurrency(c, c.spend, currency, rsdPerEur));
 
-  const allAds = adRows
-    .map((r) => {
-      const spend = toNumber(r.spend);
-      const impressions = toNumber(r.impressions);
-      const clicks = toNumber(r.clicks);
-      const reach = toNumber(r.reach);
-      const follows = extractFollows(r.actions);
-      const purchases = extractPurchases(r.actions);
-      // Meta reports purchase VALUE in whatever currency the pixel/CAPI
-      // event fired with (the store's own currency), not the ad account's
-      // billing currency — profit (which needs both in the same unit) is
-      // computed by the caller, which knows the store's actual currency.
-      const revenue = extractPurchaseRevenue(r.action_values);
+  const byAd = sumBy(rows, (r) => r.ad);
+  const deliveredIds = [...byAd.keys()].filter(Boolean);
+  const [ads, reach] = await Promise.all([
+    adDetails(connection, deliveredIds, { full: true }),
+    reachByAd(connection, range),
+  ]);
 
-      const meta = adMetaById.get(r.ad_id) || {};
+  // /insights only has ads that delivered — add the account's current ads
+  // that haven't (in review, scheduled...) with zero metrics.
+  const rangeStartMs = new Date(since).getTime();
+  const rangeEndMs = new Date(until).getTime() + DAY_MS;
+  const undelivered = (account(connection).listedAdIds || [])
+    .filter((id) => !byAd.has(id))
+    .map((id) => ads[id])
+    .filter((ad) => {
+      if (!ad) return false;
+      const created = ad.created_time ? new Date(ad.created_time).getTime() : null;
+      if (created != null && created >= rangeEndMs) return false;
+      if (ALWAYS_SHOWN_STATUSES.has(ad.effective_status)) return true;
+      return created != null && created >= rangeStartMs;
+    });
+
+  const adEntries = [
+    ...[...byAd.entries()].map(([id, a]) => ({ id, a, name: a.first.name, campaign: a.first.campaign })),
+    ...undelivered.map((ad) => ({
+      id: ad.id,
+      a: { spend: 0, impr: 0, clicks: 0, purch: 0, value: 0, follows: 0 },
+      name: ad.name,
+      campaign: ad.campaign?.name || null,
+    })),
+  ];
+
+  const allAds = adEntries
+    .map(({ id, a, name, campaign }) => {
+      const meta = ads[id] || {};
       const adset = meta.adset || {};
       const start = adset.start_time || null;
       const end = adset.end_time || null;
       // Still-running ads have no end_time — count elapsed days up to now.
-      const days = start
-        ? Math.max(1, Math.ceil((new Date(end || Date.now()) - new Date(start)) / DAY_MS))
-        : null;
+      const days = start ? Math.max(1, Math.ceil((new Date(end || Date.now()) - new Date(start)) / DAY_MS)) : null;
       // Meta returns budgets in the account's minor currency unit (cents).
-      // Campaigns using a lifetime (not daily) budget have no daily_budget
-      // at all — approximate a daily figure by spreading it over the run.
+      // Lifetime budgets are spread over the run for a daily figure.
       const dailyBudget =
         adset.daily_budget != null
           ? toNumber(adset.daily_budget) / 100
           : adset.lifetime_budget != null && days
             ? toNumber(adset.lifetime_budget) / 100 / days
             : null;
-
-      return {
-        adId: r.ad_id || null,
-        destinationHost: destinationHost(meta.creative),
-        adName: r.ad_name,
-        campaign: r.campaign_name,
-        status: meta.effective_status === "ACTIVE" ? "active" : "inactive",
-        start,
-        pricePerDay: dailyBudget,
-        days,
-        total: spend,
-        adType: meta.creative?.object_type || null,
-        reach,
-        impressions,
-        clicks,
-        follows,
-        purchases,
-        revenue,
-        ctr: impressions > 0 ? (clicks / impressions) * 100 : 0,
-        cpc: clicks > 0 ? spend / clicks : 0,
-        // null (not 0) when there were no follows/purchases — 0 would read
-        // as "free acquisition" instead of "not applicable here".
-        cpf: follows > 0 ? spend / follows : null,
-        cpa: purchases > 0 ? spend / purchases : null,
-      };
+      const spend = a.spend;
+      return withRevenueCurrency(
+        {
+          adId: id || null,
+          destinationHost: destinationHost(meta.creative),
+          adName: name,
+          campaign,
+          status: meta.effective_status === "ACTIVE" ? "active" : "inactive",
+          start,
+          pricePerDay: dailyBudget,
+          days,
+          total: spend,
+          adType: meta.creative?.object_type || null,
+          // null when Meta couldn't be asked for this range's unique reach.
+          reach: reach ? reach.get(id) ?? 0 : null,
+          impressions: a.impr,
+          clicks: a.clicks,
+          follows: a.follows,
+          purchases: a.purch,
+          revenue: a.value,
+          ctr: a.impr > 0 ? (a.clicks / a.impr) * 100 : 0,
+          cpc: a.clicks > 0 ? spend / a.clicks : 0,
+          // null (not 0) when there were no follows/purchases — 0 would read
+          // as "free acquisition" instead of "not applicable here".
+          cpf: a.follows > 0 ? spend / a.follows : null,
+          cpa: a.purch > 0 ? spend / a.purch : null,
+        },
+        spend,
+        currency,
+        rsdPerEur
+      );
     })
-    .sort((a, b) => b.total - a.total);
+    .sort((x, y) => y.total - x.total);
 
-  const currency = connection.currency || null;
-  const rsdPerEur = await fx.getRsdPerEur();
-  const result = {
+  return {
     dateRange: { startDate: isoDate(startDate), endDate: isoDate(endDate) },
     currency,
     totals,
     trend,
-    topCampaigns: topCampaigns.map((c) =>
-      withRevenueCurrency(c, c.spend, currency, rsdPerEur)
-    ),
-    allAds: allAds.map((ad) => withRevenueCurrency(ad, ad.total, currency, rsdPerEur)),
+    topCampaigns,
+    allAds,
   };
-  return result;
 }
 
-// ---- Light variants for pages that only need totals ------------------------
-//
-// getPerformance is built for the Meta Ads page: daily trend, every campaign,
-// every ad with budget/schedule, plus every paused or not-yet-delivered ad of
-// the account. The home cards, anomalies and CAC only need spend (and, per ad,
-// purchase value and website link) — on a year-long range the full call took
-// ~80s on production (2026-11-13), and the home page asked for it twice.
-
-const spendCache = new Map();
-const adSummaryCache = new Map();
-
-// Account spend per day (and total) — one insights call. Same `totals.spend`
-// / `trend[].spend` shape as getPerformance, for CAC.
-function getSpendTotals(connection, range = {}) {
-  return cachedFetch(spendCache, "spend", connection, range, async () => {
-    const { since, until } = resolveRange(range);
-    const rows = await fetchInsights(connection.adAccountId, connection.accessToken, {
-      time_range: JSON.stringify({ since, until }),
-      time_increment: 1,
-      fields: "spend",
-      level: "account",
-    });
-    const trend = rows
-      .map((r) => ({ date: r.date_start, spend: toNumber(r.spend) }))
-      .sort((a, b) => (a.date < b.date ? -1 : 1));
-    return {
-      dateRange: { startDate: since, endDate: until },
-      currency: connection.currency || null,
-      totals: { spend: trend.reduce((sum, r) => sum + r.spend, 0) },
-      trend,
-    };
-  });
-}
-
-// An ad's website link never changes after it's created — looked up once per
-// ad and kept, instead of on every summary.
-const CREATIVE_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
-const creativeCache = new Map(); // adId -> { at, creative }
-
-async function creativesFor(connection, adIds) {
-  const missing = adIds.filter((id) => {
-    const c = creativeCache.get(id);
-    return !c || Date.now() - c.at > CREATIVE_CACHE_TTL_MS;
-  });
-  const chunks = [];
-  for (let i = 0; i < missing.length; i += 50) chunks.push(missing.slice(i, i + 50));
-  await Promise.all(
-    chunks.map(async (chunk) => {
-      const url = new URL(`${GRAPH_API_BASE}/act_${connection.adAccountId}/ads`);
-      url.searchParams.set("fields", `id,${CREATIVE_FIELDS}`);
-      url.searchParams.set("filtering", JSON.stringify([{ field: "id", operator: "IN", value: chunk }]));
-      url.searchParams.set("limit", "50");
-      url.searchParams.set("access_token", connection.accessToken);
-      const data = await graphFetch(url.toString());
-      const at = Date.now();
-      // Ads missing from the answer still get an entry, so they aren't asked for again.
-      chunk.forEach((id) => creativeCache.set(id, { at, creative: null }));
-      (data.data || []).forEach((row) => creativeCache.set(row.id, { at, creative: row.creative || null }));
-    })
-  );
-  return new Map(adIds.map((id) => [id, creativeCache.get(id)?.creative || null]));
+// Account spend per day (and total), for CAC / anomalies — from the store.
+async function getSpendTotals(connection, range = {}) {
+  const { since, until } = resolveRange(range);
+  const rows = await dailyRows(connection, range);
+  const byDay = sumBy(rows, (r) => r.date);
+  const trend = [...byDay.entries()]
+    .map(([date, t]) => ({ date, spend: t.spend }))
+    .sort((a, b) => (a.date < b.date ? -1 : 1));
+  return {
+    dateRange: { startDate: since, endDate: until },
+    currency: connection.currency || null,
+    totals: { spend: trend.reduce((sum, r) => sum + r.spend, 0) },
+    trend,
+  };
 }
 
 // Ads that spent in the range: spend, purchases, purchase value (in the ad
-// account's currency, as getPerformance's revenueInAccount) and website link
-// (so adStoreId can split one account between stores), plus spend/purchases
-// per campaign for the CPA-spike anomaly. One insights call + a cached link
-// lookup. Same field names as getPerformance's allAds/topCampaigns.
-function getAdSummary(connection, range = {}) {
-  return cachedFetch(adSummaryCache, "ads", connection, range, async () => {
-    const { since, until } = resolveRange(range);
-    const rows = await fetchInsights(connection.adAccountId, connection.accessToken, {
-      time_range: JSON.stringify({ since, until }),
-      fields: "ad_id,campaign_name,spend,actions,action_values",
-      level: "ad",
-    });
-    const adIds = [...new Set(rows.map((r) => r.ad_id).filter(Boolean))];
-    const creatives = await creativesFor(connection, adIds).catch((err) => {
-      console.warn("[meta] creative lookup failed:", err.message);
-      return new Map();
-    });
+// account's currency) and website link (so adStoreId can split one account
+// between stores), plus spend/purchases per campaign for the CPA-spike
+// anomaly. From the store; only never-seen ads' links are fetched.
+async function getAdSummary(connection, range = {}) {
+  const { since, until } = resolveRange(range);
+  const rows = await dailyRows(connection, range);
+  const byAd = sumBy(rows, (r) => r.ad);
+  const ads = await adDetails(connection, [...byAd.keys()].filter(Boolean));
 
-    const currency = connection.currency || null;
-    const rsdPerEur = await fx.getRsdPerEur();
-    const allAds = rows
-      .map((r) => {
-        const total = toNumber(r.spend);
-        return withRevenueCurrency(
-          {
-            adId: r.ad_id || null,
-            destinationHost: destinationHost(creatives.get(r.ad_id)),
-            campaign: r.campaign_name,
-            total,
-            purchases: extractPurchases(r.actions),
-            revenue: extractPurchaseRevenue(r.action_values),
-          },
-          total,
-          currency,
-          rsdPerEur
-        );
-      })
-      .sort((a, b) => b.total - a.total);
+  const currency = connection.currency || null;
+  const rsdPerEur = await fx.getRsdPerEur();
+  const allAds = [...byAd.entries()]
+    .map(([id, a]) =>
+      withRevenueCurrency(
+        {
+          adId: id || null,
+          destinationHost: destinationHost(ads[id]?.creative),
+          campaign: a.first.campaign,
+          total: a.spend,
+          purchases: a.purch,
+          revenue: a.value,
+        },
+        a.spend,
+        currency,
+        rsdPerEur
+      )
+    )
+    .sort((x, y) => y.total - x.total);
 
-    const byCampaign = new Map();
-    allAds.forEach((ad) => {
-      const key = ad.campaign || "";
-      if (!byCampaign.has(key)) byCampaign.set(key, { campaign: ad.campaign, spend: 0, purchases: 0 });
-      const c = byCampaign.get(key);
-      c.spend += ad.total;
-      c.purchases += ad.purchases;
-    });
-
-    return {
-      dateRange: { startDate: since, endDate: until },
-      currency,
-      totals: { spend: allAds.reduce((sum, ad) => sum + ad.total, 0) },
-      allAds,
-      topCampaigns: [...byCampaign.values()].filter((c) => c.spend > 0).sort((a, b) => b.spend - a.spend),
-    };
+  const byCampaign = new Map();
+  allAds.forEach((ad) => {
+    const key = ad.campaign || "";
+    if (!byCampaign.has(key)) byCampaign.set(key, { campaign: ad.campaign, spend: 0, purchases: 0 });
+    const c = byCampaign.get(key);
+    c.spend += ad.total;
+    c.purchases += ad.purchases;
   });
+
+  return {
+    dateRange: { startDate: since, endDate: until },
+    currency,
+    totals: { spend: allAds.reduce((sum, ad) => sum + ad.total, 0) },
+    allAds,
+    topCampaigns: [...byCampaign.values()].filter((c) => c.spend > 0).sort((a, b) => b.spend - a.spend),
+  };
 }
 
 module.exports = { listAdAccounts, testConnection, getPerformance, getSpendTotals, getAdSummary, adStoreId };
