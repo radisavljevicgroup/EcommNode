@@ -100,7 +100,7 @@ export default function ItAdminHome() {
     }
     let cancelled = false;
     setLoading(true);
-    fetchDashboardSummaryForRange({ connectionIds: selectedIds, from, to })
+    fetchDashboardSummaryForRange({ connectionIds: selectedIds, from, to, parts: "core" })
       .then((s) => {
         if (!cancelled) setSummary(s);
       })

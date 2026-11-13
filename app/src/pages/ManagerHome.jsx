@@ -10,7 +10,7 @@ import {
 } from "recharts";
 import { fetchWooStatus } from "../api/woocommerce";
 import { fetchShopifyStatus } from "../api/shopify";
-import { fetchDashboardSummaryForRange } from "../api/dashboard";
+import { fetchDashboardSummaryProgressive } from "../api/dashboard";
 import { fetchAnalyticsTrends, fetchTopProducts, fetchGeoDistribution } from "../api/analytics";
 import { fetchGa4Status, fetchGa4Performance } from "../api/ga4";
 import { fetchGscStatus, fetchGscPerformance } from "../api/gsc";
@@ -149,6 +149,10 @@ export default function ManagerHome({ onNavigate, roleName }) {
   const [range, setRange] = useState(YEAR_PRESET.range);
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
+  // The order cards come from the fast "core" summary; the Meta card waits
+  // for the slower "ads" half (Meta + GA4) on its own.
+  const [summaryLoading, setSummaryLoading] = useState(true);
+  const [adsLoading, setAdsLoading] = useState(true);
 
   const [trends, setTrends] = useState(null);
   const [geo, setGeo] = useState(null);
@@ -220,21 +224,38 @@ export default function ManagerHome({ onNavigate, roleName }) {
       setGeo([]);
       setCategories([]);
       setLoading(false);
+      setSummaryLoading(false);
+      setAdsLoading(false);
       return undefined;
     }
     let cancelled = false;
     setLoading(true);
+    setSummaryLoading(true);
+    setAdsLoading(true);
     const filters = { connectionIds: selectedIds, from, to };
 
+    fetchDashboardSummaryProgressive(filters, (core) => {
+      if (cancelled) return;
+      setSummary(core);
+      setSummaryLoading(false);
+    })
+      .then((full) => {
+        if (!cancelled) setSummary(full);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (cancelled) return;
+        setSummaryLoading(false);
+        setAdsLoading(false);
+      });
+
     Promise.all([
-      fetchDashboardSummaryForRange(filters),
       fetchAnalyticsTrends(filters),
       fetchGeoDistribution(filters),
       fetchTopProducts({ ...filters, sortBy: "revenue" }),
     ])
-      .then(([s, t, g, p]) => {
+      .then(([t, g, p]) => {
         if (cancelled) return;
-        setSummary(s);
         setTrends(t);
         setGeo(g);
         setCategories(p.categories || []);
@@ -334,28 +355,28 @@ export default function ManagerHome({ onNavigate, roleName }) {
               title="Porudžbine i prosečna vrednost korpe"
               metrics={ORDER_METRICS}
               values={quadrantValues}
-              loading={loading}
+              loading={summaryLoading}
               currency={summary?.currency || "RSD"}
             />
             <QuadrantCard
               title="Ukupan prihod"
               metrics={REVENUE_METRICS}
               values={quadrantValues}
-              loading={loading}
+              loading={summaryLoading}
               currency={summary?.currency || "RSD"}
             />
             <QuadrantCard
               title="Trošak oglašavanja (Meta)"
               metrics={META_METRICS}
               values={quadrantValues}
-              loading={loading}
+              loading={adsLoading}
               currency={summary?.currency || "RSD"}
             />
             <QuadrantCard
               title="Poslate / dostavljene / vraćene"
               metrics={LOGISTICS_METRICS}
               values={quadrantValues}
-              loading={loading}
+              loading={summaryLoading}
             />
           </div>
 

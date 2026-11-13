@@ -102,8 +102,8 @@ async function detectCpaSpikes({ from, to, prevFrom, prevTo, storeConnections, c
     metaConnections.map(async (m) => {
       try {
         const [perfCurr, perfPrev] = await Promise.all([
-          meta.getPerformance(m, { from, to }),
-          meta.getPerformance(m, { from: prevFrom, to: prevTo }),
+          meta.getAdSummary(m, { from, to }),
+          meta.getAdSummary(m, { from: prevFrom, to: prevTo }),
         ]);
         const prevByCampaign = new Map(perfPrev.topCampaigns.map((c) => [c.campaign, c]));
 

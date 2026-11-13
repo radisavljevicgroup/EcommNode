@@ -134,7 +134,8 @@ export default function RestrictedHome({ secondChart = "yoy", roleName }) {
     const filters = { connectionIds: selectedIds, from, to };
 
     Promise.all([
-      fetchDashboardSummaryForRange(filters),
+      // Only order/logistics cards here — Meta/GA4 aren't needed.
+      fetchDashboardSummaryForRange({ ...filters, parts: "core" }),
       fetchAnalyticsTrends(filters),
       secondChart === "geo" ? fetchGeoDistribution(filters) : Promise.resolve([]),
     ])

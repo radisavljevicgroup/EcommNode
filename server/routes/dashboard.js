@@ -92,8 +92,19 @@ function resolveStoreConnections(query, company) {
   return query.connectionId ? all.filter((c) => c.id === query.connectionId) : all;
 }
 
+// parts=core  → orders/revenue/logistics only (from the local orders cache,
+//               answers at once);
+// parts=ads   → Meta spend/ROAS/MER + conversion rate (Meta and GA4, can
+//               take a while on long ranges);
+// (omitted)   → both, as before.
+// The home pages ask for core and ads separately so the order cards don't
+// wait for Meta/GA4; ad fields in a core-only answer are null.
+const EMPTY_CHANGE = { current: null, previous: null, changePercent: null };
+
 router.get("/dashboard/summary", async (req, res) => {
   const { from, to, prevFrom, prevTo } = resolvePeriod(req.query);
+  const parts = req.query.parts || "all";
+  const wantAds = parts !== "core";
 
   try {
     const storeConnections = resolveStoreConnections(req.query, req.company);
@@ -138,11 +149,13 @@ router.get("/dashboard/summary", async (req, res) => {
     const metaCurr = { spend: 0, revenue: 0, unattributedSpend: 0 };
     const metaPrev = { spend: 0, revenue: 0, unattributedSpend: 0 };
     await Promise.all(
-      metaConnections.map(async (m) => {
+      (wantAds ? metaConnections : []).map(async (m) => {
         try {
+          // Light call: only ads that spent, with value and website link —
+          // the full getPerformance (Meta Ads page) took ~80s on a year range.
           const [pc, pp] = await Promise.all([
-            meta.getPerformance(m, { from, to }),
-            meta.getPerformance(m, { from: prevFrom, to: prevTo }),
+            meta.getAdSummary(m, { from, to }),
+            meta.getAdSummary(m, { from: prevFrom, to: prevTo }),
           ]);
           for (const [acc, t] of [
             [metaCurr, metaTotals(pc, m)],
@@ -161,7 +174,7 @@ router.get("/dashboard/summary", async (req, res) => {
     const spendCurr = metaCurr.spend;
     const spendPrev = metaPrev.spend;
 
-    const [crCurr, crPrev] = storeConnections.length
+    const [crCurr, crPrev] = wantAds && storeConnections.length
       ? await Promise.all([
           computeConversionRate(storeConnections, { from, to }),
           computeConversionRate(storeConnections, { from: prevFrom, to: prevTo }),
@@ -187,7 +200,46 @@ router.get("/dashboard/summary", async (req, res) => {
       mer(prev.revenue, spendPrev),
     ]);
 
+    if (!wantAds) {
+      // Same shape as a full answer, so pages can render it as-is.
+      return res.json({
+        parts: "core",
+        currency,
+        metaCurrency: null,
+        period: { from, to },
+        revenue: { current: curr.revenue, previous: prev.revenue, changePercent: changePercent(curr.revenue, prev.revenue) },
+        orders: { current: curr.orders, previous: prev.orders, changePercent: changePercent(curr.orders, prev.orders) },
+        aov: { current: curr.aov, previous: prev.aov, changePercent: changePercent(curr.aov, prev.aov) },
+        cancelledOrders: {
+          current: curr.statusCounts.cancelled,
+          previous: prev.statusCounts.cancelled,
+          changePercent: changePercent(curr.statusCounts.cancelled, prev.statusCounts.cancelled),
+        },
+        shippedOrders: {
+          current: curr.statusCounts.shipped,
+          previous: prev.statusCounts.shipped,
+          changePercent: changePercent(curr.statusCounts.shipped, prev.statusCounts.shipped),
+        },
+        deliveredOrders: {
+          current: curr.statusCounts.delivered,
+          previous: prev.statusCounts.delivered,
+          changePercent: changePercent(curr.statusCounts.delivered, prev.statusCounts.delivered),
+        },
+        returnedOrders: {
+          current: curr.statusCounts.returned,
+          previous: prev.statusCounts.returned,
+          changePercent: changePercent(curr.statusCounts.returned, prev.statusCounts.returned),
+        },
+        adSpend: EMPTY_CHANGE,
+        roas: EMPTY_CHANGE,
+        mer: EMPTY_CHANGE,
+        adSpendUnattributed: null,
+        conversionRate: EMPTY_CHANGE,
+      });
+    }
+
     res.json({
+      parts,
       currency,
       metaCurrency,
       period: { from, to },

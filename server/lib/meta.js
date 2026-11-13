@@ -90,8 +90,22 @@ function extractFollows(actions) {
 // Error code 190 is Meta's "invalid/expired OAuth token" — everything else
 // (missing ads_read permission, bad ad account id, etc.) surfaces as a
 // generic 400 from the Graph API, so 190 is the one worth distinguishing.
+// A Graph API page that hasn't answered in 30s is given up on, so one stuck
+// call can't hold a whole page (or the home cards) open indefinitely.
+const GRAPH_TIMEOUT_MS = 30 * 1000;
+
 async function graphFetch(url) {
-  const res = await fetch(url);
+  let res;
+  try {
+    res = await fetch(url, { signal: AbortSignal.timeout(GRAPH_TIMEOUT_MS) });
+  } catch (err) {
+    if (err.name === "TimeoutError" || err.name === "AbortError") {
+      const e = new Error(`Meta nije odgovorila za ${GRAPH_TIMEOUT_MS / 1000}s — pokušaj ponovo malo kasnije.`);
+      e.status = 504;
+      throw e;
+    }
+    throw err;
+  }
   const data = await res.json().catch(() => ({}));
   if (!res.ok || data.error) {
     const err = new Error(data.error?.message || `Meta API greška (HTTP ${res.status}).`);
@@ -295,16 +309,46 @@ async function fetchAccountAds(adAccountId, accessToken) {
 // same range.
 const performanceCache = new Map();
 const CACHE_TTL_MS = 5 * 60 * 1000;
+// A range that ended at least two days ago won't change any more (Meta's
+// attribution settles within a day or so) — keep it for hours, not minutes.
+const PAST_RANGE_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 
-async function getPerformance(connection, { from, to } = {}) {
-  const cacheKey = `${connection.id}::${from || ""}::${to || ""}`;
-  const cached = performanceCache.get(cacheKey);
-  if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.data;
-
-  const { accessToken, adAccountId } = connection;
-
+function resolveRange({ from, to } = {}) {
   const endDate = to ? new Date(to) : new Date();
   const startDate = from ? new Date(from) : new Date(endDate.getTime() - DEFAULT_DAYS * DAY_MS);
+  return { startDate, endDate, since: isoDate(startDate), until: isoDate(endDate) };
+}
+
+// Shared by every Meta fetch below: cache keyed by calendar dates (callers
+// pass "now" with milliseconds, which made every call a miss), longer TTL
+// for finished ranges, and concurrent identical calls share one promise.
+const inflight = new Map();
+
+function cachedFetch(cache, kind, connection, range, fn) {
+  const { since, until } = resolveRange(range);
+  const key = `${kind}::${connection.id}::${since}::${until}`;
+  const ttl = until < isoDate(new Date(Date.now() - 2 * DAY_MS)) ? PAST_RANGE_CACHE_TTL_MS : CACHE_TTL_MS;
+  const cached = cache.get(key);
+  if (cached && Date.now() - cached.at < ttl) return Promise.resolve(cached.data);
+  if (inflight.has(key)) return inflight.get(key);
+  const p = fn()
+    .then((data) => {
+      cache.set(key, { data, at: Date.now() });
+      return data;
+    })
+    .finally(() => inflight.delete(key));
+  inflight.set(key, p);
+  return p;
+}
+
+function getPerformance(connection, range = {}) {
+  return cachedFetch(performanceCache, "perf", connection, range, () => fetchPerformance(connection, range));
+}
+
+async function fetchPerformance(connection, { from, to } = {}) {
+  const { accessToken, adAccountId } = connection;
+
+  const { startDate, endDate } = resolveRange({ from, to });
   const timeRange = JSON.stringify({ since: isoDate(startDate), until: isoDate(endDate) });
 
   const [dailyRows, campaignRows, insightAdRows, accountAds] = await Promise.all([
@@ -485,8 +529,129 @@ async function getPerformance(connection, { from, to } = {}) {
     ),
     allAds: allAds.map((ad) => withRevenueCurrency(ad, ad.total, currency, rsdPerEur)),
   };
-  performanceCache.set(cacheKey, { data: result, at: Date.now() });
   return result;
 }
 
-module.exports = { listAdAccounts, testConnection, getPerformance, adStoreId };
+// ---- Light variants for pages that only need totals ------------------------
+//
+// getPerformance is built for the Meta Ads page: daily trend, every campaign,
+// every ad with budget/schedule, plus every paused or not-yet-delivered ad of
+// the account. The home cards, anomalies and CAC only need spend (and, per ad,
+// purchase value and website link) — on a year-long range the full call took
+// ~80s on production (2026-11-13), and the home page asked for it twice.
+
+const spendCache = new Map();
+const adSummaryCache = new Map();
+
+// Account spend per day (and total) — one insights call. Same `totals.spend`
+// / `trend[].spend` shape as getPerformance, for CAC.
+function getSpendTotals(connection, range = {}) {
+  return cachedFetch(spendCache, "spend", connection, range, async () => {
+    const { since, until } = resolveRange(range);
+    const rows = await fetchInsights(connection.adAccountId, connection.accessToken, {
+      time_range: JSON.stringify({ since, until }),
+      time_increment: 1,
+      fields: "spend",
+      level: "account",
+    });
+    const trend = rows
+      .map((r) => ({ date: r.date_start, spend: toNumber(r.spend) }))
+      .sort((a, b) => (a.date < b.date ? -1 : 1));
+    return {
+      dateRange: { startDate: since, endDate: until },
+      currency: connection.currency || null,
+      totals: { spend: trend.reduce((sum, r) => sum + r.spend, 0) },
+      trend,
+    };
+  });
+}
+
+// An ad's website link never changes after it's created — looked up once per
+// ad and kept, instead of on every summary.
+const CREATIVE_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const creativeCache = new Map(); // adId -> { at, creative }
+
+async function creativesFor(connection, adIds) {
+  const missing = adIds.filter((id) => {
+    const c = creativeCache.get(id);
+    return !c || Date.now() - c.at > CREATIVE_CACHE_TTL_MS;
+  });
+  const chunks = [];
+  for (let i = 0; i < missing.length; i += 50) chunks.push(missing.slice(i, i + 50));
+  await Promise.all(
+    chunks.map(async (chunk) => {
+      const url = new URL(`${GRAPH_API_BASE}/act_${connection.adAccountId}/ads`);
+      url.searchParams.set("fields", `id,${CREATIVE_FIELDS}`);
+      url.searchParams.set("filtering", JSON.stringify([{ field: "id", operator: "IN", value: chunk }]));
+      url.searchParams.set("limit", "50");
+      url.searchParams.set("access_token", connection.accessToken);
+      const data = await graphFetch(url.toString());
+      const at = Date.now();
+      // Ads missing from the answer still get an entry, so they aren't asked for again.
+      chunk.forEach((id) => creativeCache.set(id, { at, creative: null }));
+      (data.data || []).forEach((row) => creativeCache.set(row.id, { at, creative: row.creative || null }));
+    })
+  );
+  return new Map(adIds.map((id) => [id, creativeCache.get(id)?.creative || null]));
+}
+
+// Ads that spent in the range: spend, purchases, purchase value (in the ad
+// account's currency, as getPerformance's revenueInAccount) and website link
+// (so adStoreId can split one account between stores), plus spend/purchases
+// per campaign for the CPA-spike anomaly. One insights call + a cached link
+// lookup. Same field names as getPerformance's allAds/topCampaigns.
+function getAdSummary(connection, range = {}) {
+  return cachedFetch(adSummaryCache, "ads", connection, range, async () => {
+    const { since, until } = resolveRange(range);
+    const rows = await fetchInsights(connection.adAccountId, connection.accessToken, {
+      time_range: JSON.stringify({ since, until }),
+      fields: "ad_id,campaign_name,spend,actions,action_values",
+      level: "ad",
+    });
+    const adIds = [...new Set(rows.map((r) => r.ad_id).filter(Boolean))];
+    const creatives = await creativesFor(connection, adIds).catch((err) => {
+      console.warn("[meta] creative lookup failed:", err.message);
+      return new Map();
+    });
+
+    const currency = connection.currency || null;
+    const rsdPerEur = await fx.getRsdPerEur();
+    const allAds = rows
+      .map((r) => {
+        const total = toNumber(r.spend);
+        return withRevenueCurrency(
+          {
+            adId: r.ad_id || null,
+            destinationHost: destinationHost(creatives.get(r.ad_id)),
+            campaign: r.campaign_name,
+            total,
+            purchases: extractPurchases(r.actions),
+            revenue: extractPurchaseRevenue(r.action_values),
+          },
+          total,
+          currency,
+          rsdPerEur
+        );
+      })
+      .sort((a, b) => b.total - a.total);
+
+    const byCampaign = new Map();
+    allAds.forEach((ad) => {
+      const key = ad.campaign || "";
+      if (!byCampaign.has(key)) byCampaign.set(key, { campaign: ad.campaign, spend: 0, purchases: 0 });
+      const c = byCampaign.get(key);
+      c.spend += ad.total;
+      c.purchases += ad.purchases;
+    });
+
+    return {
+      dateRange: { startDate: since, endDate: until },
+      currency,
+      totals: { spend: allAds.reduce((sum, ad) => sum + ad.total, 0) },
+      allAds,
+      topCampaigns: [...byCampaign.values()].filter((c) => c.spend > 0).sort((a, b) => b.spend - a.spend),
+    };
+  });
+}
+
+module.exports = { listAdAccounts, testConnection, getPerformance, getSpendTotals, getAdSummary, adStoreId };

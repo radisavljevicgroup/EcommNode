@@ -95,7 +95,7 @@ async function computeCac(connections, allOrders, { from, to, company }) {
   await Promise.all(
     metaConnections.map(async (m) => {
       try {
-        const perf = await meta.getPerformance(m, { from, to });
+        const perf = await meta.getSpendTotals(m, { from, to });
         totalSpend += perf.totals.spend;
         if (!currency) currency = perf.currency;
       } catch {
@@ -125,7 +125,7 @@ async function computeCacTrend(connections, allOrders, { from, to, company }) {
   await Promise.all(
     metaConnections.map(async (m) => {
       try {
-        const perf = await meta.getPerformance(m, { from, to });
+        const perf = await meta.getSpendTotals(m, { from, to });
         if (!currency) currency = perf.currency;
         perf.trend.forEach((row) => {
           const key = crBucketKey(row.date, unit);

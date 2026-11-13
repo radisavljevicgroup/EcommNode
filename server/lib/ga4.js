@@ -109,18 +109,38 @@ function runReport(connection, token, body) {
   return runLimited(connection.propertyId, () => runReportOnce(connection, token, body));
 }
 
+// Some properties occasionally take 50-60s per report on Google's side, then
+// answer 502 anyway (seen 2026-11-13 on the Casio property for a year-long
+// range, while the same reports for other properties took under a second).
+// Without a limit one such property held its 4 limiter slots for minutes and
+// every page that waits for GA4 (home cards, Analitika) waited with it. A
+// report that hasn't answered in 20s is given up on; callers already treat a
+// failed GA4 fetch as "skip this store".
+const REPORT_TIMEOUT_MS = 20 * 1000;
+
 async function runReportOnce(connection, token, body) {
-  const res = await fetch(
-    `https://analyticsdata.googleapis.com/v1beta/properties/${connection.propertyId}:runReport`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
+  let res;
+  try {
+    res = await fetch(
+      `https://analyticsdata.googleapis.com/v1beta/properties/${connection.propertyId}:runReport`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(REPORT_TIMEOUT_MS),
+      }
+    );
+  } catch (err) {
+    if (err.name === "TimeoutError" || err.name === "AbortError") {
+      const e = new Error(`Google Analytics nije odgovorio za ${REPORT_TIMEOUT_MS / 1000}s — pokušaj ponovo malo kasnije.`);
+      e.status = 504;
+      throw e;
     }
-  );
+    throw err;
+  }
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
     const err = new Error(data?.error?.message || `GA4 API greška (HTTP ${res.status}).`);
@@ -157,6 +177,26 @@ function aggregateTrend(dateRows, unit) {
 // of re-fetching identical numbers every time.
 const performanceCache = new Map();
 const CACHE_TTL_MS = 5 * 60 * 1000;
+// A range that ended before today can't change any more (GA4 finishes
+// processing within a day) — no reason to re-ask Google every 5 minutes.
+const PAST_RANGE_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+
+// Keyed by the resolved calendar dates, not the raw from/to: callers pass
+// full timestamps ("now" with milliseconds), which made every call a cache miss.
+function rangeCacheKey(connection, range) {
+  const { startDate, endDate } = resolveRange(range);
+  return `${connection.id}::${isoDate(startDate)}::${isoDate(endDate)}`;
+}
+
+function cacheTtl(range) {
+  const { endDate } = resolveRange(range);
+  return isoDate(endDate) < isoDate(new Date(Date.now() - 2 * DAY_MS)) ? PAST_RANGE_CACHE_TTL_MS : CACHE_TTL_MS;
+}
+
+function cachedValue(cache, key, range) {
+  const cached = cache.get(key);
+  return cached && Date.now() - cached.at < cacheTtl(range) ? cached.data : null;
+}
 
 function resolveRange({ from, to } = {}) {
   const latestAvailable = new Date();
@@ -177,18 +217,34 @@ function resolveRange({ from, to } = {}) {
 // anomalies, alerts and the GA4 page all on one load) each started their own
 // full set of reports. Concurrent identical calls now share one promise.
 const inflight = new Map();
+// A property that just failed (timeout, 502) is remembered for a minute, so
+// the next page load answers "no GA4 for this store" at once instead of
+// waiting another 20s for the same failure.
+const FAILURE_TTL_MS = 60 * 1000;
+const recentFailures = new Map(); // key -> { at, err }
 
 function dedupe(key, fn) {
   if (inflight.has(key)) return inflight.get(key);
-  const p = fn().finally(() => inflight.delete(key));
+  const failed = recentFailures.get(key);
+  if (failed && Date.now() - failed.at < FAILURE_TTL_MS) return Promise.reject(failed.err);
+  const p = fn()
+    .then((v) => {
+      recentFailures.delete(key);
+      return v;
+    })
+    .catch((err) => {
+      recentFailures.set(key, { at: Date.now(), err });
+      throw err;
+    })
+    .finally(() => inflight.delete(key));
   inflight.set(key, p);
   return p;
 }
 
 function getPerformance(connection, { from, to } = {}) {
-  const cacheKey = `${connection.id}::${from || ""}::${to || ""}`;
-  const cached = performanceCache.get(cacheKey);
-  if (cached && Date.now() - cached.at < CACHE_TTL_MS) return Promise.resolve(cached.data);
+  const cacheKey = rangeCacheKey(connection, { from, to });
+  const cached = cachedValue(performanceCache, cacheKey, { from, to });
+  if (cached) return Promise.resolve(cached);
   return dedupe(`perf::${cacheKey}`, () => fetchPerformance(connection, { from, to }, cacheKey));
 }
 
@@ -429,9 +485,9 @@ function buildDeviceInsights(rows) {
 const insightsCache = new Map();
 
 function getInsights(connection, { from, to } = {}) {
-  const cacheKey = `${connection.id}::${from || ""}::${to || ""}`;
-  const cached = insightsCache.get(cacheKey);
-  if (cached && Date.now() - cached.at < CACHE_TTL_MS) return Promise.resolve(cached.data);
+  const cacheKey = rangeCacheKey(connection, { from, to });
+  const cached = cachedValue(insightsCache, cacheKey, { from, to });
+  if (cached) return Promise.resolve(cached);
   return dedupe(`insights::${cacheKey}`, () => fetchInsights(connection, { from, to }, cacheKey));
 }
 
