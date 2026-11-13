@@ -1,5 +1,6 @@
 const { parseServiceAccount, getAccessToken } = require("./googleServiceAuth");
 const { getAccessTokenFromRefreshToken } = require("./googleOAuthClient");
+const { runLimited } = require("./ga4Limiter");
 
 const GA4_SCOPE = "https://www.googleapis.com/auth/analytics.readonly";
 
@@ -104,7 +105,11 @@ function metricValue(row, index) {
   return Number(row.metricValues[index]?.value || 0);
 }
 
-async function runReport(connection, token, body) {
+function runReport(connection, token, body) {
+  return runLimited(connection.propertyId, () => runReportOnce(connection, token, body));
+}
+
+async function runReportOnce(connection, token, body) {
   const res = await fetch(
     `https://analyticsdata.googleapis.com/v1beta/properties/${connection.propertyId}:runReport`,
     {
@@ -167,11 +172,27 @@ function resolveRange({ from, to } = {}) {
   return { startDate, endDate };
 }
 
-async function getPerformance(connection, { from, to } = {}) {
+// The cache above is only filled once a fetch finishes — several callers
+// asking for the same connection+range at the same moment (dashboard,
+// anomalies, alerts and the GA4 page all on one load) each started their own
+// full set of reports. Concurrent identical calls now share one promise.
+const inflight = new Map();
+
+function dedupe(key, fn) {
+  if (inflight.has(key)) return inflight.get(key);
+  const p = fn().finally(() => inflight.delete(key));
+  inflight.set(key, p);
+  return p;
+}
+
+function getPerformance(connection, { from, to } = {}) {
   const cacheKey = `${connection.id}::${from || ""}::${to || ""}`;
   const cached = performanceCache.get(cacheKey);
-  if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.data;
+  if (cached && Date.now() - cached.at < CACHE_TTL_MS) return Promise.resolve(cached.data);
+  return dedupe(`perf::${cacheKey}`, () => fetchPerformance(connection, { from, to }, cacheKey));
+}
 
+async function fetchPerformance(connection, { from, to }, cacheKey) {
   const token = await getToken(connection);
 
   const { startDate, endDate } = resolveRange({ from, to });
@@ -407,11 +428,14 @@ function buildDeviceInsights(rows) {
 
 const insightsCache = new Map();
 
-async function getInsights(connection, { from, to } = {}) {
+function getInsights(connection, { from, to } = {}) {
   const cacheKey = `${connection.id}::${from || ""}::${to || ""}`;
   const cached = insightsCache.get(cacheKey);
-  if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.data;
+  if (cached && Date.now() - cached.at < CACHE_TTL_MS) return Promise.resolve(cached.data);
+  return dedupe(`insights::${cacheKey}`, () => fetchInsights(connection, { from, to }, cacheKey));
+}
 
+async function fetchInsights(connection, { from, to }, cacheKey) {
   const token = await getToken(connection);
   const { startDate, endDate } = resolveRange({ from, to });
   const dateRange = { startDate: isoDate(startDate), endDate: isoDate(endDate) };
