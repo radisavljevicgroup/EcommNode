@@ -83,7 +83,6 @@ function TopCampaignsTable({ rows, loading, currency }) {
   const [showAll, setShowAll] = useState(false);
   const sorted = [...rows].sort(CAMPAIGN_SORTS[sortKey]);
   const visible = showAll ? sorted : sorted.slice(0, 10);
-  const revenueCurrency = rows.find((r) => r.revenueCurrency)?.revenueCurrency || currency;
 
   return (
     <div className="chart-card">
@@ -134,7 +133,7 @@ function TopCampaignsTable({ rows, loading, currency }) {
                     <td>{formatKpiValue("integer", row.clicks)}</td>
                     <td>{formatKpiValue("integer", row.purchases)}</td>
                     <td>{formatKpiValue("currency", row.cpa, currency)}</td>
-                    <td>{formatKpiValue("currency", row.revenue, revenueCurrency)}</td>
+                    <td>{formatKpiValue("currency", row.revenue, row.revenueCurrency || currency)}</td>
                     <td style={roasStyle(row.roas)}>
                       {row.roas == null ? "—" : `${row.roas.toFixed(2).replace(".", ",")}×`}
                     </td>

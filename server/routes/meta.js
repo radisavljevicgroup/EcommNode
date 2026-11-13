@@ -12,7 +12,6 @@ const {
 const { getConnections: getWooConnections } = require("../lib/store");
 const { getOrdersForConnections } = require("../lib/ordersCache");
 const analytics = require("../lib/analytics");
-const fx = require("../lib/currency");
 const { startScheduler: startTokenRefreshScheduler } = require("../lib/metaAdsTokenRefresh");
 
 const router = Router();
@@ -170,44 +169,20 @@ router.get("/meta/performance", async (req, res) => {
     // query above.
     const wooIds = new Set(connection.targetConnectionIds || []);
     const targetWoo = getWooConnections(req.company).filter((c) => wooIds.has(c.id));
-    let revenueCurrency = null;
     if (targetWoo.length) {
       const orders = await getOrdersForConnections(targetWoo);
       const periodOrders = analytics.filterByRange(orders, from, to);
       const newCustomers = analytics.newCustomerCount(periodOrders, orders, from, to);
       data.totals.newCustomers = newCustomers;
       data.totals.cac = newCustomers > 0 ? data.totals.spend / newCustomers : null;
-      revenueCurrency = orders[0]?.currency || null;
     } else {
       data.totals.newCustomers = null;
       data.totals.cac = null;
     }
 
-    // Meta's purchase-value pixel data reports in the store's currency
-    // (RSD), not the ad account's billing currency (EUR) — profit can
-    // only be computed (revenue - spend) when those actually match,
-    // otherwise it'd silently subtract one currency from another.
-    data.allAds = (data.allAds || []).map((ad) => ({
-      ...ad,
-      revenueCurrency,
-      profit: revenueCurrency && revenueCurrency === data.currency ? ad.revenue - ad.total : null,
-    }));
-
-    // ROAS per campaign: revenue converted into the ad account's currency
-    // first (same reasoning as dashboard.js — EUR spend vs RSD revenue),
-    // skipped when the conversion isn't supported.
-    const rate =
-      revenueCurrency && data.currency ? await fx.convert(1, revenueCurrency, data.currency).catch(() => null) : null;
-    data.topCampaigns = (data.topCampaigns || []).map((c) => {
-      const revenueConverted = rate != null ? c.revenue * rate : null;
-      return {
-        ...c,
-        revenueCurrency,
-        roas: revenueConverted != null && c.spend > 0 ? revenueConverted / c.spend : null,
-        profit: revenueConverted != null ? revenueConverted - c.spend : null,
-      };
-    });
-
+    // Per-campaign/per-ad revenueCurrency, roas and profit come from
+    // meta.getPerformance — the purchase value's currency differs per
+    // pixel, so it's decided row by row there (withRevenueCurrency).
     res.json(data);
   } catch (err) {
     res.status(400).json({ error: connectionError(err) });

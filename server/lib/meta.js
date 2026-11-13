@@ -1,8 +1,51 @@
 const GRAPH_API_VERSION = "v19.0";
 const GRAPH_API_BASE = `https://graph.facebook.com/${GRAPH_API_VERSION}`;
 
+const fx = require("./currency");
+
 const DEFAULT_DAYS = 28;
 const DAY_MS = 1000 * 60 * 60 * 24;
+
+// Meta's purchase value (action_values) doesn't come back in one currency
+// for every campaign: a pixel that sends the store's currency properly
+// gets converted by Meta into the ad account's currency (EUR), while a
+// pixel that sends RSD amounts without a currency (or tagged with the
+// account's) comes back as raw RSD numbers. Seen on the same account in
+// 2026-11: "Showroom akcija Sales" 5,120 per purchase (RSD — matches the
+// stores' ~2,700-5,900 RSD average order), "Papagaj Crni novembar" 40.7
+// per purchase (EUR — 40 RSD per order is impossible). Assuming RSD for
+// all of them made Papagaj's ROAS 0.07× instead of ~8×.
+//
+// RSD and EUR differ ~117×, so the value per purchase tells them apart:
+// these stores' orders are ~20-100 EUR, i.e. ~2,300-12,000 RSD. Anything
+// at or above this threshold per purchase is RSD, below it EUR.
+const RSD_PER_PURCHASE_THRESHOLD = 500;
+
+// Adds revenueCurrency (what `revenue` is actually in), revenueInAccount
+// (revenue in the ad account's currency), roas and profit (both in the ad
+// account's currency). Only EUR ad accounts get the per-row guess; any
+// other account currency is taken as what Meta reported in.
+function withRevenueCurrency(row, spend, accountCurrency, rsdPerEur) {
+  const { revenue, purchases } = row;
+  let revenueCurrency = accountCurrency;
+  let revenueInAccount = revenue;
+  if (accountCurrency === "EUR" && revenue > 0) {
+    // Purchase value with no purchase count (rare) — the per-purchase test
+    // can't run; RSD was the previous assumption for everything.
+    const perPurchase = purchases > 0 ? revenue / purchases : Infinity;
+    if (perPurchase >= RSD_PER_PURCHASE_THRESHOLD) {
+      revenueCurrency = "RSD";
+      revenueInAccount = revenue / rsdPerEur;
+    }
+  }
+  return {
+    ...row,
+    revenueCurrency,
+    revenueInAccount,
+    roas: spend > 0 ? revenueInAccount / spend : null,
+    profit: revenueInAccount - spend,
+  };
+}
 
 function isoDate(d) {
   return d.toISOString().slice(0, 10);
@@ -374,13 +417,17 @@ async function getPerformance(connection, { from, to } = {}) {
     })
     .sort((a, b) => b.total - a.total);
 
+  const currency = connection.currency || null;
+  const rsdPerEur = await fx.getRsdPerEur();
   const result = {
     dateRange: { startDate: isoDate(startDate), endDate: isoDate(endDate) },
-    currency: connection.currency || null,
+    currency,
     totals,
     trend,
-    topCampaigns,
-    allAds,
+    topCampaigns: topCampaigns.map((c) =>
+      withRevenueCurrency(c, c.spend, currency, rsdPerEur)
+    ),
+    allAds: allAds.map((ad) => withRevenueCurrency(ad, ad.total, currency, rsdPerEur)),
   };
   performanceCache.set(cacheKey, { data: result, at: Date.now() });
   return result;

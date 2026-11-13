@@ -5,7 +5,6 @@ const { getConnections: getMetaConnections } = require("../lib/metaStore");
 const { getOrdersForConnections } = require("../lib/ordersCache");
 const { computeConversionRate } = require("../lib/conversionRate");
 const { detectAnomalies } = require("../lib/anomalies");
-const fx = require("../lib/currency");
 const meta = require("../lib/meta");
 const analytics = require("../lib/analytics");
 
@@ -124,8 +123,11 @@ router.get("/dashboard/summary", async (req, res) => {
           ]);
           spendCurr += pc.totals.spend;
           spendPrev += pp.totals.spend;
-          adRevenueCurr += pc.allAds.reduce((s, ad) => s + (ad.revenue || 0), 0);
-          adRevenuePrev += pp.allAds.reduce((s, ad) => s + (ad.revenue || 0), 0);
+          // Already in the ad account's currency, ad by ad — the pixel's
+          // purchase value isn't in one currency for every ad (see
+          // withRevenueCurrency in lib/meta.js).
+          adRevenueCurr += pc.allAds.reduce((s, ad) => s + (ad.revenueInAccount || 0), 0);
+          adRevenuePrev += pp.allAds.reduce((s, ad) => s + (ad.revenueInAccount || 0), 0);
           if (!metaCurrency) metaCurrency = pc.currency;
         } catch {
           // this Meta connection's fetch failed — skip it, don't fail the summary
@@ -143,20 +145,13 @@ router.get("/dashboard/summary", async (req, res) => {
     // Meta reports spend in the ad account's billing currency, which is
     // often not the store's own currency (EUR ad spend vs RSD ad revenue,
     // here) — dividing one by the other without converting isn't a
-    // rounding quirk, it's a meaningless number. Convert the ad-attributed
-    // revenue into Meta's currency first so both sides of the ratio
-    // actually match; only skip the calc if that conversion itself isn't
-    // supported (some currency pair this app has never seen).
+    // rounding quirk, it's a meaningless number. adRevenue above is already
+    // in Meta's currency (revenueInAccount, converted ad by ad), so both
+    // sides of the ratio match.
     let roasCurr = null;
     let roasPrev = null;
-    if (metaCurrency && spendCurr > 0) {
-      const adRevenueCurrConverted = await fx.convert(adRevenueCurr, currency, metaCurrency);
-      if (adRevenueCurrConverted != null) roasCurr = adRevenueCurrConverted / spendCurr;
-    }
-    if (metaCurrency && spendPrev > 0) {
-      const adRevenuePrevConverted = await fx.convert(adRevenuePrev, currency, metaCurrency);
-      if (adRevenuePrevConverted != null) roasPrev = adRevenuePrevConverted / spendPrev;
-    }
+    if (metaCurrency && spendCurr > 0) roasCurr = adRevenueCurr / spendCurr;
+    if (metaCurrency && spendPrev > 0) roasPrev = adRevenuePrev / spendPrev;
 
     res.json({
       currency,
