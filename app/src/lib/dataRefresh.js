@@ -9,12 +9,12 @@ import { useEffect, useRef, useState } from "react";
 // spinner — and shows what the refresh brought (a new order, today's spend).
 
 const EVENT = "ecommnode:data-refreshed";
-const RELOAD_DELAY_MS = 3000;
-// A slow store / Meta can still be refreshing when the quiet reload comes —
-// that reload is marked again and schedules one more, up to this many in a
-// row, so a refresh that never ends can't keep pages reloading.
-const MAX_RELOADS_IN_A_ROW = 4;
-const CHAIN_RESET_MS = 30 * 1000;
+// A slow store / Meta (a year of missing days can take a minute) can still
+// be refreshing when the quiet reload comes — that reload is marked again
+// and schedules the next one, a bit later each time, and after the last
+// delay it stops, so a refresh that never ends can't keep pages reloading.
+const RELOAD_DELAYS_MS = [3000, 5000, 10000, 20000, 30000];
+const CHAIN_RESET_MS = 90 * 1000;
 
 let timer = null;
 let reloadsInARow = 0;
@@ -24,13 +24,13 @@ export function noteResponse(res) {
   if (res?.headers?.get("X-Data-Refreshing") !== "1") return;
   if (timer) return;
   if (Date.now() - lastReloadAt > CHAIN_RESET_MS) reloadsInARow = 0;
-  if (reloadsInARow >= MAX_RELOADS_IN_A_ROW) return;
+  if (reloadsInARow >= RELOAD_DELAYS_MS.length) return;
   timer = setTimeout(() => {
     timer = null;
     reloadsInARow += 1;
     lastReloadAt = Date.now();
     window.dispatchEvent(new Event(EVENT));
-  }, RELOAD_DELAY_MS);
+  }, RELOAD_DELAYS_MS[reloadsInARow]);
 }
 
 // const refresh = useDataRefresh();

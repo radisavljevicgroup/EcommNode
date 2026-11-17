@@ -2,6 +2,7 @@ const { parseServiceAccount, getAccessToken } = require("./googleServiceAuth");
 const { getAccessTokenFromRefreshToken } = require("./googleOAuthClient");
 const { runLimited } = require("./ga4Limiter");
 const { trackRefresh } = require("./refreshTracker");
+const { createDiskCache } = require("./diskCache");
 
 const GA4_SCOPE = "https://www.googleapis.com/auth/analytics.readonly";
 
@@ -176,7 +177,8 @@ function aggregateTrend(dateRows, unit) {
 // (brand/date range), and each call is 4 real HTTP round-trips to the GA4
 // Data API — a short cache absorbs repeated loads of the same range instead
 // of re-fetching identical numbers every time.
-const performanceCache = new Map();
+// On disk (lib/diskCache.js) so a process restart doesn't empty it.
+const performanceCache = createDiskCache("ga4-performance-cache");
 const CACHE_TTL_MS = 5 * 60 * 1000;
 // A range that ended before today can't change any more (GA4 finishes
 // processing within a day) — no reason to re-ask Google every 5 minutes.
@@ -491,7 +493,7 @@ function buildDeviceInsights(rows) {
   return { basis, devices };
 }
 
-const insightsCache = new Map();
+const insightsCache = createDiskCache("ga4-insights-cache");
 
 function getInsights(connection, { from, to } = {}) {
   const cacheKey = rangeCacheKey(connection, { from, to });
@@ -562,6 +564,7 @@ const sessionsFile = createJsonFile("ga4-sessions.json", {});
 const sessionsStore = sessionsFile.read();
 const SESSIONS_RECENT_DAYS = 3;
 const SESSIONS_RECENT_REFRESH_MS = 60 * 60 * 1000;
+const SESSIONS_MISSING_WAIT_MS = 4000;
 
 function addDaysIso(dateStr, n) {
   const d = new Date(`${dateStr}T00:00:00Z`);
@@ -623,17 +626,23 @@ async function getDailySessions(connection, range = {}) {
   const entry = propertyEntry(connection);
 
   if (missingSessionSpans(entry, since, until).length) {
-    try {
-      await withSessionLock(connection, async () => {
-        for (const [s, e] of missingSessionSpans(propertyEntry(connection), since, until)) {
-          // eslint-disable-next-line no-await-in-loop
-          await fetchSessionDays(connection, s, e);
-        }
-      });
-    } catch (err) {
-      const anyStored = entry.from && entry.from <= until && entry.to >= since;
-      if (!anyStored) throw err;
-      console.warn(`[ga4] sessions from store (${connection.propertyId}):`, err.message);
+    const fetchMissing = withSessionLock(connection, async () => {
+      for (const [s, e] of missingSessionSpans(propertyEntry(connection), since, until)) {
+        // eslint-disable-next-line no-await-in-loop
+        await fetchSessionDays(connection, s, e);
+      }
+    });
+    const anyStored = entry.from && entry.from <= until && entry.to >= since;
+    if (!anyStored) {
+      await fetchMissing;
+    } else {
+      // Partly stored: short wait, then answer with what's stored; the page
+      // reloads quietly when the rest is in (lib/refreshTracker.js).
+      const settled = fetchMissing.catch((err) =>
+        console.warn(`[ga4] sessions from store (${connection.propertyId}):`, err.message)
+      );
+      trackRefresh(settled);
+      await Promise.race([settled, new Promise((resolve) => setTimeout(resolve, SESSIONS_MISSING_WAIT_MS))]);
     }
   }
 

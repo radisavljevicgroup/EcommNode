@@ -1,6 +1,7 @@
 const { parseServiceAccount, getAccessToken } = require("./googleServiceAuth");
 const { getAccessTokenFromRefreshToken } = require("./googleOAuthClient");
 const { trackRefresh } = require("./refreshTracker");
+const { createDiskCache } = require("./diskCache");
 
 const GSC_SCOPE = "https://www.googleapis.com/auth/webmasters.readonly";
 
@@ -120,7 +121,8 @@ function aggregateTrend(dateRows, unit) {
 // CACHE_TTL_MS; after that the old copy is still served while a background
 // refetch replaces it (marked X-Data-Refreshing, see lib/refreshTracker.js).
 const CACHE_TTL_MS = 60 * 60 * 1000;
-const performanceCache = new Map(); // key -> { data, at }
+// On disk (lib/diskCache.js) so a process restart doesn't empty it.
+const performanceCache = createDiskCache("gsc-performance-cache");
 const inflight = new Map();
 
 function fetchOnce(key, connection, range) {

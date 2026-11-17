@@ -16,7 +16,8 @@ let cached = null; // { rate, fetchedAt }
 async function getRsdPerEur() {
   if (cached && Date.now() - cached.fetchedAt < RATE_CACHE_MS) return cached.rate;
   try {
-    const res = await fetch("https://open.er-api.com/v6/latest/EUR");
+    // Short timeout: a hanging rate API held the dashboard's MER card.
+    const res = await fetch("https://open.er-api.com/v6/latest/EUR", { signal: AbortSignal.timeout(3000) });
     const data = await res.json();
     const rate = data.rates?.RSD;
     if (!rate) throw new Error("Odgovor ne sadrži RSD kurs.");

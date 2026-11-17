@@ -386,12 +386,15 @@ async function fetchAccountAds(adAccountId, accessToken) {
 
 const { createJsonFile } = require("./jsonFile");
 const { trackRefresh } = require("./refreshTracker");
+const { createDiskCache } = require("./diskCache");
 
 const insightsFile = createJsonFile("meta-insights.json", {});
 let store = insightsFile.read();
 
 const RECENT_DAYS = 3;
 const RECENT_REFRESH_MS = 30 * 60 * 1000;
+// How long a range that's only partly stored waits for the missing days.
+const MISSING_WAIT_MS = 4000;
 // Longest window asked for in one call — a year of daily ad rows in one go is
 // what Meta answers slowest.
 const FETCH_CHUNK_DAYS = 92;
@@ -520,18 +523,26 @@ async function dailyRows(connection, range) {
 
   const spans = missingSpans(acct, since, until);
   if (spans.length) {
-    try {
-      await withAccountLock(connection, async () => {
-        // Re-check inside the lock: another request may have just fetched them.
-        for (const [s, e] of missingSpans(account(connection), since, until)) {
-          // eslint-disable-next-line no-await-in-loop
-          await fetchDays(connection, s, e);
-        }
-      });
-    } catch (err) {
-      const anyStored = acct.from && acct.from <= until && acct.to >= since;
-      if (!anyStored) throw err;
-      console.warn("[meta] serving stored insights, fetch failed:", err.message);
+    const fetchMissing = withAccountLock(connection, async () => {
+      // Re-check inside the lock: another request may have just fetched them.
+      for (const [s, e] of missingSpans(account(connection), since, until)) {
+        // eslint-disable-next-line no-await-in-loop
+        await fetchDays(connection, s, e);
+      }
+    });
+    const anyStored = acct.from && acct.from <= until && acct.to >= since;
+    if (!anyStored) {
+      // Nothing to show for this range yet — has to wait for Meta.
+      await fetchMissing;
+    } else {
+      // Part of the range is stored (e.g. last year for a comparison isn't
+      // yet): wait a little, then answer with what's stored and let the
+      // page reload quietly when the rest is in (lib/refreshTracker.js).
+      const settled = fetchMissing.catch((err) =>
+        console.warn("[meta] serving stored insights, fetch failed:", err.message)
+      );
+      trackRefresh(settled);
+      await Promise.race([settled, new Promise((resolve) => setTimeout(resolve, MISSING_WAIT_MS))]);
     }
   }
 
@@ -627,13 +638,16 @@ async function fetchAdDetails(connection, adIds, full) {
 // Unique reach per ad / campaign can't be summed from days (or from a
 // campaign's ads) — the Meta Ads page asks for its range once per level and
 // keeps it (finished ranges for hours).
-const reachCache = new Map();
+// On disk (lib/diskCache.js) so a process restart doesn't empty it; the
+// per-id reach is stored as a plain object.
+const reachCache = createDiskCache("meta-reach-cache");
+const reachMap = (entry) => (entry ? new Map(Object.entries(entry.map || {})) : null);
 async function reachBy(connection, range, level) {
   const { since, until } = resolveRange(range);
   const key = `${connection.adAccountId}::${level}::${since}::${until}`;
   const ttl = until < addDays(todayStr(), -2) ? PAST_RANGE_CACHE_TTL_MS : RECENT_REFRESH_MS;
   const cached = reachCache.get(key);
-  if (cached && Date.now() - cached.at < ttl) return cached.map;
+  if (cached && Date.now() - cached.at < ttl) return reachMap(cached);
   // Expired — answer with the old numbers, refresh in the background.
   if (cached) {
     if (!reachInflight.has(key)) {
@@ -643,7 +657,7 @@ async function reachBy(connection, range, level) {
       );
     }
     trackRefresh(reachInflight.get(key));
-    return cached.map;
+    return reachMap(cached);
   }
   return fetchReach(connection, { since, until }, level, key);
 }
@@ -661,11 +675,11 @@ async function fetchReach(connection, { since, until }, level, key) {
       })
     );
     const map = new Map(rows.map((r) => [r[idField], toNumber(r.reach)]));
-    reachCache.set(key, { map, at: Date.now() });
+    reachCache.set(key, { map: Object.fromEntries(map), at: Date.now() });
     return map;
   } catch (err) {
     console.warn("[meta] reach unavailable:", err.message);
-    return cached?.map || null;
+    return reachMap(cached);
   }
 }
 
