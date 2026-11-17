@@ -96,6 +96,11 @@ const GSC_METRICS = [
 export default function AnalyticsOverview({ onNavigate }) {
   const refresh = useDataRefresh();
   const [connections, setConnections] = useState([]);
+  // "loading" | "ok" | "error" — the store list itself. Without it a failed
+  // or still-pending /status looked exactly like "no store connected".
+  const [connectionsState, setConnectionsState] = useState("loading");
+  const [connectionsError, setConnectionsError] = useState("");
+  const [retryKey, setRetryKey] = useState(0);
   const [trends, setTrends] = useState(null);
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -119,10 +124,20 @@ export default function AnalyticsOverview({ onNavigate }) {
     .filter(Boolean);
 
   useEffect(() => {
+    const quiet = refresh.isQuiet("stores");
     Promise.all([fetchWooStatus(), fetchShopifyStatus()])
+      .catch((err) => {
+        // A quiet refresh keeps what's on screen; otherwise show the error.
+        if (!quiet) {
+          setConnectionsError(err.message);
+          setConnectionsState("error");
+        }
+        throw err;
+      })
       .then(([woo, shopify]) => {
         const list = [...(woo.connections || []), ...(shopify.connections || [])];
         setConnections(list);
+        setConnectionsState("ok");
         if (list.length === 0) return null;
 
         const to = isoDate(new Date());
@@ -138,7 +153,14 @@ export default function AnalyticsOverview({ onNavigate }) {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [refresh.tick]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refresh.tick, retryKey]);
+
+  const retryConnections = () => {
+    setConnectionsState("loading");
+    setLoading(true);
+    setRetryKey((k) => k + 1);
+  };
 
   useEffect(() => {
     fetchGa4Status()
@@ -202,7 +224,16 @@ export default function AnalyticsOverview({ onNavigate }) {
         </p>
       </div>
 
-      {connections.length === 0 ? (
+      {connectionsState === "loading" && connections.length === 0 ? (
+        <div className="empty-hint">Učitavanje prodavnica…</div>
+      ) : connectionsState === "error" && connections.length === 0 ? (
+        <div className="woo-error">
+          Prodavnice nisu učitane: {connectionsError}{" "}
+          <button type="button" className="performance-link" onClick={retryConnections}>
+            Pokušaj ponovo
+          </button>
+        </div>
+      ) : connections.length === 0 ? (
         <div className="empty-hint">
           Poveži WooCommerce ili Shopify prodavnicu u Podešavanja → Integracije da bi video analitiku.
         </div>

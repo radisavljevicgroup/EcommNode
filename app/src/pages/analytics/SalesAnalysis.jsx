@@ -39,6 +39,11 @@ export default function SalesAnalysis() {
   const [chartMetric, setChartMetric] = useState(null);
   const [productSortBy, setProductSortBy] = useState("revenue");
   const [refreshKey, setRefreshKey] = useState(0);
+  // "loading" | "ok" | "error" for the store list — a failed or pending
+  // /status must not read as "no store connected".
+  const [connectionsState, setConnectionsState] = useState("loading");
+  const [connectionsError, setConnectionsError] = useState("");
+  const [connectionsRetry, setConnectionsRetry] = useState(0);
 
   const [from, to] = range;
 
@@ -48,9 +53,18 @@ export default function SalesAnalysis() {
         const list = [...(woo.connections || []), ...(shopify.connections || [])];
         setConnections(list);
         setSelectedIds(list.map((c) => c.id));
+        setConnectionsState("ok");
       })
-      .catch(() => {});
-  }, []);
+      .catch((err) => {
+        setConnectionsError(err.message);
+        setConnectionsState("error");
+      });
+  }, [connectionsRetry]);
+
+  const retryConnections = () => {
+    setConnectionsState("loading");
+    setConnectionsRetry((k) => k + 1);
+  };
 
   const idsKey = selectedIds.join(",");
 
@@ -185,7 +199,16 @@ export default function SalesAnalysis() {
         </div>
       )}
 
-      {connections.length === 0 ? (
+      {connectionsState === "loading" && connections.length === 0 ? (
+        <div className="empty-hint">Učitavanje prodavnica…</div>
+      ) : connectionsState === "error" && connections.length === 0 ? (
+        <div className="woo-error">
+          Prodavnice nisu učitane: {connectionsError}{" "}
+          <button type="button" className="performance-link" onClick={retryConnections}>
+            Pokušaj ponovo
+          </button>
+        </div>
+      ) : connections.length === 0 ? (
         <div className="empty-hint">
           Poveži WooCommerce ili Shopify prodavnicu u Podešavanja → Integracije da bi video analitiku.
         </div>
