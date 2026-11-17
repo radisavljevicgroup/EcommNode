@@ -4,6 +4,7 @@ import { fetchShopifyStatus } from "../api/shopify";
 import { fetchDashboardSummary, fetchDashboardAnomalies } from "../api/dashboard";
 import { formatKpiValue } from "../utils/format";
 import { siteLabel } from "../utils/site";
+import { useDataRefresh } from "../lib/dataRefresh";
 
 const PERIOD_DAYS = 7;
 
@@ -73,6 +74,7 @@ function AnomalyCard({ anomaly, fallbackCurrency }) {
 }
 
 export default function Dashboard() {
+  const refresh = useDataRefresh();
   const [checkingStores, setCheckingStores] = useState(true);
   const [connections, setConnections] = useState([]);
   const [selectedBrand, setSelectedBrand] = useState("");
@@ -94,8 +96,11 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (checkingStores || !hasStores) return;
-    setLoading(true);
-    setError("");
+    const quiet = refresh.isQuiet();
+    if (!quiet) {
+      setLoading(true);
+      setError("");
+    }
     Promise.all([
       fetchDashboardSummary(PERIOD_DAYS, selectedBrand),
       fetchDashboardAnomalies(PERIOD_DAYS, selectedBrand),
@@ -104,9 +109,11 @@ export default function Dashboard() {
         setSummary(summaryData);
         setAnomalies(anomalyData.anomalies || []);
       })
-      .catch((err) => setError(err.message))
+      .catch((err) => {
+        if (!quiet) setError(err.message);
+      })
       .finally(() => setLoading(false));
-  }, [checkingStores, hasStores, selectedBrand]);
+  }, [checkingStores, hasStores, selectedBrand, refresh.tick]);
 
   const hint = `vs prethodnih ${PERIOD_DAYS} dana`;
 

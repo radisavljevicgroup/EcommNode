@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useDataRefresh } from "../../lib/dataRefresh";
 import {
   LineChart,
   Line,
@@ -93,6 +94,7 @@ const GSC_METRICS = [
 ];
 
 export default function AnalyticsOverview({ onNavigate }) {
+  const refresh = useDataRefresh();
   const [connections, setConnections] = useState([]);
   const [trends, setTrends] = useState(null);
   const [summary, setSummary] = useState(null);
@@ -136,7 +138,7 @@ export default function AnalyticsOverview({ onNavigate }) {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, []);
+  }, [refresh.tick]);
 
   useEffect(() => {
     fetchGa4Status()
@@ -151,7 +153,7 @@ export default function AnalyticsOverview({ onNavigate }) {
       })
       .catch(() => {})
       .finally(() => setGa4Loading(false));
-  }, []);
+  }, [refresh.tick]);
 
   useEffect(() => {
     fetchGscStatus()
@@ -166,7 +168,7 @@ export default function AnalyticsOverview({ onNavigate }) {
       })
       .catch(() => {})
       .finally(() => setGscLoading(false));
-  }, []);
+  }, [refresh.tick]);
 
   useEffect(() => {
     fetchMetaStatus()
@@ -181,7 +183,7 @@ export default function AnalyticsOverview({ onNavigate }) {
       })
       .catch(() => {})
       .finally(() => setMetaLoading(false));
-  }, []);
+  }, [refresh.tick]);
 
   useEffect(() => {
     fetchSettings()

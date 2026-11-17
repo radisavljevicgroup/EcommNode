@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useDataRefresh } from "../../lib/dataRefresh";
 import { fetchWooStatus } from "../../api/woocommerce";
 import { fetchShopifyStatus } from "../../api/shopify";
 import {
@@ -24,6 +25,7 @@ import { RefreshIcon } from "../../icons";
 const YEAR_PRESET = PRESETS.find((p) => p.key === "year");
 
 export default function SalesAnalysis() {
+  const refresh = useDataRefresh();
   const [connections, setConnections] = useState([]);
   const [selectedIds, setSelectedIds] = useState([]);
   const [range, setRange] = useState(YEAR_PRESET.range);
@@ -79,8 +81,11 @@ export default function SalesAnalysis() {
       return undefined;
     }
     let cancelled = false;
-    setLoading(true);
-    setError("");
+    const quiet = refresh.isQuiet();
+    if (!quiet) {
+      setLoading(true);
+      setError("");
+    }
 
     const filters = { connectionIds: selectedIds, from, to };
 
@@ -98,7 +103,7 @@ export default function SalesAnalysis() {
         setGeo(g);
       })
       .catch((err) => {
-        if (!cancelled) setError(err.message);
+        if (!cancelled && !quiet) setError(err.message);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -108,7 +113,7 @@ export default function SalesAnalysis() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [idsKey, from, to, productSortBy, refreshKey]);
+  }, [idsKey, from, to, productSortBy, refreshKey, refresh.tick]);
 
   useEffect(() => {
     if (selectedIds.length === 0) return undefined;

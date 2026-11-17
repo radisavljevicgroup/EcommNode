@@ -1,6 +1,7 @@
 const { parseServiceAccount, getAccessToken } = require("./googleServiceAuth");
 const { getAccessTokenFromRefreshToken } = require("./googleOAuthClient");
 const { runLimited } = require("./ga4Limiter");
+const { trackRefresh } = require("./refreshTracker");
 
 const GA4_SCOPE = "https://www.googleapis.com/auth/analytics.readonly";
 
@@ -193,11 +194,6 @@ function cacheTtl(range) {
   return isoDate(endDate) < isoDate(new Date(Date.now() - 2 * DAY_MS)) ? PAST_RANGE_CACHE_TTL_MS : CACHE_TTL_MS;
 }
 
-function cachedValue(cache, key, range) {
-  const cached = cache.get(key);
-  return cached && Date.now() - cached.at < cacheTtl(range) ? cached.data : null;
-}
-
 function resolveRange({ from, to } = {}) {
   const latestAvailable = new Date();
   latestAvailable.setDate(latestAvailable.getDate() - REPORTING_LAG_DAYS);
@@ -241,11 +237,24 @@ function dedupe(key, fn) {
   return p;
 }
 
+// Fresh entry → it. Expired entry → it too, while a background refetch
+// replaces it (the response is marked X-Data-Refreshing, see
+// lib/refreshTracker.js). Nothing cached → wait for GA4.
+function cachedOrFetch(cache, inflightKey, cacheKey, range, fetchFn) {
+  const cached = cache.get(cacheKey);
+  if (cached && Date.now() - cached.at < cacheTtl(range)) return Promise.resolve(cached.data);
+  if (cached) {
+    trackRefresh(dedupe(inflightKey, fetchFn).catch(() => {}));
+    return Promise.resolve(cached.data);
+  }
+  return dedupe(inflightKey, fetchFn);
+}
+
 function getPerformance(connection, { from, to } = {}) {
   const cacheKey = rangeCacheKey(connection, { from, to });
-  const cached = cachedValue(performanceCache, cacheKey, { from, to });
-  if (cached) return Promise.resolve(cached);
-  return dedupe(`perf::${cacheKey}`, () => fetchPerformance(connection, { from, to }, cacheKey));
+  return cachedOrFetch(performanceCache, `perf::${cacheKey}`, cacheKey, { from, to }, () =>
+    fetchPerformance(connection, { from, to }, cacheKey)
+  );
 }
 
 async function fetchPerformance(connection, { from, to }, cacheKey) {
@@ -486,9 +495,9 @@ const insightsCache = new Map();
 
 function getInsights(connection, { from, to } = {}) {
   const cacheKey = rangeCacheKey(connection, { from, to });
-  const cached = cachedValue(insightsCache, cacheKey, { from, to });
-  if (cached) return Promise.resolve(cached);
-  return dedupe(`insights::${cacheKey}`, () => fetchInsights(connection, { from, to }, cacheKey));
+  return cachedOrFetch(insightsCache, `insights::${cacheKey}`, cacheKey, { from, to }, () =>
+    fetchInsights(connection, { from, to }, cacheKey)
+  );
 }
 
 async function fetchInsights(connection, { from, to }, cacheKey) {
@@ -553,7 +562,6 @@ const sessionsFile = createJsonFile("ga4-sessions.json", {});
 const sessionsStore = sessionsFile.read();
 const SESSIONS_RECENT_DAYS = 3;
 const SESSIONS_RECENT_REFRESH_MS = 60 * 60 * 1000;
-const SESSIONS_RECENT_WAIT_MS = 8000;
 
 function addDaysIso(dateStr, n) {
   const d = new Date(`${dateStr}T00:00:00Z`);
@@ -637,7 +645,9 @@ async function getDailySessions(connection, range = {}) {
       const latest = isoDate(resolveRange({}).endDate);
       await fetchSessionDays(connection, recentFrom, latest);
     }).catch((err) => console.warn(`[ga4] recent sessions refresh failed (${connection.propertyId}):`, err.message));
-    await Promise.race([refresh, new Promise((resolve) => setTimeout(resolve, SESSIONS_RECENT_WAIT_MS))]);
+    // Not awaited: answers from what's stored, the page reloads quietly
+    // once GA4 answered (lib/refreshTracker.js).
+    trackRefresh(refresh);
   }
 
   // Same shapes as getPerformance where callers overlap: totals.sessions,

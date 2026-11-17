@@ -1,4 +1,5 @@
 import { authHeaders } from "../lib/authHeaders";
+import { noteResponse } from "../lib/dataRefresh";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000/api";
 
@@ -7,6 +8,7 @@ async function request(path, options = {}) {
     headers: await authHeaders(),
     ...options,
   });
+  noteResponse(res);
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     throw new Error(data.error || "Došlo je do greške.");

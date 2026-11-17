@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useDataRefresh } from "../../lib/dataRefresh";
 import { fetchGscStatus, fetchGscPerformance } from "../../api/gsc";
 import QuadrantCard from "../../components/QuadrantCard";
 import SearchConsoleTrendChart from "../../components/charts/SearchConsoleTrendChart";
@@ -72,6 +73,7 @@ function TopTable({ title, subtitle, rows, rowKey, columnLabel, loading }) {
 }
 
 export default function SearchConsole() {
+  const refresh = useDataRefresh();
   const [connections, setConnections] = useState([]);
   const [selectedId, setSelectedId] = useState("");
   const [range, setRange] = useState(YEAR_PRESET.range);
@@ -94,14 +96,17 @@ export default function SearchConsole() {
   useEffect(() => {
     if (!selectedId) return undefined;
     let cancelled = false;
-    setLoading(true);
-    setError("");
+    const quiet = refresh.isQuiet();
+    if (!quiet) {
+      setLoading(true);
+      setError("");
+    }
     fetchGscPerformance(selectedId, from, to)
       .then((res) => {
         if (!cancelled) setData(res);
       })
       .catch((err) => {
-        if (!cancelled) setError(err.message);
+        if (!cancelled && !quiet) setError(err.message);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -109,7 +114,7 @@ export default function SearchConsole() {
     return () => {
       cancelled = true;
     };
-  }, [selectedId, from, to]);
+  }, [selectedId, from, to, refresh.tick]);
 
   return (
     <div className="analytics-page">

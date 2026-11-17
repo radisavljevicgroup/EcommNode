@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useDataRefresh } from "../lib/dataRefresh";
 import {
   fetchWooOrders,
   fetchWooStatus,
@@ -596,6 +597,9 @@ function OrdersOverview({ assigneeModule, orderInfoModules }) {
   // of run it is.
   const [pollTick, setPollTick] = useState(0);
   const pollingRef = useRef(false);
+  // Quiet reload once the server's background refresh of new orders is in
+  // (lib/dataRefresh.js) — the list itself answers from the cache at once.
+  const refresh = useDataRefresh();
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -671,7 +675,8 @@ function OrdersOverview({ assigneeModule, orderInfoModules }) {
   useEffect(() => {
     if (connections.length === 0) return;
     let cancelled = false;
-    const silent = pollingRef.current;
+    const quietRefresh = refresh.isQuiet();
+    const silent = pollingRef.current || quietRefresh;
     pollingRef.current = false;
     if (!silent) {
       setLoadingOrders(true);
@@ -717,6 +722,7 @@ function OrdersOverview({ assigneeModule, orderInfoModules }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     pollTick,
+    refresh.tick,
     connections,
     selectedId,
     page,

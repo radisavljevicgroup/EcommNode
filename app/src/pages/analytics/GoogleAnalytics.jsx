@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useDataRefresh } from "../../lib/dataRefresh";
 import { fetchGa4Status, fetchGa4Performance, fetchGa4Insights } from "../../api/ga4";
 import QuadrantCard from "../../components/QuadrantCard";
 import Ga4TrendChart from "../../components/charts/Ga4TrendChart";
@@ -241,6 +242,7 @@ function ProductInsights({ insights, loading }) {
 }
 
 export default function GoogleAnalytics() {
+  const refresh = useDataRefresh();
   const [connections, setConnections] = useState([]);
   const [selectedId, setSelectedId] = useState("");
   const [range, setRange] = useState(YEAR_PRESET.range);
@@ -265,14 +267,17 @@ export default function GoogleAnalytics() {
   useEffect(() => {
     if (!selectedId) return undefined;
     let cancelled = false;
-    setLoading(true);
-    setError("");
+    const quiet = refresh.isQuiet("performance");
+    if (!quiet) {
+      setLoading(true);
+      setError("");
+    }
     fetchGa4Performance(selectedId, from, to)
       .then((res) => {
         if (!cancelled) setData(res);
       })
       .catch((err) => {
-        if (!cancelled) setError(err.message);
+        if (!cancelled && !quiet) setError(err.message);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -280,21 +285,24 @@ export default function GoogleAnalytics() {
     return () => {
       cancelled = true;
     };
-  }, [selectedId, from, to]);
+  }, [selectedId, from, to, refresh.tick]);
 
   // Separate request so a slow or failing e-commerce report never holds up
   // or breaks the main traffic numbers above it.
   useEffect(() => {
     if (!selectedId) return undefined;
     let cancelled = false;
-    setInsightsLoading(true);
-    setInsights(null);
+    const quiet = refresh.isQuiet("insights");
+    if (!quiet) {
+      setInsightsLoading(true);
+      setInsights(null);
+    }
     fetchGa4Insights(selectedId, from, to)
       .then((res) => {
         if (!cancelled) setInsights(res);
       })
       .catch((err) => {
-        if (!cancelled) setInsights({ products: { error: err.message }, devices: { error: err.message } });
+        if (!cancelled && !quiet) setInsights({ products: { error: err.message }, devices: { error: err.message } });
       })
       .finally(() => {
         if (!cancelled) setInsightsLoading(false);
@@ -302,7 +310,7 @@ export default function GoogleAnalytics() {
     return () => {
       cancelled = true;
     };
-  }, [selectedId, from, to]);
+  }, [selectedId, from, to, refresh.tick]);
 
   return (
     <div className="analytics-page">

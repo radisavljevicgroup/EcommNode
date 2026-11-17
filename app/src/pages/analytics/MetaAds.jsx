@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useDataRefresh } from "../../lib/dataRefresh";
 import { fetchMetaStatus, fetchMetaPerformance } from "../../api/meta";
 import QuadrantCard from "../../components/QuadrantCard";
 import MetaTrendChart from "../../components/charts/MetaTrendChart";
@@ -406,6 +407,7 @@ function AllAdsTable({ rows, loading, currency }) {
 }
 
 export default function MetaAds() {
+  const refresh = useDataRefresh();
   const [connections, setConnections] = useState([]);
   const [selectedId, setSelectedId] = useState("");
   const [range, setRange] = useState(YEAR_PRESET.range);
@@ -429,14 +431,17 @@ export default function MetaAds() {
   useEffect(() => {
     if (!selectedId) return undefined;
     let cancelled = false;
-    setLoading(true);
-    setError("");
+    const quiet = refresh.isQuiet();
+    if (!quiet) {
+      setLoading(true);
+      setError("");
+    }
     fetchMetaPerformance(selectedId, from, to)
       .then((res) => {
         if (!cancelled) setData(res);
       })
       .catch((err) => {
-        if (!cancelled) setError(err.message);
+        if (!cancelled && !quiet) setError(err.message);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -444,7 +449,7 @@ export default function MetaAds() {
     return () => {
       cancelled = true;
     };
-  }, [selectedId, from, to]);
+  }, [selectedId, from, to, refresh.tick]);
 
   return (
     <div className="analytics-page">

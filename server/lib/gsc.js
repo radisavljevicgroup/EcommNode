@@ -1,5 +1,6 @@
 const { parseServiceAccount, getAccessToken } = require("./googleServiceAuth");
 const { getAccessTokenFromRefreshToken } = require("./googleOAuthClient");
+const { trackRefresh } = require("./refreshTracker");
 
 const GSC_SCOPE = "https://www.googleapis.com/auth/webmasters.readonly";
 
@@ -114,9 +115,42 @@ function aggregateTrend(dateRows, unit) {
   return [...buckets.values()];
 }
 
-async function getPerformance(connection, { from, to } = {}) {
-  const token = await getToken(connection);
+// Every Analitika/SEO load used to ask Search Console again (3 queries).
+// Its data lags ~3 days and changes slowly, so a range is kept for
+// CACHE_TTL_MS; after that the old copy is still served while a background
+// refetch replaces it (marked X-Data-Refreshing, see lib/refreshTracker.js).
+const CACHE_TTL_MS = 60 * 60 * 1000;
+const performanceCache = new Map(); // key -> { data, at }
+const inflight = new Map();
 
+function fetchOnce(key, connection, range) {
+  if (!inflight.has(key)) {
+    inflight.set(
+      key,
+      fetchPerformance(connection, range)
+        .then((data) => {
+          performanceCache.set(key, { data, at: Date.now() });
+          return data;
+        })
+        .finally(() => inflight.delete(key))
+    );
+  }
+  return inflight.get(key);
+}
+
+function getPerformance(connection, { from, to } = {}) {
+  const { dateRange } = resolveDates({ from, to });
+  const key = `${connection.id}::${connection.siteUrl}::${dateRange.startDate}::${dateRange.endDate}`;
+  const cached = performanceCache.get(key);
+  if (cached && Date.now() - cached.at < CACHE_TTL_MS) return Promise.resolve(cached.data);
+  if (cached) {
+    trackRefresh(fetchOnce(key, connection, { from, to }).catch(() => {}));
+    return Promise.resolve(cached.data);
+  }
+  return fetchOnce(key, connection, { from, to });
+}
+
+function resolveDates({ from, to } = {}) {
   const latestAvailable = new Date();
   latestAvailable.setDate(latestAvailable.getDate() - REPORTING_LAG_DAYS);
 
@@ -128,6 +162,12 @@ async function getPerformance(connection, { from, to } = {}) {
   if (startDate > endDate) startDate = new Date(endDate);
 
   const dateRange = { startDate: isoDate(startDate), endDate: isoDate(endDate) };
+  return { startDate, endDate, dateRange };
+}
+
+async function fetchPerformance(connection, { from, to } = {}) {
+  const token = await getToken(connection);
+  const { startDate, endDate, dateRange } = resolveDates({ from, to });
   const spanDays = Math.max((endDate - startDate) / (1000 * 60 * 60 * 24), 1);
   const unit = spanDays <= 31 ? "day" : spanDays <= 180 ? "week" : "month";
 

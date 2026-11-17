@@ -385,15 +385,13 @@ async function fetchAccountAds(adAccountId, accessToken) {
 // While Meta is throttling, everything is served from what's stored.
 
 const { createJsonFile } = require("./jsonFile");
+const { trackRefresh } = require("./refreshTracker");
 
 const insightsFile = createJsonFile("meta-insights.json", {});
 let store = insightsFile.read();
 
 const RECENT_DAYS = 3;
 const RECENT_REFRESH_MS = 30 * 60 * 1000;
-// A request for a period whose recent days are stale waits this long for the
-// refresh, then answers from what's stored (the refresh still lands).
-const RECENT_WAIT_MS = 8000;
 // Longest window asked for in one call — a year of daily ad rows in one go is
 // what Meta answers slowest.
 const FETCH_CHUNK_DAYS = 92;
@@ -537,11 +535,19 @@ async function dailyRows(connection, range) {
     }
   }
 
-  if (until >= addDays(todayStr(), -(RECENT_DAYS - 1))) {
-    const refresh = refreshRecent(connection).catch((err) =>
-      console.warn("[meta] recent insights refresh failed:", err.message)
+  // Recent days are refreshed in the background — the range answers from
+  // what's stored now, and the response is marked X-Data-Refreshing so the
+  // page reloads quietly once Meta answered (lib/refreshTracker.js).
+  const recentStale =
+    recentInflight.has(String(connection.adAccountId)) ||
+    !acct.recentAt ||
+    Date.now() - Date.parse(acct.recentAt) >= RECENT_REFRESH_MS;
+  if (until >= addDays(todayStr(), -(RECENT_DAYS - 1)) && recentStale) {
+    trackRefresh(
+      refreshRecent(connection).catch((err) =>
+        console.warn("[meta] recent insights refresh failed:", err.message)
+      )
     );
-    await Promise.race([refresh, new Promise((resolve) => setTimeout(resolve, RECENT_WAIT_MS))]);
   }
 
   const out = [];
@@ -556,6 +562,34 @@ async function dailyRows(connection, range) {
 // every listed-status ad of the account (the not-yet-delivered ones), at most
 // hourly. Stored with the insights so a restart doesn't refetch them.
 async function adDetails(connection, adIds, { full = false } = {}) {
+  const acct = account(connection);
+  const ads = acct.ads || (acct.ads = {});
+  const expired = (at) => !at || Date.now() - Date.parse(at) > AD_DETAILS_TTL_MS;
+  // Nothing stored yet for some ad (or the account's ad list never fetched)
+  // — that has to be fetched before answering.
+  const lacking =
+    (full && !acct.adsListAt) || adIds.some((id) => !ads[id] || ads[id].creative === undefined);
+  if (lacking) {
+    await fetchAdDetails(connection, adIds, full);
+    return ads;
+  }
+  // Only the hourly status/budget refresh is due — answer from what's stored
+  // and refresh in the background (lib/refreshTracker.js).
+  if (full && (expired(acct.adsListAt) || adIds.some((id) => expired(ads[id].at)))) {
+    const key = String(connection.adAccountId);
+    if (!adDetailsInflight.has(key)) {
+      adDetailsInflight.set(
+        key,
+        fetchAdDetails(connection, adIds, full).finally(() => adDetailsInflight.delete(key))
+      );
+    }
+    trackRefresh(adDetailsInflight.get(key));
+  }
+  return ads;
+}
+
+const adDetailsInflight = new Map();
+async function fetchAdDetails(connection, adIds, full) {
   const acct = account(connection);
   const ads = acct.ads || (acct.ads = {});
   try {
@@ -588,7 +622,6 @@ async function adDetails(connection, adIds, { full = false } = {}) {
   } catch (err) {
     console.warn("[meta] ad details from store, fetch failed:", err.message);
   }
-  return ads;
 }
 
 // Unique reach per ad / campaign can't be summed from days (or from a
@@ -597,11 +630,28 @@ async function adDetails(connection, adIds, { full = false } = {}) {
 const reachCache = new Map();
 async function reachBy(connection, range, level) {
   const { since, until } = resolveRange(range);
-  const idField = `${level}_id`;
   const key = `${connection.adAccountId}::${level}::${since}::${until}`;
   const ttl = until < addDays(todayStr(), -2) ? PAST_RANGE_CACHE_TTL_MS : RECENT_REFRESH_MS;
   const cached = reachCache.get(key);
   if (cached && Date.now() - cached.at < ttl) return cached.map;
+  // Expired — answer with the old numbers, refresh in the background.
+  if (cached) {
+    if (!reachInflight.has(key)) {
+      reachInflight.set(
+        key,
+        fetchReach(connection, { since, until }, level, key).finally(() => reachInflight.delete(key))
+      );
+    }
+    trackRefresh(reachInflight.get(key));
+    return cached.map;
+  }
+  return fetchReach(connection, { since, until }, level, key);
+}
+
+const reachInflight = new Map();
+async function fetchReach(connection, { since, until }, level, key) {
+  const idField = `${level}_id`;
+  const cached = reachCache.get(key);
   try {
     const rows = await withAccountLock(connection, () =>
       fetchInsights(connection.adAccountId, connection.accessToken, {

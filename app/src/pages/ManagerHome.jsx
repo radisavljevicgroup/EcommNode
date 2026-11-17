@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useDataRefresh } from "../lib/dataRefresh";
 import {
   LineChart,
   Line,
@@ -143,6 +144,7 @@ const LOGISTICS_METRICS = [
 const WORKER_STATS_ROLES = new Set(["E-commerce Manager"]);
 
 export default function ManagerHome({ onNavigate, roleName }) {
+  const refresh = useDataRefresh();
   const [checkingStores, setCheckingStores] = useState(true);
   const [connections, setConnections] = useState([]);
   const [selectedIds, setSelectedIds] = useState([]);
@@ -229,13 +231,18 @@ export default function ManagerHome({ onNavigate, roleName }) {
       return undefined;
     }
     let cancelled = false;
-    setLoading(true);
-    setSummaryLoading(true);
-    setAdsLoading(true);
+    // Quiet reload (lib/dataRefresh.js): keep the cards on screen and swap
+    // in the new numbers when they're all there.
+    const quiet = refresh.isQuiet();
+    if (!quiet) {
+      setLoading(true);
+      setSummaryLoading(true);
+      setAdsLoading(true);
+    }
     const filters = { connectionIds: selectedIds, from, to };
 
     fetchDashboardSummaryProgressive(filters, (core) => {
-      if (cancelled) return;
+      if (cancelled || quiet) return;
       setSummary(core);
       setSummaryLoading(false);
     })
@@ -268,7 +275,7 @@ export default function ManagerHome({ onNavigate, roleName }) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [idsKey, from, to]);
+  }, [idsKey, from, to, refresh.tick]);
 
   useEffect(() => {
     fetchGa4Status()
@@ -282,7 +289,7 @@ export default function ManagerHome({ onNavigate, roleName }) {
       })
       .catch(() => {})
       .finally(() => setGa4Loading(false));
-  }, []);
+  }, [refresh.tick]);
 
   useEffect(() => {
     fetchGscStatus()
@@ -296,7 +303,7 @@ export default function ManagerHome({ onNavigate, roleName }) {
       })
       .catch(() => {})
       .finally(() => setGscLoading(false));
-  }, []);
+  }, [refresh.tick]);
 
   const quadrantValues = summary && {
     orderCount: summary.orders.current,

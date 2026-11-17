@@ -2,6 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const express = require("express");
 const cors = require("cors");
+const { refreshTrackerMiddleware } = require("./lib/refreshTracker");
 const dotenv = require("dotenv");
 
 const connectRouter = require("./routes/connect");
@@ -61,6 +62,8 @@ app.use(
       if (!CLIENT_ORIGIN) return callback(null, true);
       callback(new Error("Not allowed by CORS"));
     },
+    // Read by the frontend — see lib/refreshTracker.js.
+    exposedHeaders: ["X-Data-Refreshing"],
   })
 );
 // Before express.json(): the proxy forwards the raw request body as-is
@@ -94,6 +97,9 @@ app.use(express.json({ limit: "25mb", verify: (req, res, buf) => { req.rawBody =
 // meant for a later, unauthenticated router, before that router ever gets
 // a chance to say "not my route". These three have to come before every
 // requireAuth-gated mount for that reason, not just before some of them.
+// Marks responses answered while a background refresh still runs
+// (X-Data-Refreshing) — see lib/refreshTracker.js.
+app.use("/api", refreshTrackerMiddleware);
 app.use("/api", workersRouter);
 app.use("/api", inboxRouter);
 app.use("/api", googleOAuthRouter);

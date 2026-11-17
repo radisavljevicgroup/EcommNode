@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useDataRefresh } from "../lib/dataRefresh";
 import { fetchWooStatus } from "../api/woocommerce";
 import { fetchShopifyStatus } from "../api/shopify";
 import { fetchDashboardSummaryForRange } from "../api/dashboard";
@@ -54,6 +55,7 @@ const ORDER_METRICS = [
 // No revenue/ad-spend, no trend charts, no premium analytics tools — this
 // role's nav is limited to IT Infrastruktura, and this home reflects that.
 export default function ItAdminHome() {
+  const refresh = useDataRefresh();
   const [checkingStores, setCheckingStores] = useState(true);
   const [connections, setConnections] = useState([]);
   const [selectedIds, setSelectedIds] = useState([]);
@@ -99,7 +101,7 @@ export default function ItAdminHome() {
       return undefined;
     }
     let cancelled = false;
-    setLoading(true);
+    if (!refresh.isQuiet()) setLoading(true);
     fetchDashboardSummaryForRange({ connectionIds: selectedIds, from, to, parts: "core" })
       .then((s) => {
         if (!cancelled) setSummary(s);
@@ -112,7 +114,7 @@ export default function ItAdminHome() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [idsKey, from, to]);
+  }, [idsKey, from, to, refresh.tick]);
 
   const quadrantValues = summary && {
     orderCount: summary.orders.current,

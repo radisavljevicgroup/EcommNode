@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useDataRefresh } from "../../lib/dataRefresh";
 import { isoDate, startOfMonth } from "../../components/DateRangePicker";
 import RevenueTrendChart from "../../components/charts/RevenueTrendChart";
 import InfoTooltip from "../../components/InfoTooltip";
@@ -26,6 +27,7 @@ function daysAgo(n) {
 }
 
 export default function YearComparisonSection({ selectedIds }) {
+  const refresh = useDataRefresh();
   const [compareMode, setCompareMode] = useState("month");
   // Deliberately NOT the same range "Isti mesec" would show (month-to-
   // date) — defaulting to that made switching between the two look like
@@ -55,8 +57,11 @@ export default function YearComparisonSection({ selectedIds }) {
       return undefined;
     }
     let cancelled = false;
-    setLoading(true);
-    setError("");
+    const quiet = refresh.isQuiet();
+    if (!quiet) {
+      setLoading(true);
+      setError("");
+    }
 
     Promise.all([
       fetchAnalyticsSummary({ connectionIds: selectedIds, from, to, compare: true }),
@@ -68,7 +73,7 @@ export default function YearComparisonSection({ selectedIds }) {
         setTrends(t);
       })
       .catch((err) => {
-        if (!cancelled) setError(err.message);
+        if (!cancelled && !quiet) setError(err.message);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -78,7 +83,7 @@ export default function YearComparisonSection({ selectedIds }) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [idsKey, compareMode, from, to]);
+  }, [idsKey, compareMode, from, to, refresh.tick]);
 
   // RevenueTrendChart's x-axis field is literally named "month" (it was
   // built for the always-on monthly overview chart above) — reused as-is

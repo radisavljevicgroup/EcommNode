@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useDataRefresh } from "../lib/dataRefresh";
 import { fetchWooStatus } from "../api/woocommerce";
 import { fetchShopifyStatus } from "../api/shopify";
 import { fetchDashboardSummaryForRange } from "../api/dashboard";
@@ -77,6 +78,7 @@ const LOGISTICS_METRICS = [
 // last-year revenue comparison isn't their job but delivery destinations
 // are; "yoy" (E-commerce Operations Manager) keeps the trend comparison.
 export default function RestrictedHome({ secondChart = "yoy", roleName }) {
+  const refresh = useDataRefresh();
   const [checkingStores, setCheckingStores] = useState(true);
   const [connections, setConnections] = useState([]);
   const [selectedIds, setSelectedIds] = useState([]);
@@ -130,7 +132,7 @@ export default function RestrictedHome({ secondChart = "yoy", roleName }) {
       return undefined;
     }
     let cancelled = false;
-    setLoading(true);
+    if (!refresh.isQuiet()) setLoading(true);
     const filters = { connectionIds: selectedIds, from, to };
 
     Promise.all([
@@ -153,7 +155,7 @@ export default function RestrictedHome({ secondChart = "yoy", roleName }) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [idsKey, from, to, secondChart]);
+  }, [idsKey, from, to, secondChart, refresh.tick]);
 
   const quadrantValues = summary && {
     orderCount: summary.orders.current,

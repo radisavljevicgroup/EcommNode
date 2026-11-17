@@ -5,6 +5,7 @@ const { mapShopifyOrder } = require("./mapShopifyOrder");
 const { fetchAllShopifyOrdersRaw } = require("./shopify");
 const { getStaleOrderThresholdDays } = require("./settingsStore");
 const { getCallCount } = require("./orderCallsStore");
+const { trackRefresh } = require("./refreshTracker");
 
 const file = createJsonFile("orders-cache.json", {});
 let cache = file.read();
@@ -241,19 +242,29 @@ async function refreshRecentOrders(connections, { minIntervalMs = 0 } = {}) {
   await Promise.all(
     connections.map((connection) => {
       const inFlight = recentRefreshing.get(connection.id);
-      if (inFlight) return inFlight;
+      if (inFlight) return trackRefresh(inFlight);
       if (Date.now() - (recentAttemptAt.get(connection.id) || 0) < minIntervalMs) return null;
       const promise = refreshRecentConnection(connection).finally(() =>
         recentRefreshing.delete(connection.id)
       );
       recentRefreshing.set(connection.id, promise);
-      return promise;
+      return trackRefresh(promise);
     })
   );
 }
 
-// For request handlers: refresh recent orders (throttled), but don't hold
-// the response longer than RECENT_WAIT_MS on a slow store.
+// For request handlers that answer from the cache right away: starts the
+// throttled recent-orders refresh without waiting for it. The response is
+// marked X-Data-Refreshing while it runs (lib/refreshTracker.js), and the
+// page reloads quietly once the new orders are in — waiting here instead
+// held Porudžbine for up to RECENT_WAIT_MS behind the slowest store.
+function startRecentRefresh(connections) {
+  refreshRecentOrders(connections, { minIntervalMs: RECENT_MIN_INTERVAL_MS }).catch(() => {});
+}
+
+// For callers that must have the newest orders before acting (premium
+// modules: order distribution, customer journey): refresh recent orders
+// (throttled), but don't wait longer than RECENT_WAIT_MS on a slow store.
 function freshenOrders(connections) {
   return Promise.race([
     refreshRecentOrders(connections, { minIntervalMs: RECENT_MIN_INTERVAL_MS }),
@@ -495,6 +506,7 @@ module.exports = {
   syncConnection,
   refreshRecentOrders,
   freshenOrders,
+  startRecentRefresh,
   getOrdersForConnections,
   getOrdersForConnectionsTagged,
   getOrdersPage,

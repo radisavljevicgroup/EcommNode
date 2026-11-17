@@ -6,7 +6,7 @@ const {
   getStaleOrders,
   getUnfiscalizedOrders,
   getPersonalizationOrders,
-  freshenOrders,
+  startRecentRefresh,
 } = require("../lib/ordersCache");
 const {
   isStaleTrackingEnabled,
@@ -68,8 +68,10 @@ router.get("/orders", async (req, res) => {
 
   // Pulls in orders placed since the last cache write (one request per
   // store, at most once a minute) — otherwise a new order only showed up
-  // after the hourly full sync. See ordersCache.js's freshenOrders.
-  await freshenOrders(targets);
+  // after the hourly full sync. Not awaited: the list answers from the
+  // cache at once and the page reloads quietly when the refresh is in (see
+  // ordersCache.js's startRecentRefresh, lib/refreshTracker.js).
+  startRecentRefresh(targets);
 
   // Stale-orders view reads from the local analytics cache (needs full
   // history to find old un-completed orders) instead of paginating the
