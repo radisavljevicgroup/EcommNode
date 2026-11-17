@@ -237,6 +237,11 @@ async function fetchInsights(adAccountId, accessToken, params) {
 // this page take unreasonably long to load.
 // object_type plus every place a creative can keep its website link —
 // destinationHost() below reads them to tell which store an ad sells for.
+// Adset id/budget/schedule per ad, plus the campaign's own budget (campaign
+// budget optimization keeps the budget there and leaves the adsets' empty).
+const BUDGET_FIELDS =
+  "adset{id,daily_budget,lifetime_budget,start_time,end_time},campaign{id,name,daily_budget,lifetime_budget}";
+
 const CREATIVE_FIELDS =
   "creative{object_type,link_url,object_url,object_story_spec{link_data{link},video_data{call_to_action{value{link}}},template_data{link}},asset_feed_spec{link_urls{website_url}}}";
 
@@ -291,7 +296,7 @@ function adStoreId(ad, connection, stores) {
 
 async function fetchAdMetaByIds(adAccountId, adIds, accessToken) {
   if (!adIds.length) return new Map();
-  const fields = `id,effective_status,adset{daily_budget,lifetime_budget,start_time,end_time},${CREATIVE_FIELDS}`;
+  const fields = `id,effective_status,${BUDGET_FIELDS},${CREATIVE_FIELDS}`;
 
   const chunks = [];
   for (let i = 0; i < adIds.length; i += 50) chunks.push(adIds.slice(i, i + 50));
@@ -341,7 +346,7 @@ async function fetchAccountAds(adAccountId, accessToken) {
   const url = new URL(`${GRAPH_API_BASE}/act_${adAccountId}/ads`);
   url.searchParams.set(
     "fields",
-    `id,name,created_time,effective_status,campaign{name},adset{daily_budget,lifetime_budget,start_time,end_time},${CREATIVE_FIELDS}`
+    `id,name,created_time,effective_status,${BUDGET_FIELDS},${CREATIVE_FIELDS}`
   );
   url.searchParams.set(
     "filtering",
@@ -586,12 +591,14 @@ async function adDetails(connection, adIds, { full = false } = {}) {
   return ads;
 }
 
-// Unique reach per ad can't be summed from days — the Meta Ads page asks for
-// its range once and keeps it (finished ranges for hours).
+// Unique reach per ad / campaign can't be summed from days (or from a
+// campaign's ads) — the Meta Ads page asks for its range once per level and
+// keeps it (finished ranges for hours).
 const reachCache = new Map();
-async function reachByAd(connection, range) {
+async function reachBy(connection, range, level) {
   const { since, until } = resolveRange(range);
-  const key = `${connection.adAccountId}::${since}::${until}`;
+  const idField = `${level}_id`;
+  const key = `${connection.adAccountId}::${level}::${since}::${until}`;
   const ttl = until < addDays(todayStr(), -2) ? PAST_RANGE_CACHE_TTL_MS : RECENT_REFRESH_MS;
   const cached = reachCache.get(key);
   if (cached && Date.now() - cached.at < ttl) return cached.map;
@@ -599,11 +606,11 @@ async function reachByAd(connection, range) {
     const rows = await withAccountLock(connection, () =>
       fetchInsights(connection.adAccountId, connection.accessToken, {
         time_range: JSON.stringify({ since, until }),
-        fields: "ad_id,reach",
-        level: "ad",
+        fields: `${idField},reach`,
+        level,
       })
     );
-    const map = new Map(rows.map((r) => [r.ad_id, toNumber(r.reach)]));
+    const map = new Map(rows.map((r) => [r[idField], toNumber(r.reach)]));
     reachCache.set(key, { map, at: Date.now() });
     return map;
   } catch (err) {
@@ -664,28 +671,12 @@ async function getPerformance(connection, range = {}) {
   const currency = connection.currency || null;
   const rsdPerEur = await fx.getRsdPerEur();
 
-  // Every campaign that spent in the period, so the page can compare them
-  // side by side when moving budget.
-  const topCampaigns = [...sumBy(rows, (r) => r.cid || r.campaign || "").values()]
-    .map((c) => ({
-      campaignId: c.first.cid,
-      campaign: c.first.campaign,
-      spend: c.spend,
-      impressions: c.impr,
-      clicks: c.clicks,
-      purchases: c.purch,
-      revenue: c.value,
-      cpa: c.purch > 0 ? c.spend / c.purch : null,
-    }))
-    .filter((c) => c.spend > 0)
-    .sort((a, b) => b.spend - a.spend)
-    .map((c) => withRevenueCurrency(c, c.spend, currency, rsdPerEur));
-
   const byAd = sumBy(rows, (r) => r.ad);
   const deliveredIds = [...byAd.keys()].filter(Boolean);
-  const [ads, reach] = await Promise.all([
+  const [ads, reach, campaignReach] = await Promise.all([
     adDetails(connection, deliveredIds, { full: true }),
-    reachByAd(connection, range),
+    reachBy(connection, range, "ad"),
+    reachBy(connection, range, "campaign"),
   ]);
 
   // /insights only has ads that delivered — add the account's current ads
@@ -704,17 +695,24 @@ async function getPerformance(connection, range = {}) {
     });
 
   const adEntries = [
-    ...[...byAd.entries()].map(([id, a]) => ({ id, a, name: a.first.name, campaign: a.first.campaign })),
+    ...[...byAd.entries()].map(([id, a]) => ({
+      id,
+      a,
+      name: a.first.name,
+      campaignId: a.first.cid,
+      campaign: a.first.campaign,
+    })),
     ...undelivered.map((ad) => ({
       id: ad.id,
       a: { spend: 0, impr: 0, clicks: 0, purch: 0, value: 0, follows: 0 },
       name: ad.name,
+      campaignId: ad.campaign?.id || null,
       campaign: ad.campaign?.name || null,
     })),
   ];
 
   const allAds = adEntries
-    .map(({ id, a, name, campaign }) => {
+    .map(({ id, a, name, campaignId, campaign }) => {
       const meta = ads[id] || {};
       const adset = meta.adset || {};
       const start = adset.start_time || null;
@@ -735,7 +733,11 @@ async function getPerformance(connection, range = {}) {
           adId: id || null,
           destinationHost: destinationHost(meta.creative),
           adName: name,
+          campaignId,
           campaign,
+          adsetId: adset.id || null,
+          adsetBudget: adset.daily_budget != null || adset.lifetime_budget != null,
+          end,
           status: meta.effective_status === "ACTIVE" ? "active" : "inactive",
           start,
           pricePerDay: dailyBudget,
@@ -762,6 +764,80 @@ async function getPerformance(connection, range = {}) {
       );
     })
     .sort((x, y) => y.total - x.total);
+
+  // Every campaign with an ad in the table (spent in the period, or new and
+  // not delivered yet), with the same columns as the per-ad table — so the
+  // page can compare them side by side when moving budget.
+  const byCampaign = new Map();
+  allAds.forEach((ad) => {
+    const key = ad.campaignId || ad.campaign || "";
+    if (!byCampaign.has(key)) {
+      byCampaign.set(key, { id: ad.campaignId, name: ad.campaign, ads: [] });
+    }
+    byCampaign.get(key).ads.push(ad);
+  });
+
+  const topCampaigns = [...byCampaign.values()]
+    .map(({ id, name, ads: campaignAds }) => {
+      const sum = (field) => campaignAds.reduce((s, ad) => s + (ad[field] || 0), 0);
+      const spend = sum("total");
+      const impressions = sum("impressions");
+      const clicks = sum("clicks");
+      const follows = sum("follows");
+      const purchases = sum("purchases");
+
+      const starts = campaignAds.map((ad) => ad.start).filter(Boolean).sort();
+      const start = starts[0] || null;
+      const stillRunning = campaignAds.some((ad) => ad.start && !ad.end);
+      const ends = campaignAds.map((ad) => ad.end).filter(Boolean).sort();
+      const end = stillRunning ? null : ends[ends.length - 1] || null;
+      const days = start ? Math.max(1, Math.ceil((new Date(end || Date.now()) - new Date(start)) / DAY_MS)) : null;
+
+      // Campaign budget (CBO) when there is one; otherwise each adset's
+      // budget once, however many of its ads are listed.
+      const campaignMeta = campaignAds.map((ad) => ads[ad.adId]?.campaign).find(Boolean) || {};
+      let pricePerDay = null;
+      if (campaignMeta.daily_budget != null) pricePerDay = toNumber(campaignMeta.daily_budget) / 100;
+      else if (campaignMeta.lifetime_budget != null && days) pricePerDay = toNumber(campaignMeta.lifetime_budget) / 100 / days;
+      else {
+        const seen = new Set();
+        campaignAds.forEach((ad) => {
+          if (ad.pricePerDay == null || !ad.adsetBudget) return;
+          const adsetKey = ad.adsetId || ad.adId;
+          if (seen.has(adsetKey)) return;
+          seen.add(adsetKey);
+          pricePerDay = (pricePerDay || 0) + ad.pricePerDay;
+        });
+      }
+
+      const reachValue = campaignReach ? campaignReach.get(id) ?? 0 : null;
+      return withRevenueCurrency(
+        {
+          campaignId: id || null,
+          campaign: name,
+          status: campaignAds.some((ad) => ad.status === "active") ? "active" : "inactive",
+          adCount: campaignAds.length,
+          start,
+          pricePerDay,
+          days,
+          spend,
+          reach: reachValue,
+          impressions,
+          clicks,
+          follows,
+          purchases,
+          revenue: sum("revenue"),
+          ctr: impressions > 0 ? (clicks / impressions) * 100 : 0,
+          cpc: clicks > 0 ? spend / clicks : 0,
+          cpf: follows > 0 ? spend / follows : null,
+          cpa: purchases > 0 ? spend / purchases : null,
+        },
+        spend,
+        currency,
+        rsdPerEur
+      );
+    })
+    .sort((a, b) => b.spend - a.spend);
 
   return {
     dateRange: { startDate: isoDate(startDate), endDate: isoDate(endDate) },

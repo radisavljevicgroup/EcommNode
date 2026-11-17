@@ -87,9 +87,20 @@ const CAMPAIGN_SORTS = {
 
 function TopCampaignsTable({ rows, loading, currency }) {
   const [sortKey, setSortKey] = useState("spend");
-  const [showAll, setShowAll] = useState(false);
-  const sorted = [...rows].sort(CAMPAIGN_SORTS[sortKey]);
-  const visible = showAll ? sorted : sorted.slice(0, 10);
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [pageSize, setPageSize] = useState(10);
+  const [page, setPage] = useState(1);
+
+  const filteredRows = (statusFilter === "all" ? rows : rows.filter((r) => r.status === statusFilter)).sort(
+    CAMPAIGN_SORTS[sortKey]
+  );
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const pageRows = filteredRows.slice((safePage - 1) * pageSize, safePage * pageSize);
+
+  useEffect(() => {
+    setPage(1);
+  }, [sortKey, statusFilter, pageSize, rows]);
 
   return (
     <div className="chart-card">
@@ -111,36 +122,80 @@ function TopCampaignsTable({ rows, loading, currency }) {
                 <option value="profit">Po profitu</option>
               </select>
             </label>
+            <label className="per-page-select">
+              Status
+              <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+                <option value="all">Sve</option>
+                <option value="active">Aktivne</option>
+                <option value="inactive">Neaktivne</option>
+              </select>
+            </label>
+            <label className="per-page-select">
+              Po stranici
+              <select value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))}>
+                {PAGE_SIZE_OPTIONS.map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
         )}
       </div>
       {rows.length === 0 ? (
         <div className="empty-hint">{loading ? "Učitavanje…" : "Nema podataka."}</div>
+      ) : filteredRows.length === 0 ? (
+        <div className="empty-hint">Nema kampanja za izabrani status.</div>
       ) : (
         <>
           <div className="orders-items-table-wrap">
-            <table className="orders-items-table">
+            <table className="orders-items-table meta-ads-table">
               <thead>
                 <tr>
                   <th>Kampanja</th>
-                  <th>Potrošnja</th>
-                  <th>Klikovi</th>
-                  <th>Kupovine</th>
+                  <th>Status</th>
+                  <th>Početak</th>
+                  <th>Cena po danu</th>
+                  <th>Broj dana</th>
+                  <th>Ukupno</th>
+                  <th>Reach</th>
+                  <th>Impression</th>
+                  <th>Clicks</th>
+                  <th>Follows</th>
+                  <th>Broj kupaca</th>
+                  <th>Zarada</th>
+                  <th>CTR</th>
+                  <th>CPC</th>
+                  <th>CPF</th>
                   <th>CPA</th>
-                  <th>Prihod</th>
                   <th>ROAS</th>
                   <th>Profit</th>
                 </tr>
               </thead>
               <tbody>
-                {visible.map((row, i) => (
+                {pageRows.map((row, i) => (
                   <tr key={row.campaignId || i}>
-                    <td className="gsc-key-cell">{row.campaign}</td>
+                    <td className="gsc-key-cell">{row.campaign || "—"}</td>
+                    <td>
+                      <span className={"status-pill" + (row.status === "active" ? "" : " inactive")}>
+                        {row.status === "active" ? "Aktivna" : "Neaktivna"}
+                      </span>
+                    </td>
+                    <td>{formatDate(row.start)}</td>
+                    <td>{formatKpiValue("currency", row.pricePerDay, currency)}</td>
+                    <td>{row.days ?? "—"}</td>
                     <td>{formatKpiValue("currency", row.spend, currency)}</td>
+                    <td>{formatKpiValue("integer", row.reach)}</td>
+                    <td>{formatKpiValue("integer", row.impressions)}</td>
                     <td>{formatKpiValue("integer", row.clicks)}</td>
+                    <td>{formatKpiValue("integer", row.follows)}</td>
                     <td>{formatKpiValue("integer", row.purchases)}</td>
-                    <td>{formatKpiValue("currency", row.cpa, currency)}</td>
                     <td>{formatKpiValue("currency", row.revenue, row.revenueCurrency || currency)}</td>
+                    <td>{formatKpiValue("percent", row.ctr)}</td>
+                    <td>{formatKpiValue("currency", row.cpc, currency)}</td>
+                    <td>{formatKpiValue("currency", row.cpf, currency)}</td>
+                    <td>{formatKpiValue("currency", row.cpa, currency)}</td>
                     <td style={roasStyle(row.roas)}>
                       {row.roas == null ? "—" : `${row.roas.toFixed(2).replace(".", ",")}×`}
                     </td>
@@ -150,11 +205,7 @@ function TopCampaignsTable({ rows, loading, currency }) {
               </tbody>
             </table>
           </div>
-          {rows.length > 10 && (
-            <button type="button" className="btn-cancel" style={{ marginTop: 12 }} onClick={() => setShowAll((v) => !v)}>
-              {showAll ? "Prikaži samo prvih 10" : `Prikaži sve (${rows.length})`}
-            </button>
-          )}
+          <Pagination page={safePage} totalPages={totalPages} onChange={setPage} />
         </>
       )}
     </div>
