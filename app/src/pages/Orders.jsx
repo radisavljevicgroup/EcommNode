@@ -746,7 +746,10 @@ function OrdersOverview({ assigneeModule, orderInfoModules }) {
   // useEnabledPremiumModules' fetchFirma() resolves, which is usually after
   // the first list fetch — so it has to refetch when the modules arrive, not
   // just when the list changes. Keyed on order ids so markRead's unread
-  // toggle doesn't refetch every badge.
+  // toggle doesn't refetch every badge — plus pollTick/refresh.tick: a
+  // worker is often assigned to an order already on the page (the 5-min
+  // scheduler, an Interni nalog being sent), and keyed on ids alone the
+  // badge only showed up after a reload or a page change.
   const orderKeys = orders.map((o) => `${o.connectionId}:${o.id}`).join(",");
   const orderInfoModulesKey = orderInfoModules.length;
   useEffect(() => {
@@ -767,7 +770,7 @@ function OrdersOverview({ assigneeModule, orderInfoModules }) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orderKeys, assigneeModule, orderInfoModulesKey]);
+  }, [orderKeys, assigneeModule, orderInfoModulesKey, pollTick, refresh.tick]);
 
   const handlePerPageChange = (e) => {
     setPerPage(Number(e.target.value));
