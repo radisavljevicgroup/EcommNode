@@ -80,6 +80,49 @@ function roasStyle(roas) {
   return { fontWeight: 600 };
 }
 
+// Case- and diacritic-insensitive: "cokolada" finds "Čokolada", and "đ",
+// "dj" and "d" all match each other ("Djordje"/"Dordje" find "Đorđe") —
+// đ has no NFD decomposition, so it's mapped by hand.
+function normalizeSearch(text) {
+  return String(text || "")
+    .toLowerCase()
+    .replace(/đ/g, "d")
+    .replace(/dj/g, "d")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .trim();
+}
+
+function matchesSearch(query, ...fields) {
+  const q = normalizeSearch(query);
+  if (!q) return true;
+  return fields.some((f) => normalizeSearch(f).includes(q));
+}
+
+function TableSearch({ value, onChange, placeholder }) {
+  return (
+    <div className="orders-search">
+      <input
+        type="search"
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        aria-label={placeholder}
+      />
+    </div>
+  );
+}
+
+// "Prikazano 3 od 12" — only while a search/filter actually narrows the list.
+function FilteredCount({ shown, total, noun }) {
+  if (shown === total) return null;
+  return (
+    <p className="chart-subtitle" style={{ marginBottom: 10 }}>
+      Prikazano {shown} od {total} {noun}
+    </p>
+  );
+}
+
 const CAMPAIGN_SORTS = {
   spend: (a, b) => b.spend - a.spend,
   roas: (a, b) => (b.roas ?? -1) - (a.roas ?? -1),
@@ -89,19 +132,21 @@ const CAMPAIGN_SORTS = {
 function TopCampaignsTable({ rows, loading, currency }) {
   const [sortKey, setSortKey] = useState("spend");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [query, setQuery] = useState("");
   const [pageSize, setPageSize] = useState(10);
   const [page, setPage] = useState(1);
 
-  const filteredRows = (statusFilter === "all" ? rows : rows.filter((r) => r.status === statusFilter)).sort(
-    CAMPAIGN_SORTS[sortKey]
-  );
+  const filteredRows = rows
+    .filter((r) => statusFilter === "all" || r.status === statusFilter)
+    .filter((r) => matchesSearch(query, r.campaign))
+    .sort(CAMPAIGN_SORTS[sortKey]);
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
   const safePage = Math.min(page, totalPages);
   const pageRows = filteredRows.slice((safePage - 1) * pageSize, safePage * pageSize);
 
   useEffect(() => {
     setPage(1);
-  }, [sortKey, statusFilter, pageSize, rows]);
+  }, [sortKey, statusFilter, query, pageSize, rows]);
 
   return (
     <div className="chart-card">
@@ -115,6 +160,7 @@ function TopCampaignsTable({ rows, loading, currency }) {
         </div>
         {rows.length > 0 && (
           <div className="table-toolbar">
+            <TableSearch value={query} onChange={setQuery} placeholder="Pretraži kampanje..." />
             <label className="per-page-select">
               Sortiraj
               <select value={sortKey} onChange={(e) => setSortKey(e.target.value)}>
@@ -147,9 +193,12 @@ function TopCampaignsTable({ rows, loading, currency }) {
       {rows.length === 0 ? (
         <div className="empty-hint">{loading ? "Učitavanje…" : "Nema podataka."}</div>
       ) : filteredRows.length === 0 ? (
-        <div className="empty-hint">Nema kampanja za izabrani status.</div>
+        <div className="empty-hint">
+          {query.trim() ? `Nema kampanja za „${query.trim()}”.` : "Nema kampanja za izabrani status."}
+        </div>
       ) : (
         <>
+          <FilteredCount shown={filteredRows.length} total={rows.length} noun="kampanja" />
           <div className="orders-items-table-wrap">
             <table className="orders-items-table meta-ads-table">
               <thead>
@@ -293,8 +342,11 @@ function AllAdsTable({ rows, loading, currency }) {
   const [pageSize, setPageSize] = useState(10);
   const [page, setPage] = useState(1);
 
-  const filteredRows =
-    statusFilter === "all" ? rows : rows.filter((r) => r.status === statusFilter);
+  const [query, setQuery] = useState("");
+
+  const filteredRows = rows
+    .filter((r) => statusFilter === "all" || r.status === statusFilter)
+    .filter((r) => matchesSearch(query, r.adName, r.campaign));
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
   const safePage = Math.min(page, totalPages);
   const pageRows = filteredRows.slice((safePage - 1) * pageSize, safePage * pageSize);
@@ -304,7 +356,7 @@ function AllAdsTable({ rows, loading, currency }) {
   // past the end.
   useEffect(() => {
     setPage(1);
-  }, [statusFilter, pageSize, rows]);
+  }, [statusFilter, query, pageSize, rows]);
 
   return (
     <div className="chart-card">
@@ -315,6 +367,7 @@ function AllAdsTable({ rows, loading, currency }) {
         </div>
         {rows.length > 0 && (
           <div className="table-toolbar">
+            <TableSearch value={query} onChange={setQuery} placeholder="Pretraži objave ili kampanje..." />
             <label className="per-page-select">
               Status
               <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
@@ -340,9 +393,12 @@ function AllAdsTable({ rows, loading, currency }) {
       {rows.length === 0 ? (
         <div className="empty-hint">{loading ? "Učitavanje…" : "Nema podataka."}</div>
       ) : filteredRows.length === 0 ? (
-        <div className="empty-hint">Nema objava za izabrani status.</div>
+        <div className="empty-hint">
+          {query.trim() ? `Nema objava za „${query.trim()}”.` : "Nema objava za izabrani status."}
+        </div>
       ) : (
         <>
+          <FilteredCount shown={filteredRows.length} total={rows.length} noun="objava" />
           <div className="orders-items-table-wrap">
             <table className="orders-items-table meta-ads-table">
               <thead>
