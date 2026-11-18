@@ -3012,59 +3012,8 @@ a.personalization-file-name {
     grid-template-columns: 1fr;
   }
 
-  /* Below this width the 5-column items table no longer fits and was
-     silently scrolling off the right edge of .orders-items-table-wrap
-     instead of wrapping — reflow each row into a small stacked block
-     (thumbnail, full-width name, then label: value meta) instead. */
-  .orders-items-table-wrap {
-    overflow-x: visible;
-  }
-
-  .orders-items-table thead {
-    display: none;
-  }
-
-  .orders-items-table,
-  .orders-items-table tbody,
-  .orders-items-table tr,
-  .orders-items-table td {
-    display: block;
-    width: auto;
-    max-width: 100%;
-  }
-
-  .orders-items-table tr {
-    padding: 10px 0;
-    border-bottom: 1px solid var(--border);
-  }
-
-  .orders-items-table tr:last-child {
-    border-bottom: none;
-  }
-
-  .orders-items-table td {
-    padding: 2px 0;
-    border-bottom: none;
-    overflow-wrap: break-word;
-  }
-
-  .order-item-name {
-    margin-top: 6px;
-    font-weight: 600;
-  }
-
-  .orders-items-table td:first-child {
-    margin-top: 0;
-  }
-
-  .orders-items-table td[data-label]:not(.order-item-name) {
-    font-size: 12px;
-    color: var(--text-muted);
-  }
-
-  .orders-items-table td[data-label]:not(.order-item-name)::before {
-    content: attr(data-label) ": ";
-  }
+  /* The items table's mobile layout is the global .rt-stack card layout
+     (see "Responsive tables" at the end of this file). */
 }
 
 .orders-items-table-wrap {
@@ -3188,6 +3137,10 @@ a.personalization-file-name {
 
 .meta-ads-table tbody tr:hover {
   background: #efe9fb;
+}
+
+.meta-ads-table td:not(.gsc-key-cell) {
+  white-space: nowrap;
 }
 
 .meta-ads-table th {
@@ -6449,4 +6402,108 @@ a.personalization-file-name {
   padding: 2px 6px;
   border-radius: 4px;
   font-size: 13px;
+}
+
+/* ── Responsive tables ────────────────────────────────────────────────
+   lib/responsiveTables.js tags every table that has a <thead> with
+   .rt-stack and copies each column's header into its cells' data-label.
+   On phones each row becomes a card: the first labelled cell (campaign,
+   product, name…) is the card title, every other cell is a
+   "Header ........ value" line — so metrics stay readable instead of a
+   column of unlabeled numbers. Desktop keeps the normal table. Opt out
+   per table with className="no-stack". */
+@media (max-width: 640px) {
+  table.rt-stack,
+  table.rt-stack > tbody,
+  table.rt-stack > tfoot {
+    display: block;
+    width: 100%;
+    min-width: 0 !important;
+    max-width: 100%;
+  }
+
+  table.rt-stack > thead {
+    display: none;
+  }
+
+  table.rt-stack > tbody > tr,
+  table.rt-stack > tfoot > tr {
+    display: block;
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 6px 12px;
+    margin: 0 0 10px;
+  }
+
+  table.rt-stack > tbody > tr:nth-child(even),
+  table.rt-stack > tbody > tr:hover {
+    background: #fff;
+  }
+
+  table.rt-stack > tbody > tr > td,
+  table.rt-stack > tfoot > tr > td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    width: auto;
+    min-width: 0;
+    max-width: none;
+    padding: 6px 0;
+    border: none;
+    border-bottom: 1px solid #f1f1f1;
+    text-align: right;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    overflow-wrap: anywhere;
+    background: transparent;
+  }
+
+  table.rt-stack > tbody > tr > td:last-child,
+  table.rt-stack > tfoot > tr > td:last-child {
+    border-bottom: none;
+  }
+
+  table.rt-stack > tbody > tr > td[data-label]::before,
+  table.rt-stack > tfoot > tr > td[data-label]::before {
+    content: attr(data-label);
+    flex: 0 1 auto;
+    max-width: 55%;
+    text-align: left;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-muted);
+    overflow-wrap: normal;
+  }
+
+  /* Cells without a header (thumbnails, checkboxes, action buttons) and
+     full-width colSpan cells ("Nema podataka", expanded details). */
+  table.rt-stack > tbody > tr > td:not([data-label]),
+  table.rt-stack > tbody > tr > td[data-stack-full] {
+    display: block;
+    text-align: left;
+  }
+
+  table.rt-stack > tbody > tr > td[data-stack-title] {
+    display: block;
+    text-align: left;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-dark);
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  table.rt-stack > tbody > tr > td[data-stack-title]::before {
+    content: none;
+  }
+
+  /* Wrappers that scrolled the wide table sideways don't need to now. */
+  .orders-items-table-wrap,
+  .asm-table-wrap,
+  .iol-table-wrap {
+    overflow-x: visible;
+  }
 }
