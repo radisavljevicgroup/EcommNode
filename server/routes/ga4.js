@@ -140,4 +140,22 @@ router.get("/ga4/insights", async (req, res) => {
   }
 });
 
+// Funnel for every GA4 connection of the company (one per site) — a site
+// whose GA4 fails just carries its error instead of failing the rest.
+router.get("/ga4/funnel", async (req, res) => {
+  const { from, to } = req.query;
+  const connections = getGa4Connections(req.company);
+  const sites = await Promise.all(
+    connections.map(async (c) => {
+      const base = { connectionId: c.id, siteUrl: toPublic(c, req.company).targetSiteUrl, label: c.label };
+      try {
+        return { ...base, ...(await ga4.getFunnel(c, { from, to })) };
+      } catch (err) {
+        return { ...base, error: connectionError(err, c) };
+      }
+    })
+  );
+  res.json({ sites });
+});
+
 module.exports = router;

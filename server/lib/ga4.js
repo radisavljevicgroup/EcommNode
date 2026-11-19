@@ -547,6 +547,48 @@ async function fetchInsights(connection, { from, to }, cacheKey) {
   return result;
 }
 
+// ---- Funnel: users per e-commerce step ---------------------------------------
+//
+// Users who fired each step's event in the range (GA4 page: "Levak po sajtu").
+// Users, not event counts — one visitor opening ten products is one user who
+// reached "opened a product". A step whose event the site doesn't send comes
+// back 0 (the page says so). Own cache, so it never delays the other reports.
+const FUNNEL_EVENTS = [
+  ["sessions", "session_start"],
+  ["viewItem", "view_item"],
+  ["addToCart", "add_to_cart"],
+  ["beginCheckout", "begin_checkout"],
+  ["purchase", "purchase"],
+];
+const funnelCache = createDiskCache("ga4-funnel-cache");
+
+function getFunnel(connection, { from, to } = {}) {
+  const cacheKey = rangeCacheKey(connection, { from, to });
+  return cachedOrFetch(funnelCache, `funnel::${cacheKey}`, cacheKey, { from, to }, () =>
+    fetchFunnel(connection, { from, to }, cacheKey)
+  );
+}
+
+async function fetchFunnel(connection, { from, to }, cacheKey) {
+  const token = await getToken(connection);
+  const { startDate, endDate } = resolveRange({ from, to });
+  const report = await runReport(connection, token, {
+    dateRanges: [{ startDate: isoDate(startDate), endDate: isoDate(endDate) }],
+    dimensions: [{ name: "eventName" }],
+    metrics: [{ name: "totalUsers" }],
+    dimensionFilter: {
+      filter: { fieldName: "eventName", inListFilter: { values: FUNNEL_EVENTS.map(([, e]) => e) } },
+    },
+  });
+  const byEvent = new Map((report.rows || []).map((r) => [r.dimensionValues[0].value, metricValue(r, 0)]));
+  const result = {
+    dateRange: { startDate: isoDate(startDate), endDate: isoDate(endDate) },
+    ...Object.fromEntries(FUNNEL_EVENTS.map(([key, event]) => [key, byEvent.get(event) || 0])),
+  };
+  funnelCache.set(cacheKey, { data: result, at: Date.now() });
+  return result;
+}
+
 // ---- Sessions per day, stored on disk ----------------------------------------
 //
 // CR (orders / sessions) is shown on the home page, Analitika and alerts, for
@@ -670,4 +712,4 @@ async function getDailySessions(connection, range = {}) {
   return { sessions, days: trend.length, totals: { sessions }, trend };
 }
 
-module.exports = { testConnection, getPerformance, getInsights, listProperties, weekStart, getDailySessions };
+module.exports = { testConnection, getPerformance, getInsights, getFunnel, listProperties, weekStart, getDailySessions };

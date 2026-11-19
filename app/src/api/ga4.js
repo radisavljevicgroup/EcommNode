@@ -41,6 +41,13 @@ export function fetchGa4Performance(id, from, to) {
   return request(`/ga4/performance?${params.toString()}`);
 }
 
+export function fetchGa4Funnel(from, to) {
+  const params = new URLSearchParams();
+  if (from) params.set("from", from);
+  if (to) params.set("to", to);
+  return request(`/ga4/funnel?${params.toString()}`);
+}
+
 export function fetchGa4Insights(id, from, to) {
   const params = new URLSearchParams({ id });
   if (from) params.set("from", from);

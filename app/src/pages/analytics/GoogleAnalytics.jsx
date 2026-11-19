@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useDataRefresh } from "../../lib/dataRefresh";
-import { fetchGa4Status, fetchGa4Performance, fetchGa4Insights } from "../../api/ga4";
+import { fetchGa4Status, fetchGa4Performance, fetchGa4Insights, fetchGa4Funnel } from "../../api/ga4";
+import FunnelSteps from "../../components/FunnelSteps";
 import QuadrantCard from "../../components/QuadrantCard";
 import Ga4TrendChart from "../../components/charts/Ga4TrendChart";
 import DateRangePicker, { PRESETS } from "../../components/DateRangePicker";
@@ -8,6 +9,61 @@ import { siteLabel } from "../../utils/site";
 import { formatKpiValue } from "../../utils/format";
 
 const YEAR_PRESET = PRESETS.find((p) => p.key === "year");
+
+// GA4 funnel — users who reached each step, all channels (not only ads).
+const FUNNEL_STEPS = [
+  { key: "sessions", label: "Poseta sajtu", hint: "Svi posetioci sajta, iz svih kanala." },
+  {
+    key: "viewItem",
+    label: "Otvoren proizvod",
+    hint: "Nisko: početna/kategorije ne vode ka proizvodima, ili saobraćaj nije pravi.",
+  },
+  { key: "addToCart", label: "Dodato u korpu", hint: "Nisko: problem su cena, popust ili stranica proizvoda." },
+  { key: "beginCheckout", label: "Započeta kupovina", hint: "Nisko: verovatno iznenadi cena dostave." },
+  { key: "purchase", label: "Kupovina", hint: "Nisko: problem je u formi ili načinu plaćanja." },
+];
+
+function Ga4FunnelBySite({ sites, loading }) {
+  return (
+    <div className="chart-card">
+      <div className="chart-card-head">
+        <div>
+          <h3>Levak po sajtu</h3>
+          <p className="chart-subtitle">
+            Broj korisnika koji su stigli do svakog koraka (svi kanali, ne samo oglasi) — GA4 događaji session_start,
+            view_item, add_to_cart, begin_checkout i purchase. Korak sa 0 obično znači da sajt taj događaj ne šalje
+            u GA4 (fali e-commerce plugin).
+          </p>
+        </div>
+      </div>
+      {sites.length === 0 ? (
+        <div className="empty-hint">{loading ? "Učitavanje…" : "Nema podataka."}</div>
+      ) : (
+        sites.map((site) =>
+          site.error ? (
+            <div key={site.connectionId} style={{ marginTop: 14 }}>
+              <strong style={{ color: "var(--text-dark)" }}>{siteLabel(site.siteUrl) || site.label}</strong>
+              <div className="woo-error" style={{ marginTop: 6 }}>
+                {site.error}
+              </div>
+            </div>
+          ) : (
+            <FunnelSteps
+              key={site.connectionId}
+              steps={FUNNEL_STEPS}
+              values={site}
+              siteUrl={site.siteUrl}
+              topLabel="Od posetilaca"
+              aside={`Konverzija: ${
+                site.sessions > 0 ? `${((site.purchase / site.sessions) * 100).toFixed(2).replace(".", ",")} %` : "—"
+              }`}
+            />
+          )
+        )
+      )}
+    </div>
+  );
+}
 
 const METRICS = [
   {
@@ -249,6 +305,8 @@ export default function GoogleAnalytics() {
   const [data, setData] = useState(null);
   const [insights, setInsights] = useState(null);
   const [insightsLoading, setInsightsLoading] = useState(false);
+  const [funnel, setFunnel] = useState([]);
+  const [funnelLoading, setFunnelLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -312,6 +370,26 @@ export default function GoogleAnalytics() {
     };
   }, [selectedId, from, to, refresh.tick]);
 
+  // All sites at once, independent of the site picker above.
+  useEffect(() => {
+    let cancelled = false;
+    const quiet = refresh.isQuiet("funnel");
+    if (!quiet) setFunnelLoading(true);
+    fetchGa4Funnel(from, to)
+      .then((res) => {
+        if (!cancelled) setFunnel(res.sites || []);
+      })
+      .catch(() => {
+        if (!cancelled && !quiet) setFunnel([]);
+      })
+      .finally(() => {
+        if (!cancelled) setFunnelLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [from, to, refresh.tick]);
+
   return (
     <div className="analytics-page">
       <div className="settings-header">
@@ -348,6 +426,8 @@ export default function GoogleAnalytics() {
           />
 
           <Ga4TrendChart series={data?.trend || []} />
+
+          <Ga4FunnelBySite sites={funnel} loading={funnelLoading} />
 
           <DeviceTable insights={insights} loading={insightsLoading} />
 

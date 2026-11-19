@@ -7,6 +7,7 @@ import DateRangePicker, { PRESETS } from "../../components/DateRangePicker";
 import { siteLabel } from "../../utils/site";
 import { formatKpiValue } from "../../utils/format";
 import Pagination from "../../components/Pagination";
+import FunnelSteps from "../../components/FunnelSteps";
 
 const YEAR_PRESET = PRESETS.find((p) => p.key === "year");
 
@@ -338,61 +339,6 @@ const FUNNEL_STEPS = [
   { key: "purchases", label: "Kupovina", hint: "Nisko: problem je u formi ili načinu plaćanja." },
 ];
 
-function formatRate(rate) {
-  return rate == null ? "—" : `${rate.toFixed(1).replace(".", ",")} %`;
-}
-
-function SiteFunnel({ row, currency }) {
-  const top = row.linkClicks || 0;
-  return (
-    <div style={{ marginTop: 14 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
-        <strong style={{ color: "var(--text-dark)" }}>{siteLabel(row.siteUrl)}</strong>
-        <span className="chart-subtitle">Potrošnja: {formatKpiValue("currency", row.spend, currency)}</span>
-      </div>
-      <div className="orders-items-table-wrap">
-        <table className="orders-items-table">
-          <thead>
-            <tr>
-              <th>Korak</th>
-              <th>Broj</th>
-              <th>Od prethodnog</th>
-              <th style={{ width: "30%" }}>Od klikova</th>
-              <th>Ako je nisko</th>
-            </tr>
-          </thead>
-          <tbody>
-            {FUNNEL_STEPS.map((step, i) => {
-              const value = row[step.key] || 0;
-              const prev = i > 0 ? row[FUNNEL_STEPS[i - 1].key] || 0 : null;
-              const rate = prev ? (value / prev) * 100 : null;
-              const ofTop = top > 0 ? Math.min(100, (value / top) * 100) : 0;
-              const warn = step.warnBelow != null && rate != null && rate < step.warnBelow;
-              return (
-                <tr key={step.key}>
-                  <td className="gsc-key-cell">{step.label}</td>
-                  <td>{formatKpiValue("integer", value)}</td>
-                  <td style={warn ? { color: "#dc2626", fontWeight: 700 } : undefined}>
-                    {i === 0 ? "—" : formatRate(rate)}
-                  </td>
-                  <td>
-                    <div style={{ background: "var(--pill-bg)", borderRadius: 4, height: 10, overflow: "hidden" }}>
-                      <div style={{ width: `${ofTop}%`, height: "100%", background: "var(--purple)" }} />
-                    </div>
-                  </td>
-                  <td className="chart-subtitle" style={{ fontWeight: 500 }}>
-                    {step.hint}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
 function FunnelByStore({ rows, loading, currency }) {
   return (
     <div className="chart-card">
@@ -408,7 +354,16 @@ function FunnelByStore({ rows, loading, currency }) {
       {rows.length === 0 ? (
         <div className="empty-hint">{loading ? "Učitavanje…" : "Nema oglasa sa linkom ka sajtu u ovom periodu."}</div>
       ) : (
-        rows.map((row) => <SiteFunnel key={row.connectionId} row={row} currency={currency} />)
+        rows.map((row) => (
+          <FunnelSteps
+            key={row.connectionId}
+            steps={FUNNEL_STEPS}
+            values={row}
+            siteUrl={row.siteUrl}
+            topLabel="Od klikova"
+            aside={`Potrošnja: ${formatKpiValue("currency", row.spend, currency)}`}
+          />
+        ))
       )}
     </div>
   );
