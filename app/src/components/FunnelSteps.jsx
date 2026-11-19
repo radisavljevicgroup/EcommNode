@@ -69,8 +69,17 @@ function StatusCell({ row, isWorst }) {
 
 // One site's funnel (Meta Ads and GA4 "Levak po sajtu"), collapsed to a
 // one-line summary until opened.
-export default function FunnelSteps({ steps, values, siteUrl, aside, topLabel = "Od prvog koraka", topNoun, lastNoun }) {
-  const [open, setOpen] = useState(false);
+export default function FunnelSteps({
+  steps,
+  values,
+  siteUrl,
+  aside,
+  topLabel = "Od prvog koraka",
+  topNoun,
+  lastNoun,
+  defaultOpen = false,
+}) {
+  const [open, setOpen] = useState(defaultOpen);
   const { rows, worst } = evaluate(steps, values);
   const top = rows[0].value;
   const last = rows[rows.length - 1].value;
@@ -92,6 +101,14 @@ export default function FunnelSteps({ steps, values, siteUrl, aside, topLabel = 
   return (
     <details
       style={{ marginTop: 10, border: "1px solid var(--border)", borderRadius: 10, padding: "10px 14px" }}
+      ref={(el) => {
+        // Opened once on mount only — React must not force it open again
+        // after the user closes it.
+        if (el && defaultOpen && !el.dataset.init) {
+          el.dataset.init = "1";
+          el.open = true;
+        }
+      }}
       onToggle={(e) => setOpen(e.currentTarget.open)}
     >
       <summary

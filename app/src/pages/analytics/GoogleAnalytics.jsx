@@ -39,18 +39,28 @@ const FUNNEL_STEPS = [
   },
 ];
 
-function Ga4FunnelBySite({ sites, loading }) {
+// Follows the page's site picker (that site's funnel, open); "Svi sajtovi"
+// lists every GA4 site collapsed, for comparing them.
+function Ga4FunnelBySite({ sites: allSites, selectedId, loading }) {
+  const [showAll, setShowAll] = useState(false);
+  const all = showAll || !selectedId;
+  const sites = all ? allSites : allSites.filter((s) => s.connectionId === selectedId);
   return (
     <div className="chart-card">
-      <div className="chart-card-head">
+      <div className="chart-card-head" style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
         <div>
-          <h3>Levak po sajtu</h3>
+          <h3>{all ? "Levak po sajtu" : "Levak"}</h3>
           <p className="chart-subtitle">
             Broj korisnika koji su stigli do svakog koraka (svi kanali, ne samo oglasi) — GA4 događaji session_start,
             view_item, add_to_cart, begin_checkout i purchase. Korak sa 0 znači da sajt taj događaj ne šalje u GA4
             (fali e-commerce plugin). Orijentiri su okvirni proseci za e-prodavnice, ne pravilo.
           </p>
         </div>
+        {allSites.length > 1 && selectedId && (
+          <label className="per-page-select" style={{ whiteSpace: "nowrap", alignSelf: "flex-start" }}>
+            <input type="checkbox" checked={showAll} onChange={(e) => setShowAll(e.target.checked)} /> Svi sajtovi
+          </label>
+        )}
       </div>
       {sites.length === 0 ? (
         <div className="empty-hint">{loading ? "Učitavanje…" : "Nema podataka."}</div>
@@ -65,7 +75,8 @@ function Ga4FunnelBySite({ sites, loading }) {
             </div>
           ) : (
             <FunnelSteps
-              key={site.connectionId}
+              key={`${site.connectionId}-${all}`}
+              defaultOpen={!all}
               steps={FUNNEL_STEPS}
               values={site}
               siteUrl={site.siteUrl}
@@ -442,7 +453,7 @@ export default function GoogleAnalytics() {
 
           <Ga4TrendChart series={data?.trend || []} />
 
-          <Ga4FunnelBySite sites={funnel} loading={funnelLoading} />
+          <Ga4FunnelBySite sites={funnel} selectedId={selectedId} loading={funnelLoading} />
 
           <DeviceTable insights={insights} loading={insightsLoading} />
 
