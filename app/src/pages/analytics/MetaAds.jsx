@@ -330,13 +330,33 @@ const FUNNEL_STEPS = [
   {
     key: "landingViews",
     label: "Stranica se učitala",
-    hint: "Ispod ~70 % klikova: stranica je spora na mobilnom (ljudi odu pre nego što se učita).",
-    warnBelow: 70,
+    benchmark: 70,
+    problem: "Stranica je spora (posebno na mobilnom) — ljudi odu pre nego što se učita.",
   },
-  { key: "viewContent", label: "Otvoren proizvod", hint: "Nisko: odredišna stranica ne „vuče” dalje ka proizvodima." },
-  { key: "addToCart", label: "Dodato u korpu", hint: "Nisko: problem su cena, popust ili stranica proizvoda." },
-  { key: "initiateCheckout", label: "Započeta kupovina", hint: "Nisko: verovatno iznenadi cena dostave." },
-  { key: "purchases", label: "Kupovina", hint: "Nisko: problem je u formi ili načinu plaćanja." },
+  {
+    key: "viewContent",
+    label: "Otvoren proizvod",
+    benchmark: 60,
+    problem: "Odredišna stranica ne vodi dalje ka proizvodima.",
+  },
+  {
+    key: "addToCart",
+    label: "Dodato u korpu",
+    benchmark: 5,
+    problem: "Proizvodi se gledaju, ali ne stavljaju u korpu: cena, popust, slike/opis ili zalihe.",
+  },
+  {
+    key: "initiateCheckout",
+    label: "Započeta kupovina",
+    benchmark: 40,
+    problem: "Korpa se puni, ali se ne kreće na kasu — najčešće iznenadi cena dostave.",
+  },
+  {
+    key: "purchases",
+    label: "Kupovina",
+    benchmark: 40,
+    problem: "Napuštaju kasu — forma je duga ili fali željeni način plaćanja.",
+  },
 ];
 
 function FunnelByStore({ rows, loading, currency }) {
@@ -347,7 +367,8 @@ function FunnelByStore({ rows, loading, currency }) {
           <h3>Levak po sajtu</h3>
           <p className="chart-subtitle">
             Gde ljudi iz oglasa otpadaju — Meta pixel događaji koje Meta pripisuje oglasima koji vode na taj sajt
-            (atribucioni prozor oglasa), ne sav saobraćaj sajta. Korak sa 0 obično znači da pixel taj događaj ne šalje.
+            (atribucioni prozor oglasa), ne sav saobraćaj sajta. Broje se događaji, pa „Otvoren proizvod” može preći
+            100 % (jedna osoba otvori više proizvoda). Orijentiri su okvirni proseci za e-prodavnice, ne pravilo.
           </p>
         </div>
       </div>
@@ -361,6 +382,8 @@ function FunnelByStore({ rows, loading, currency }) {
             values={row}
             siteUrl={row.siteUrl}
             topLabel="Od klikova"
+            topNoun="klikova"
+            lastNoun="kupovina"
             aside={`Potrošnja: ${formatKpiValue("currency", row.spend, currency)}`}
           />
         ))

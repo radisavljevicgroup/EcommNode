@@ -16,11 +16,27 @@ const FUNNEL_STEPS = [
   {
     key: "viewItem",
     label: "Otvoren proizvod",
-    hint: "Nisko: početna/kategorije ne vode ka proizvodima, ili saobraćaj nije pravi.",
+    benchmark: 40,
+    problem: "Početna/kategorije ne vode ka proizvodima, ili saobraćaj nije pravi (pogrešna publika).",
   },
-  { key: "addToCart", label: "Dodato u korpu", hint: "Nisko: problem su cena, popust ili stranica proizvoda." },
-  { key: "beginCheckout", label: "Započeta kupovina", hint: "Nisko: verovatno iznenadi cena dostave." },
-  { key: "purchase", label: "Kupovina", hint: "Nisko: problem je u formi ili načinu plaćanja." },
+  {
+    key: "addToCart",
+    label: "Dodato u korpu",
+    benchmark: 8,
+    problem: "Proizvodi se gledaju, ali ne stavljaju u korpu: cena, popust, slike/opis ili zalihe.",
+  },
+  {
+    key: "beginCheckout",
+    label: "Započeta kupovina",
+    benchmark: 40,
+    problem: "Korpa se puni, ali se ne kreće na kasu — najčešće iznenadi cena dostave.",
+  },
+  {
+    key: "purchase",
+    label: "Kupovina",
+    benchmark: 40,
+    problem: "Napuštaju kasu — forma je duga ili fali željeni način plaćanja.",
+  },
 ];
 
 function Ga4FunnelBySite({ sites, loading }) {
@@ -31,8 +47,8 @@ function Ga4FunnelBySite({ sites, loading }) {
           <h3>Levak po sajtu</h3>
           <p className="chart-subtitle">
             Broj korisnika koji su stigli do svakog koraka (svi kanali, ne samo oglasi) — GA4 događaji session_start,
-            view_item, add_to_cart, begin_checkout i purchase. Korak sa 0 obično znači da sajt taj događaj ne šalje
-            u GA4 (fali e-commerce plugin).
+            view_item, add_to_cart, begin_checkout i purchase. Korak sa 0 znači da sajt taj događaj ne šalje u GA4
+            (fali e-commerce plugin). Orijentiri su okvirni proseci za e-prodavnice, ne pravilo.
           </p>
         </div>
       </div>
@@ -54,9 +70,8 @@ function Ga4FunnelBySite({ sites, loading }) {
               values={site}
               siteUrl={site.siteUrl}
               topLabel="Od posetilaca"
-              aside={`Konverzija: ${
-                site.sessions > 0 ? `${((site.purchase / site.sessions) * 100).toFixed(2).replace(".", ",")} %` : "—"
-              }`}
+              topNoun="posetilaca"
+              lastNoun="kupaca"
             />
           )
         )
