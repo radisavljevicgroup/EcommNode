@@ -21,6 +21,9 @@ const calendarRouter = require("./routes/calendar");
 const firmaRouter = require("./routes/firma");
 const personalizationRouter = require("./routes/personalization");
 const supabaseProxyRouter = require("./routes/supabaseProxy");
+const wooWebhooksRouter = require("./routes/wooWebhooks");
+const { getAllConnections } = require("./lib/store");
+const { ensureWebhooks } = require("./lib/orderWebhooks");
 const { requireAuth, requirePremiumModule } = require("./lib/auth");
 
 dotenv.config();
@@ -103,6 +106,8 @@ app.use("/api", refreshTrackerMiddleware);
 app.use("/api", workersRouter);
 app.use("/api", inboxRouter);
 app.use("/api", googleOAuthRouter);
+// WooCommerce order webhooks — public, signature-checked (routes/wooWebhooks.js).
+app.use("/api", wooWebhooksRouter);
 app.use("/api", requireAuth, connectRouter);
 app.use("/api", requireAuth, shopifyRouter);
 app.use("/api", requireAuth, ordersRouter);
@@ -141,4 +146,9 @@ app.use((err, req, res, next) => {
 
 app.listen(PORT, () => {
   console.log(`EcommNode API server running on http://localhost:${PORT}`);
+  // Order webhooks on every connected WooCommerce store (production only —
+  // see lib/orderWebhooks.js), without waiting for someone to open a page.
+  setTimeout(() => {
+    getAllConnections().forEach((c) => ensureWebhooks(c));
+  }, 5000);
 });

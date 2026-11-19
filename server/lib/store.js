@@ -22,4 +22,21 @@ function removeConnection(id, company) {
   return getConnections(company);
 }
 
-module.exports = { getConnections, addConnection, removeConnection };
+// Unscoped — only for callers with no company of their own: the
+// WooCommerce order webhook (routes/wooWebhooks.js) finds its store by the
+// id in the delivery URL, and boot-time webhook registration walks them all.
+function getConnectionById(id) {
+  return connections.find((c) => c.id === id) || null;
+}
+
+function getAllConnections() {
+  return connections;
+}
+
+module.exports = {
+  getConnections,
+  addConnection,
+  removeConnection,
+  getConnectionById,
+  getAllConnections,
+};

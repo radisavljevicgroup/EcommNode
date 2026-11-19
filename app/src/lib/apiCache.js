@@ -27,12 +27,18 @@ const MAX_STALE_MS = 10 * 60 * 1000;
 const MAX_ENTRIES = 300;
 
 // Polled, streamed or file endpoints: always live.
-const SKIP = ["/sync-status", "/inbox", "/messages", "/export", "/oauth", "/supabase/", "/auth"];
+const SKIP = ["/sync-status", "/orders/last-change", "/inbox", "/messages", "/export", "/oauth", "/supabase/", "/auth"];
 
 const cache = new Map(); // url -> { body, status, contentType, at }
 const inFlight = new Map(); // url -> Promise<void>
 
 function clearCache() {
+  cache.clear();
+}
+
+// lib/orderChanges.js: an order came in — everything cached may show the old
+// list/counts, so the next read of every page goes to the server.
+export function clearApiCache() {
   cache.clear();
 }
 
@@ -61,7 +67,8 @@ function remember(url, body, res) {
 function toResponse(entry) {
   return new Response(entry.body, {
     status: entry.status,
-    headers: { "Content-Type": entry.contentType },
+    // lib/dataRefresh.js tells these apart from real server answers.
+    headers: { "Content-Type": entry.contentType, "X-From-Cache": "1" },
   });
 }
 

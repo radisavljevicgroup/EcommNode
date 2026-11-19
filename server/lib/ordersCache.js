@@ -6,6 +6,7 @@ const { fetchAllShopifyOrdersRaw } = require("./shopify");
 const { getStaleOrderThresholdDays } = require("./settingsStore");
 const { getCallCount } = require("./orderCallsStore");
 const { trackRefresh } = require("./refreshTracker");
+const { ensureWebhooks, hasActiveWebhooks } = require("./orderWebhooks");
 
 const file = createJsonFile("orders-cache.json", {});
 let cache = file.read();
@@ -42,6 +43,11 @@ const RECENT_OVERLAP_MS = 5 * 60 * 1000;
 
 const syncing = new Set();
 const syncErrors = new Map();
+// connectionId -> ms of the last time an order was added or changed in the
+// cache (webhook, recent refresh, sync). GET /orders/last-change hands the
+// newest one to the browser, which reloads the open page when it moves —
+// that's how a webhook-delivered order shows up within seconds.
+const lastChangeAt = new Map();
 
 async function fetchWooPages(connection, params, maxPages = Infinity) {
   const client = createWooClient(connection);
@@ -96,17 +102,57 @@ async function fetchAllShopifyOrders(connection) {
 // the last 60 days; WooCommerce because its syncs are incremental (above).
 function mergeOrders(existing, fresh) {
   const byId = new Map(existing.map((o) => [o.id, o]));
-  for (const o of fresh) byId.set(o.id, o);
-  return [...byId.values()];
+  let changed = 0;
+  for (const o of fresh) {
+    const old = byId.get(o.id);
+    if (!old || JSON.stringify(old) !== JSON.stringify(o)) changed += 1;
+    byId.set(o.id, o);
+  }
+  return { orders: [...byId.values()], changed };
+}
+
+// The cache file holds every order of every store, so writing it is the
+// slow part — a burst of webhooks (a status change on 30 orders at once)
+// is written once, a moment later.
+let writeTimer = null;
+function writeSoon() {
+  if (writeTimer) return;
+  writeTimer = setTimeout(() => {
+    writeTimer = null;
+    file.write(cache);
+  }, 2000);
 }
 
 // Always merges into cache[connectionId] as it is *now*, not a copy taken
 // before an await — refreshRecentConnection may have merged meanwhile.
-function mergeIntoCache(connectionId, fresh, patch = {}) {
+function mergeIntoCache(connectionId, fresh, patch = {}, { deferWrite = false } = {}) {
   const current = cache[connectionId] || { orders: [] };
-  cache[connectionId] = { ...current, ...patch, orders: mergeOrders(current.orders || [], fresh) };
-  file.write(cache);
+  const { orders, changed } = mergeOrders(current.orders || [], fresh);
+  cache[connectionId] = { ...current, ...patch, orders };
+  if (changed > 0) lastChangeAt.set(connectionId, Date.now());
+  if (deferWrite) writeSoon();
+  else file.write(cache);
   return cache[connectionId];
+}
+
+// An order the store itself pushed (routes/wooWebhooks.js) — in the cache,
+// and so on every page, right away.
+function applyWebhookOrder(connectionId, order) {
+  mergeIntoCache(connectionId, [order], {}, { deferWrite: true });
+}
+
+function removeCachedOrder(connectionId, orderId) {
+  const current = cache[connectionId];
+  if (!current?.orders) return;
+  const orders = current.orders.filter((o) => String(o.id) !== String(orderId));
+  if (orders.length === current.orders.length) return;
+  cache[connectionId] = { ...current, orders };
+  lastChangeAt.set(connectionId, Date.now());
+  writeSoon();
+}
+
+function getLastChange(connections) {
+  return connections.reduce((max, c) => Math.max(max, lastChangeAt.get(c.id) || 0), 0);
 }
 
 async function syncWooConnection(connection, startedAt) {
@@ -207,6 +253,14 @@ async function fetchRecentWooOrders(connection, since) {
 // orders too, at most once per RECENT_MIN_INTERVAL_MS per store (a failed
 // attempt counts, so a store that's down isn't hit on every request).
 const RECENT_MIN_INTERVAL_MS = 60 * 1000;
+// A store whose webhooks are in place pushes its orders itself; the poll is
+// only a safety net for a missed delivery there.
+const RECENT_MIN_INTERVAL_WEBHOOK_MS = 10 * 60 * 1000;
+
+function recentInterval(connection, minIntervalMs) {
+  if (minIntervalMs === 0) return 0;
+  return hasActiveWebhooks(connection.id) ? RECENT_MIN_INTERVAL_WEBHOOK_MS : minIntervalMs;
+}
 // How long a request waits for that refresh before answering from the
 // cache anyway (the refresh still lands for the next read).
 const RECENT_WAIT_MS = 8000;
@@ -243,7 +297,8 @@ async function refreshRecentOrders(connections, { minIntervalMs = 0 } = {}) {
     connections.map((connection) => {
       const inFlight = recentRefreshing.get(connection.id);
       if (inFlight) return trackRefresh(inFlight);
-      if (Date.now() - (recentAttemptAt.get(connection.id) || 0) < minIntervalMs) return null;
+      const interval = recentInterval(connection, minIntervalMs);
+      if (Date.now() - (recentAttemptAt.get(connection.id) || 0) < interval) return null;
       const promise = refreshRecentConnection(connection).finally(() =>
         recentRefreshing.delete(connection.id)
       );
@@ -286,6 +341,7 @@ function isStale(entry) {
 // throttled recent-orders refresh, so callers that don't await
 // freshenOrders still pick new orders up on their next read.
 function readCache(connection) {
+  ensureWebhooks(connection);
   const entry = cache[connection.id];
   if (isStale(entry) && !syncing.has(connection.id)) {
     syncConnection(connection);
@@ -504,6 +560,9 @@ function getSyncStatus(connections) {
 
 module.exports = {
   syncConnection,
+  applyWebhookOrder,
+  removeCachedOrder,
+  getLastChange,
   refreshRecentOrders,
   freshenOrders,
   startRecentRefresh,

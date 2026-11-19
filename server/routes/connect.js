@@ -2,6 +2,7 @@ const { Router } = require("express");
 const crypto = require("crypto");
 const { createWooClient } = require("../lib/woocommerce");
 const { getConnections, addConnection, removeConnection } = require("../lib/store");
+const { ensureWebhooks, removeWebhooks, getWebhookStatus } = require("../lib/orderWebhooks");
 
 const router = Router();
 
@@ -56,6 +57,8 @@ router.post("/connect", async (req, res) => {
   };
 
   addConnection(connection);
+  // New orders pushed by the store from now on (lib/orderWebhooks.js).
+  ensureWebhooks(connection);
 
   res.json({
     connected: true,
@@ -65,6 +68,8 @@ router.post("/connect", async (req, res) => {
 
 router.post("/disconnect", (req, res) => {
   const { id } = req.body || {};
+  const removed = getConnections(req.company).find((c) => c.id === id);
+  if (removed) removeWebhooks(removed);
   const connections = removeConnection(id, req.company);
   res.json({ connections: connections.map(toPublic) });
 });
@@ -74,7 +79,13 @@ router.get("/status", (req, res) => {
 });
 
 function toPublic(connection) {
-  return { id: connection.id, siteUrl: connection.siteUrl, platform: "woocommerce" };
+  return {
+    id: connection.id,
+    siteUrl: connection.siteUrl,
+    platform: "woocommerce",
+    // Whether new orders arrive instantly (webhooks) or by periodic check.
+    webhooks: getWebhookStatus(connection.id),
+  };
 }
 
 module.exports = router;

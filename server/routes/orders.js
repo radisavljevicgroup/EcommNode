@@ -7,6 +7,7 @@ const {
   getUnfiscalizedOrders,
   getPersonalizationOrders,
   startRecentRefresh,
+  getLastChange,
 } = require("../lib/ordersCache");
 const {
   isStaleTrackingEnabled,
@@ -142,6 +143,17 @@ router.get("/orders", async (req, res) => {
   } catch {
     res.status(400).json({ error: "Ne mogu da učitam porudžbine." });
   }
+});
+
+// Polled every few seconds by the browser (app/src/lib/orderChanges.js):
+// when the newest change moves (a webhook delivered an order, a refresh
+// found one), the open page reloads quietly. Also starts the throttled
+// recent-orders check — the fallback for stores without webhooks — so new
+// orders still come in while a page is just sitting open.
+router.get("/orders/last-change", (req, res) => {
+  const connections = [...getConnections(req.company), ...getShopifyConnections(req.company)];
+  startRecentRefresh(connections);
+  res.json({ at: getLastChange(connections) });
 });
 
 router.get("/orders/stale-count", async (req, res) => {

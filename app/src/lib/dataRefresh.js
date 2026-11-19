@@ -21,7 +21,18 @@ let reloadsInARow = 0;
 let lastReloadAt = 0;
 
 export function noteResponse(res) {
-  if (res?.headers?.get("X-Data-Refreshing") !== "1") return;
+  if (!res?.headers) return;
+  // Served from lib/apiCache.js, not the server — says nothing about
+  // whether the server is still refreshing.
+  if (res.headers.get("X-From-Cache") === "1") return;
+  if (res.headers.get("X-Data-Refreshing") !== "1") {
+    // The server finished refreshing: the next refresh gets the full chain
+    // of quiet reloads again. Before, a page left open got a refresh every
+    // minute (Porudžbine's poll), the 90s reset never came, and after five
+    // of them quiet reloads stopped for good — new orders no longer showed.
+    reloadsInARow = 0;
+    return;
+  }
   if (timer) return;
   if (Date.now() - lastReloadAt > CHAIN_RESET_MS) reloadsInARow = 0;
   if (reloadsInARow >= RELOAD_DELAYS_MS.length) return;
@@ -42,6 +53,11 @@ export function noteResponse(res) {
 //
 // isQuiet() is true when the run was started by a refresh tick (keep what's
 // on screen while reloading), false for a normal load / filter change.
+// Reload every page using useDataRefresh now (lib/orderChanges.js).
+export function triggerDataRefresh() {
+  window.dispatchEvent(new Event(EVENT));
+}
+
 export function useDataRefresh() {
   const [tick, setTick] = useState(0);
   const seen = useRef({});
