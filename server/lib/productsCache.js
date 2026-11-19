@@ -10,7 +10,36 @@ const WC_PAGE_SIZE = 100;
 const MAX_SYNC_PAGES = 30; // safety cap, same reasoning as ordersCache
 const MAX_VARIATION_PAGES = 10; // per product — generous, variations rarely exceed a page
 
+// Same limits as the Eurocom/stock-control fetchers: firing one variation
+// request per variable product with no cap (up to 100 at once, via
+// Promise.all) exhausted the shared host's MySQL connections — 2026-11-19
+// the papagaj/maped/rotring stores (one cPanel account, one DB server)
+// answered those bursts with 500s and reset connections, which also broke
+// the Eurocom diff ("read ECONNRESET") running against the same host.
+const VARIATION_CONCURRENCY = 2;
+const PRODUCT_FIELDS = "id,name,sku,type,categories";
+const VARIATION_FIELDS = "id,sku";
+// A failed sync used to leave the entry stale, so every analytics request
+// started the whole fetch again right away — and failed again under its own
+// load. Wait this long after a failure before retrying.
+const FAILURE_BACKOFF_MS = 30 * 60 * 1000;
+
 const syncing = new Set();
+const lastFailureAt = new Map();
+
+async function mapWithConcurrency(items, limit, fn) {
+  const results = new Array(items.length);
+  let next = 0;
+  async function worker() {
+    while (next < items.length) {
+      const i = next++;
+      // eslint-disable-next-line no-await-in-loop
+      results[i] = await fn(items[i], i);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
 
 // Variable products carry their own (usually SKU-less) product record, plus
 // one variation per combination of attributes (size/color/...) — each
@@ -24,6 +53,7 @@ async function fetchVariations(client, productId) {
     const response = await client.get(`products/${productId}/variations`, {
       page,
       per_page: WC_PAGE_SIZE,
+      _fields: VARIATION_FIELDS,
     });
     variations.push(
       ...response.data.map((v) => ({
@@ -45,10 +75,16 @@ async function fetchAllProducts(connection) {
   let page = 1;
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    const response = await client.get("products", { page, per_page: WC_PAGE_SIZE });
+    const response = await client.get("products", {
+      page,
+      per_page: WC_PAGE_SIZE,
+      _fields: PRODUCT_FIELDS,
+    });
     // eslint-disable-next-line no-await-in-loop
-    const withVariations = await Promise.all(
-      response.data.map(async (p) => {
+    const withVariations = await mapWithConcurrency(
+      response.data,
+      VARIATION_CONCURRENCY,
+      async (p) => {
         const categories = (p.categories || []).map((c) => c.name);
         const entries = [{ id: p.id, name: p.name, sku: p.sku || "", categories }];
         if (p.type === "variable") {
@@ -60,7 +96,7 @@ async function fetchAllProducts(connection) {
           );
         }
         return entries;
-      })
+      }
     );
     products.push(...withVariations.flat());
     const totalPages = Number(response.headers?.["x-wp-totalpages"] || 1);
@@ -121,8 +157,12 @@ async function syncConnection(connection) {
       cache[connection.id] = { syncedAt: new Date().toISOString(), products, categories };
     }
     file.write(cache);
-  } catch {
-    // leave the previous cache entry (if any) in place; next stale check retries
+    lastFailureAt.delete(connection.id);
+  } catch (err) {
+    // Leave the previous cache entry (if any) in place; retried after
+    // FAILURE_BACKOFF_MS, not on the very next request.
+    lastFailureAt.set(connection.id, Date.now());
+    console.error(`[products-cache] ${connection.siteUrl}: ${err.message}`);
   } finally {
     syncing.delete(connection.id);
   }
@@ -137,7 +177,9 @@ function getProductCategoryMap(connections) {
   const map = new Map();
   connections.forEach((connection) => {
     const entry = cache[connection.id];
-    if (isStale(entry) && !syncing.has(connection.id)) {
+    const failedAt = lastFailureAt.get(connection.id);
+    const backingOff = failedAt && Date.now() - failedAt < FAILURE_BACKOFF_MS;
+    if (isStale(entry) && !syncing.has(connection.id) && !backingOff) {
       syncConnection(connection); // fire and forget
     }
     (entry?.products || []).forEach((p) => map.set(p.id, p.categories));
