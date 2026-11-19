@@ -19,6 +19,7 @@ import Privacy from "./pages/legal/Privacy";
 import Terms from "./pages/legal/Terms";
 import DataDeletion from "./pages/legal/DataDeletion";
 import { supabase } from "./lib/supabaseClient";
+import { useOrdersToolEnabled } from "./lib/ordersTool";
 import {
   isRouteAllowed,
   EMPTY_HOME_ROLES,
@@ -65,6 +66,7 @@ export default function App() {
   const [settingsSection, setSettingsSection] = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const ordersEnabled = useOrdersToolEnabled(isAuthenticated);
 
   useEffect(() => {
     const onHashChange = () => setRoute(routeFromHash());
@@ -150,7 +152,9 @@ export default function App() {
 
   // Direct hash navigation to a route hidden from this role's nav collapses
   // to the (empty) home page, same as the hidden nav items.
-  const effectiveRoute = isRouteAllowed(roleName, route) ? route : "home";
+  // Porudžbine is a tool (Svi alati) — switched off, its route goes home too.
+  const effectiveRoute =
+    isRouteAllowed(roleName, route) && !(route === "porudzbine" && !ordersEnabled) ? route : "home";
 
   return (
     <>
@@ -161,6 +165,7 @@ export default function App() {
         fullName={fullName}
         onOpenSettingsSection={openSettingsSection}
         roleName={roleName}
+        ordersEnabled={ordersEnabled}
       />
       {effectiveRoute === "podesavanja" ? (
         <Settings

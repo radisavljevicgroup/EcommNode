@@ -1,10 +1,26 @@
-import { ClockIcon, ReceiptIcon, PersonalizeIcon } from "../../icons";
+import { OrdersIcon, ClockIcon, ReceiptIcon, PersonalizeIcon } from "../../icons";
 
 // Add new tools here — each entry gets a card in "Sve alatke" and, once
 // enabled, a row in "Moje alatke".
 export const TOOLS = [
   {
+    key: "orders",
+    name: "Porudžbine",
+    icon: OrdersIcon,
+    shortDesc: "Pregled i obrada porudžbina sa svih povezanih sajtova na jednom mestu.",
+    openHash: "/porudzbine",
+    desc: (
+      <>
+        Sve porudžbine sa povezanih WooCommerce i Shopify sajtova na jednom mestu — pretraga,
+        filtriranje po statusu i sajtu, promena statusa, štampa i praćenje isporuke. Kad je
+        uključena, stranica <strong>Porudžbine</strong> se pojavljuje u glavnom meniju. Alatke
+        za praćenje zastarelih i nefiskalizovanih porudžbina i personalizaciju rade unutar nje.
+      </>
+    ),
+  },
+  {
     key: "stale",
+    requiresOrders: true,
     name: "Praćenje zastarelih porudžbina",
     icon: ClockIcon,
     shortDesc: "Upozorava kad se probije zakonski rok isporuke od 30 dana.",
@@ -20,6 +36,7 @@ export const TOOLS = [
   },
   {
     key: "unfiscalized",
+    requiresOrders: true,
     name: "Praćenje nefiskalizovanih računa",
     icon: ReceiptIcon,
     shortDesc: "Upozorava na završene porudžbine bez izdatog fiskalnog računa.",
@@ -34,6 +51,7 @@ export const TOOLS = [
   },
   {
     key: "personalization",
+    requiresOrders: true,
     name: "Personalizacija porudžbina",
     icon: PersonalizeIcon,
     shortDesc: "Kupac prilaže fajlove za personalizaciju uz izabrane proizvode.",

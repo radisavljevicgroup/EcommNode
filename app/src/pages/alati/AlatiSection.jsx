@@ -4,6 +4,7 @@ import { fetchGa4Status } from "../../api/ga4";
 import { TOOLS } from "./catalog";
 import { filterEntitledModules, useEnabledPremiumModules } from "../../lib/premiumModules";
 import { retryable } from "../../lib/fetchWithRetry";
+import { setOrdersToolEnabled } from "../../lib/ordersTool";
 
 // A transient failure here (dev server mid-restart, a dropped connection)
 // used to be swallowed silently, permanently leaving stale/unfiscalized
@@ -55,6 +56,14 @@ function originTarget(origin) {
   return ORIGIN_TARGETS[origin] || ORIGIN_TARGETS.analitika;
 }
 
+function OrdersRequirementNote() {
+  return (
+    <p className="tool-card-requirement-note">
+      Radi unutar stranice Porudžbine — prvo uključi alatku „Porudžbine".
+    </p>
+  );
+}
+
 function ToolStatus({ enabled }) {
   return (
     <span className={"tool-status" + (enabled ? " on" : "")}>
@@ -83,6 +92,7 @@ export default function AlatiSection() {
   // matter too: with the old optimistic `true`, a component that reads
   // enabledMap before that render gate settles (e.g. a fast re-render
   // triggered by a sibling state update) would still see wrong data.
+  const [ordersEnabled, setOrdersEnabled] = useState(false);
   const [staleEnabled, setStaleEnabled] = useState(false);
   const [staleThreshold, setStaleThreshold] = useState("");
   const [staleSaved, setStaleSaved] = useState(false);
@@ -124,6 +134,7 @@ export default function AlatiSection() {
     fetchSettingsWithRetry()
       .then((data) => {
         if (cancelled) return;
+        setOrdersEnabled(data.ordersEnabled !== false);
         setStaleEnabled(data.staleTrackingEnabled !== false);
         setStaleThreshold(String(data.staleOrderThresholdDays ?? 30));
         setUnfiscalizedEnabled(data.unfiscalizedTrackingEnabled !== false);
@@ -147,9 +158,19 @@ export default function AlatiSection() {
   }, []);
 
   const enabledMap = {
+    orders: ordersEnabled,
     stale: staleEnabled,
     unfiscalized: unfiscalizedEnabled,
     personalization: personalizationEnabled,
+  };
+
+  const toggleOrders = (enabled) => {
+    setOrdersEnabled(enabled);
+    setOrdersToolEnabled(enabled);
+    updateSettings({ ordersEnabled: enabled }).catch(() => {
+      setOrdersEnabled(!enabled);
+      setOrdersToolEnabled(!enabled);
+    });
   };
 
   const toggleStale = (enabled) => {
@@ -195,6 +216,7 @@ export default function AlatiSection() {
   };
 
   const toggleHandlers = {
+    orders: toggleOrders,
     stale: toggleStale,
     unfiscalized: toggleUnfiscalized,
     personalization: togglePersonalization,
@@ -295,6 +317,17 @@ export default function AlatiSection() {
                   </p>
                   <p className="integration-site">{t.shortDesc}</p>
                 </div>
+                {t.openHash && (
+                  <button
+                    type="button"
+                    className="tool-card-open-btn tool-card-open-btn-inline"
+                    onClick={() => {
+                      window.location.hash = t.openHash;
+                    }}
+                  >
+                    {ORIGIN_TARGETS.porudzbine.label}
+                  </button>
+                )}
                 <button
                   className="integration-remove"
                   type="button"
@@ -311,6 +344,7 @@ export default function AlatiSection() {
           {PREMIUM_TOOLS.map((t) => {
             const enabled = enabledPremiumTools.includes(t.key);
             const blockedByGa4 = t.requiresGa4 && !hasGa4 && !enabled;
+            const blockedByOrders = t.origin === "porudzbine" && !ordersEnabled && !enabled;
             return (
               <div className="integration-grid-card" key={t.key}>
                 <div className="tool-card-head">
@@ -329,6 +363,7 @@ export default function AlatiSection() {
                     Zahteva Google Analytics 4 — poveži ga u Podešavanja → Integracije pre uključivanja.
                   </p>
                 )}
+                {blockedByOrders && <OrdersRequirementNote />}
 
                 <div className="tool-card-footer">
                   <div className="tool-card-toggle-row">
@@ -338,7 +373,7 @@ export default function AlatiSection() {
                       type="checkbox"
                       checked={enabled}
                       onChange={(e) => togglePremiumTool(t, e.target.checked)}
-                      disabled={loading || blockedByGa4}
+                      disabled={loading || blockedByGa4 || blockedByOrders}
                       aria-label={`Uključi/isključi: ${t.name}`}
                     />
                   </div>
@@ -358,7 +393,9 @@ export default function AlatiSection() {
             );
           })}
 
-          {TOOLS.map((t) => (
+          {TOOLS.map((t) => {
+            const blockedByOrders = t.requiresOrders && !ordersEnabled && !enabledMap[t.key];
+            return (
             <div className="integration-grid-card" key={t.key}>
               <div className="tool-card-head">
                 <span className="tool-badge">
@@ -368,6 +405,7 @@ export default function AlatiSection() {
               </div>
 
               <p className="integration-grid-desc">{t.desc}</p>
+              {blockedByOrders && <OrdersRequirementNote />}
 
               <div className="tool-card-footer">
                 <div className="tool-card-toggle-row">
@@ -377,7 +415,7 @@ export default function AlatiSection() {
                     type="checkbox"
                     checked={enabledMap[t.key]}
                     onChange={(e) => toggleHandlers[t.key](e.target.checked)}
-                    disabled={loading}
+                    disabled={loading || blockedByOrders}
                     aria-label={`Uključi/isključi: ${t.name}`}
                   />
                 </div>
@@ -417,9 +455,21 @@ export default function AlatiSection() {
                     {personalizationSaved && <span className="stale-saved-hint">Sačuvano</span>}
                   </div>
                 )}
+                {t.openHash && enabledMap[t.key] && (
+                  <button
+                    type="button"
+                    className="tool-card-open-btn"
+                    onClick={() => {
+                      window.location.hash = t.openHash;
+                    }}
+                  >
+                    {ORIGIN_TARGETS.porudzbine.label}
+                  </button>
+                )}
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </>

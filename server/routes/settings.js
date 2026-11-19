@@ -9,6 +9,7 @@ router.get("/settings", (req, res) => {
 
 router.put("/settings", (req, res) => {
   const {
+    ordersEnabled,
     staleOrderThresholdDays,
     staleTrackingEnabled,
     unfiscalizedTrackingEnabled,
@@ -25,6 +26,9 @@ router.put("/settings", (req, res) => {
       return res.status(400).json({ error: "Broj dana mora biti pozitivan broj." });
     }
     patch.staleOrderThresholdDays = n;
+  }
+  if (ordersEnabled !== undefined) {
+    patch.ordersEnabled = Boolean(ordersEnabled);
   }
   if (staleTrackingEnabled !== undefined) {
     patch.staleTrackingEnabled = Boolean(staleTrackingEnabled);

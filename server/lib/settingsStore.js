@@ -1,6 +1,10 @@
 const { createJsonFile } = require("./jsonFile");
 
 const DEFAULT_SETTINGS = {
+  // "Porudžbine" built-in tool (app/src/pages/alati/catalog.jsx) — on by
+  // default so existing companies keep the page; switching it off hides the
+  // Porudžbine nav pill and route.
+  ordersEnabled: true,
   staleOrderThresholdDays: 30,
   staleTrackingEnabled: true,
   unfiscalizedTrackingEnabled: true,

@@ -24,14 +24,24 @@ export const NAV_ITEMS = [
   { route: "podesavanja", label: "Podešavanja", icon: GearIcon },
 ];
 
-export default function Header({ route, onNavigate, photo, fullName, onOpenSettingsSection, roleName }) {
+export default function Header({
+  route,
+  onNavigate,
+  photo,
+  fullName,
+  onOpenSettingsSection,
+  roleName,
+  ordersEnabled = true,
+}) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const menuRef = useRef(null);
 
-  const visibleNavItems = RESTRICTED_ROLES.has(roleName)
-    ? NAV_ITEMS.filter((item) => RESTRICTED_NAV_ROUTES.has(item.route))
-    : NAV_ITEMS.filter((item) => !ROLE_HIDDEN_ROUTES[roleName]?.has(item.route));
+  const visibleNavItems = (
+    RESTRICTED_ROLES.has(roleName)
+      ? NAV_ITEMS.filter((item) => RESTRICTED_NAV_ROUTES.has(item.route))
+      : NAV_ITEMS.filter((item) => !ROLE_HIDDEN_ROUTES[roleName]?.has(item.route))
+  ).filter((item) => item.route !== "porudzbine" || ordersEnabled);
 
   useEffect(() => {
     if (!menuOpen) return;
