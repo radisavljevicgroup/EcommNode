@@ -235,6 +235,23 @@ router.get("/meta/performance", async (req, res) => {
       data.unattributedSpend = unattributedSpend;
     }
 
+    // Pixel funnel per site (link click → landing → product → cart →
+    // checkout → purchase), each ad assigned to a site by its website link,
+    // same as MER per store above. Ads without a site link are left out.
+    const FUNNEL_FIELDS = ["linkClicks", "landingViews", "viewContent", "addToCart", "initiateCheckout", "purchases"];
+    const funnelStores = new Map(
+      targetStores.map((s) => [s.id, { connectionId: s.id, siteUrl: s.siteUrl, spend: 0, ...Object.fromEntries(FUNNEL_FIELDS.map((f) => [f, 0])) }])
+    );
+    for (const ad of data.allAds || []) {
+      const row = funnelStores.get(meta.adStoreId(ad, connection, allStores));
+      if (!row || !ad.funnel) continue;
+      row.spend += ad.total || 0;
+      FUNNEL_FIELDS.forEach((f) => {
+        row[f] += ad.funnel[f] || 0;
+      });
+    }
+    data.funnelByStore = [...funnelStores.values()].filter((r) => r.spend > 0).sort((a, b) => b.spend - a.spend);
+
     // Per-campaign/per-ad revenueCurrency, roas and profit come from
     // meta.getPerformance — the purchase value's currency differs per
     // pixel, so it's decided row by row there (withRevenueCurrency).

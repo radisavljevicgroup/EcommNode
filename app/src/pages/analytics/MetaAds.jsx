@@ -322,6 +322,98 @@ function MerByStoreTable({ rows, unattributedSpend, loading, currency }) {
   );
 }
 
+// Pixel funnel per site — each step's rate is against the previous step, and
+// the hint says where the problem usually is when that rate is low.
+const FUNNEL_STEPS = [
+  { key: "linkClicks", label: "Klik na link", hint: "Klikovi na link oglasa (ne svi klikovi na oglas)." },
+  {
+    key: "landingViews",
+    label: "Stranica se učitala",
+    hint: "Ispod ~70 % klikova: stranica je spora na mobilnom (ljudi odu pre nego što se učita).",
+    warnBelow: 70,
+  },
+  { key: "viewContent", label: "Otvoren proizvod", hint: "Nisko: odredišna stranica ne „vuče” dalje ka proizvodima." },
+  { key: "addToCart", label: "Dodato u korpu", hint: "Nisko: problem su cena, popust ili stranica proizvoda." },
+  { key: "initiateCheckout", label: "Započeta kupovina", hint: "Nisko: verovatno iznenadi cena dostave." },
+  { key: "purchases", label: "Kupovina", hint: "Nisko: problem je u formi ili načinu plaćanja." },
+];
+
+function formatRate(rate) {
+  return rate == null ? "—" : `${rate.toFixed(1).replace(".", ",")} %`;
+}
+
+function SiteFunnel({ row, currency }) {
+  const top = row.linkClicks || 0;
+  return (
+    <div style={{ marginTop: 14 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+        <strong style={{ color: "var(--text-dark)" }}>{siteLabel(row.siteUrl)}</strong>
+        <span className="chart-subtitle">Potrošnja: {formatKpiValue("currency", row.spend, currency)}</span>
+      </div>
+      <div className="orders-items-table-wrap">
+        <table className="orders-items-table">
+          <thead>
+            <tr>
+              <th>Korak</th>
+              <th>Broj</th>
+              <th>Od prethodnog</th>
+              <th style={{ width: "30%" }}>Od klikova</th>
+              <th>Ako je nisko</th>
+            </tr>
+          </thead>
+          <tbody>
+            {FUNNEL_STEPS.map((step, i) => {
+              const value = row[step.key] || 0;
+              const prev = i > 0 ? row[FUNNEL_STEPS[i - 1].key] || 0 : null;
+              const rate = prev ? (value / prev) * 100 : null;
+              const ofTop = top > 0 ? Math.min(100, (value / top) * 100) : 0;
+              const warn = step.warnBelow != null && rate != null && rate < step.warnBelow;
+              return (
+                <tr key={step.key}>
+                  <td className="gsc-key-cell">{step.label}</td>
+                  <td>{formatKpiValue("integer", value)}</td>
+                  <td style={warn ? { color: "#dc2626", fontWeight: 700 } : undefined}>
+                    {i === 0 ? "—" : formatRate(rate)}
+                  </td>
+                  <td>
+                    <div style={{ background: "var(--pill-bg)", borderRadius: 4, height: 10, overflow: "hidden" }}>
+                      <div style={{ width: `${ofTop}%`, height: "100%", background: "var(--purple)" }} />
+                    </div>
+                  </td>
+                  <td className="chart-subtitle" style={{ fontWeight: 500 }}>
+                    {step.hint}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function FunnelByStore({ rows, loading, currency }) {
+  return (
+    <div className="chart-card">
+      <div className="chart-card-head">
+        <div>
+          <h3>Levak po sajtu</h3>
+          <p className="chart-subtitle">
+            Gde ljudi iz oglasa otpadaju — Meta pixel događaji koje Meta pripisuje oglasima koji vode na taj sajt
+            (atribucioni prozor oglasa), ne sav saobraćaj sajta. Korak sa 0 obično znači da pixel taj događaj ne šalje.
+          </p>
+        </div>
+      </div>
+      {rows.length === 0 ? (
+        <div className="empty-hint">{loading ? "Učitavanje…" : "Nema oglasa sa linkom ka sajtu u ovom periodu."}</div>
+      ) : (
+        rows.map((row) => <SiteFunnel key={row.connectionId} row={row} currency={currency} />)
+      )}
+    </div>
+  );
+}
+
 const AD_TYPE_LABELS = {
   PHOTO: "Slika",
   VIDEO: "Video",
@@ -549,6 +641,8 @@ export default function MetaAds() {
             loading={loading}
             currency={currency}
           />
+
+          <FunnelByStore rows={data?.funnelByStore || []} loading={loading} currency={currency} />
 
           <MetaTrendChart series={data?.trend || []} currency={currency} />
 

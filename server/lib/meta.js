@@ -87,6 +87,26 @@ function extractFollows(actions) {
   return match ? toNumber(match.value) : 0;
 }
 
+// Funnel steps (Meta Ads page: "Levak po sajtu"). One pixel event is often
+// reported under several action_types at once (omni_*, the plain name and the
+// offsite_conversion.fb_pixel_* variant) — they're the same events counted
+// again, so the first one present (in this order) is taken, never a sum.
+const FUNNEL_ACTIONS = {
+  lc: ["link_click"],
+  lpv: ["landing_page_view", "omni_landing_page_view"],
+  vc: ["offsite_conversion.fb_pixel_view_content", "view_content", "omni_view_content"],
+  atc: ["offsite_conversion.fb_pixel_add_to_cart", "add_to_cart", "omni_add_to_cart"],
+  ic: ["offsite_conversion.fb_pixel_initiate_checkout", "initiate_checkout", "omni_initiated_checkout"],
+};
+function extractAction(actions, types) {
+  if (!Array.isArray(actions)) return 0;
+  for (const type of types) {
+    const match = actions.find((a) => a.action_type === type);
+    if (match) return toNumber(match.value);
+  }
+  return 0;
+}
+
 // Error code 190 is Meta's "invalid/expired OAuth token" — everything else
 // (missing ads_read permission, bad ad account id, etc.) surfaces as a
 // generic 400 from the Graph API, so 190 is the one worth distinguishing.
@@ -391,6 +411,16 @@ const { createDiskCache } = require("./diskCache");
 const insightsFile = createJsonFile("meta-insights.json", {});
 let store = insightsFile.read();
 
+// Bumped when compactRow gains fields: days stored by an older version lack
+// them (the raw actions aren't kept), so they're dropped and fetched again
+// once. v2 = funnel steps (lc/lpv/vc/atc/ic). Ad details are kept.
+const STORE_VERSION = 2;
+Object.values(store).forEach((acct) => {
+  if (acct && acct.v !== STORE_VERSION) {
+    Object.assign(acct, { v: STORE_VERSION, from: null, to: null, recentAt: null, days: {} });
+  }
+});
+
 const RECENT_DAYS = 3;
 const RECENT_REFRESH_MS = 30 * 60 * 1000;
 // How long a range that's only partly stored waits for the missing days.
@@ -412,7 +442,7 @@ function saveStore() {
 
 function account(connection) {
   const id = String(connection.adAccountId);
-  if (!store[id]) store[id] = { from: null, to: null, recentAt: null, days: {}, ads: {} };
+  if (!store[id]) store[id] = { v: STORE_VERSION, from: null, to: null, recentAt: null, days: {}, ads: {} };
   return store[id];
 }
 
@@ -449,8 +479,14 @@ function compactRow(r) {
     purch: extractPurchases(r.actions),
     value: extractPurchaseRevenue(r.action_values),
     follows: extractFollows(r.actions),
+    lc: extractAction(r.actions, FUNNEL_ACTIONS.lc),
+    lpv: extractAction(r.actions, FUNNEL_ACTIONS.lpv),
+    vc: extractAction(r.actions, FUNNEL_ACTIONS.vc),
+    atc: extractAction(r.actions, FUNNEL_ACTIONS.atc),
+    ic: extractAction(r.actions, FUNNEL_ACTIONS.ic),
   };
 }
+const FUNNEL_KEYS = Object.keys(FUNNEL_ACTIONS);
 
 // Fetches [since, until] day by day at ad level and replaces those days in
 // the store (a day with no rows is stored as [] — "fetched, nothing ran").
@@ -695,7 +731,16 @@ function sumBy(rows, keyFn) {
   const map = new Map();
   rows.forEach((r) => {
     const key = keyFn(r);
-    const acc = map.get(key) || { spend: 0, impr: 0, clicks: 0, purch: 0, value: 0, follows: 0, first: r };
+    let acc = map.get(key);
+    if (!acc) {
+      acc = { spend: 0, impr: 0, clicks: 0, purch: 0, value: 0, follows: 0, first: r };
+      FUNNEL_KEYS.forEach((k) => {
+        acc[k] = 0;
+      });
+    }
+    FUNNEL_KEYS.forEach((k) => {
+      acc[k] += r[k] || 0;
+    });
     acc.spend += r.spend;
     acc.impr += r.impr;
     acc.clicks += r.clicks;
@@ -768,7 +813,7 @@ async function getPerformance(connection, range = {}) {
     })),
     ...undelivered.map((ad) => ({
       id: ad.id,
-      a: { spend: 0, impr: 0, clicks: 0, purch: 0, value: 0, follows: 0 },
+      a: { spend: 0, impr: 0, clicks: 0, purch: 0, value: 0, follows: 0, lc: 0, lpv: 0, vc: 0, atc: 0, ic: 0 },
       name: ad.name,
       campaignId: ad.campaign?.id || null,
       campaign: ad.campaign?.name || null,
@@ -815,6 +860,7 @@ async function getPerformance(connection, range = {}) {
           follows: a.follows,
           purchases: a.purch,
           revenue: a.value,
+          funnel: { linkClicks: a.lc, landingViews: a.lpv, viewContent: a.vc, addToCart: a.atc, initiateCheckout: a.ic, purchases: a.purch },
           ctr: a.impr > 0 ? (a.clicks / a.impr) * 100 : 0,
           cpc: a.clicks > 0 ? spend / a.clicks : 0,
           // null (not 0) when there were no follows/purchases — 0 would read
