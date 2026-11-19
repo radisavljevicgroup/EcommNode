@@ -18,7 +18,10 @@ const SYNC_MAX_AGE_MS = 60 * 60 * 1000; // 1h
 // a new backfill from the newest order down), overwriting the old copies by
 // id as it goes — the old ones keep being served until then.
 // 3 = journeySessionId ("Put kupca").
-const CACHE_FORMAT = 3;
+// 4 = re-read after the wooGmtDate fix below: every incremental fetch until
+// then skipped orders modified within ~1h after the previous one, so each
+// cache is missing orders that only a full re-read brings back.
+const CACHE_FORMAT = 4;
 const WC_PAGE_SIZE = 100;
 // Shopify only: how far back a full sync asks for. Without read_all_orders
 // Shopify returns just the last 60 days anyway; mergeOrders keeps whatever
@@ -49,14 +52,34 @@ const syncErrors = new Map();
 // that's how a webhook-delivered order shows up within seconds.
 const lastChangeAt = new Map();
 
+// WooCommerce date filters (modified_after, before...) must be sent as a
+// bare "YYYY-MM-DDTHH:MM:SS" with dates_are_gmt. A toISOString() value
+// ("...T12:10:00.000Z") is NOT read as UTC: WordPress converts the "Z" time
+// to the site's timezone and then treats that as GMT, so on a Europe/Belgrade
+// store the filter lands 1h (2h in summer) later than asked. Confirmed on
+// watermanolovke.rs: modified_after=12:10:00.000Z skipped an order modified
+// at 13:18:56 GMT, while 12:10:00 (no Z) returned it. With only a 5-minute
+// overlap, every incremental fetch silently dropped whatever was modified in
+// the hour after the previous one — those orders never reached the cache.
+// Accepts an ISO string or ms; anything with a zone suffix is normalized.
+function wooGmtDate(value) {
+  return new Date(value).toISOString().slice(0, 19);
+}
+
+const WOO_DATE_PARAMS = ["after", "before", "modified_after", "modified_before"];
+
 async function fetchWooPages(connection, params, maxPages = Infinity) {
   const client = createWooClient(connection);
   const orders = [];
   let reachedEnd = false;
+  const query = { ...params };
+  WOO_DATE_PARAMS.forEach((key) => {
+    if (query[key]) query[key] = wooGmtDate(query[key]);
+  });
   for (let page = 1; page <= maxPages; page += 1) {
     // eslint-disable-next-line no-await-in-loop
     const response = await client.get("orders", {
-      ...params,
+      ...query,
       page,
       per_page: WC_PAGE_SIZE,
       dates_are_gmt: true,
