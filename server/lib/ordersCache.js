@@ -68,7 +68,39 @@ function wooGmtDate(value) {
 
 const WOO_DATE_PARAMS = ["after", "before", "modified_after", "modified_before"];
 
-async function fetchWooPages(connection, params, maxPages = Infinity) {
+// A dropped connection (ECONNRESET, socket hang up, timeout) or a 5xx/429 is
+// retried — all stores share one host, and a big backfill page (100 full
+// orders) now and then gets cut off. Any other status is a real answer.
+const PAGE_RETRIES = 3;
+
+function isTransient(err) {
+  const status = err?.response?.status;
+  if (status) return status >= 500 || status === 429;
+  return true; // no response at all: network error / timeout
+}
+
+async function getOrdersPage(client, params) {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      return await client.get("orders", params);
+    } catch (err) {
+      if (attempt >= PAGE_RETRIES || !isTransient(err)) throw err;
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise((resolve) => setTimeout(resolve, 2000 * (attempt + 1)));
+    }
+  }
+}
+
+// partialOk: when a page still fails after its retries, return the pages
+// already read (reachedEnd false) instead of throwing them away. Only the
+// backfill sets it — its cursor comes from the oldest order actually read,
+// so the next chunk resumes right there. Before, one failed page out of 10
+// discarded the whole chunk and the next attempt re-read it from the same
+// cursor, so a store whose host kept dropping one page never got anywhere.
+// modified_after callers must not take a partial list (they then move their
+// "since" past what they didn't read), so they get the error.
+async function fetchWooPages(connection, params, maxPages = Infinity, { partialOk = false } = {}) {
   const client = createWooClient(connection);
   const orders = [];
   let reachedEnd = false;
@@ -77,15 +109,21 @@ async function fetchWooPages(connection, params, maxPages = Infinity) {
     if (query[key]) query[key] = wooGmtDate(query[key]);
   });
   for (let page = 1; page <= maxPages; page += 1) {
-    // eslint-disable-next-line no-await-in-loop
-    const response = await client.get("orders", {
-      ...query,
-      page,
-      per_page: WC_PAGE_SIZE,
-      dates_are_gmt: true,
-      orderby: "date",
-      order: "desc",
-    });
+    let response;
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      response = await getOrdersPage(client, {
+        ...query,
+        page,
+        per_page: WC_PAGE_SIZE,
+        dates_are_gmt: true,
+        orderby: "date",
+        order: "desc",
+      });
+    } catch (err) {
+      if (partialOk && orders.length) return { orders, reachedEnd: false, error: err };
+      throw err;
+    }
     orders.push(...response.data.map((o) => mapOrder(o, null)));
     const totalPages = Number(response.headers?.["x-wp-totalpages"] || 1);
     if (page >= totalPages || response.data.length === 0) {
@@ -209,10 +247,11 @@ async function syncWooConnection(connection, startedAt) {
   while (!entry.backfill?.done) {
     const before = entry.backfill.before;
     // eslint-disable-next-line no-await-in-loop
-    const { orders, reachedEnd } = await fetchWooPages(
+    const { orders, reachedEnd, error } = await fetchWooPages(
       connection,
       before ? { before } : {},
-      BACKFILL_CHUNK_PAGES
+      BACKFILL_CHUNK_PAGES,
+      { partialOk: true }
     );
     const nextBefore = backfillCursor(orders) || before;
     entry = mergeIntoCache(id, orders, {
@@ -220,9 +259,15 @@ async function syncWooConnection(connection, startedAt) {
       // order, so from here on step 1 covers anything newer.
       syncedAt: entry.syncedAt || startedAt,
       // A chunk that didn't move the cursor (e.g. 1,000+ orders in one
-      // second) would loop forever — treat it as the end.
-      backfill: { done: reachedEnd || nextBefore === before, before: nextBefore },
+      // second) would loop forever — treat it as the end. A cut-short chunk
+      // is never the end: the rest is still to be read.
+      backfill: {
+        done: !error && (reachedEnd || nextBefore === before),
+        before: nextBefore,
+      },
     });
+    // What was read is saved; stop here and let the next read resume.
+    if (error) throw error;
   }
 }
 
