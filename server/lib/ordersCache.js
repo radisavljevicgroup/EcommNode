@@ -79,7 +79,7 @@ function isTransient(err) {
   return true; // no response at all: network error / timeout
 }
 
-async function getOrdersPage(client, params) {
+async function fetchWooOrdersPage(client, params) {
   for (let attempt = 0; ; attempt += 1) {
     try {
       // eslint-disable-next-line no-await-in-loop
@@ -112,7 +112,7 @@ async function fetchWooPages(connection, params, maxPages = Infinity, { partialO
     let response;
     try {
       // eslint-disable-next-line no-await-in-loop
-      response = await getOrdersPage(client, {
+      response = await fetchWooOrdersPage(client, {
         ...query,
         page,
         per_page: WC_PAGE_SIZE,
