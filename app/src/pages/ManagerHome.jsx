@@ -192,6 +192,12 @@ export default function ManagerHome({ onNavigate, roleName }) {
   const showSalesFunnel =
     salesFunnelModule && enabledPremiumTools.includes(salesFunnelModule.toolCard.key);
 
+  // Mesečni ciljevi (premium mesecni-ciljevi) — this month's progress vs.
+  // the goals the manager set, for the stores picked above.
+  const monthlyGoalsModule = entitledModules.find((mod) => mod.overview?.key === "mesecni-ciljevi");
+  const showMonthlyGoals =
+    monthlyGoalsModule && enabledPremiumTools.includes(monthlyGoalsModule.toolCard.key);
+
   // Eurocom has no self-service on/off switch (see itInfraTab.jsx) — gated
   // purely by company entitlement, same as everywhere else it's checked.
   const showEurocomSync = EurocomHomeSyncStatusCard && enabledPremiumModules.includes("eurocom");
@@ -390,6 +396,26 @@ export default function ManagerHome({ onNavigate, roleName }) {
               loading={summaryLoading}
             />
           </div>
+
+          {showMonthlyGoals && (
+            <div className="chart-card">
+              <div className="chart-card-head">
+                <h3>Mesečni ciljevi</h3>
+                <button
+                  type="button"
+                  className="performance-link"
+                  onClick={() => onNavigate?.("analitika")}
+                >
+                  Kompletan izveštaj →
+                </button>
+              </div>
+              <p className="chart-subtitle">
+                Ostvareno ovog meseca u odnosu na cilj — crta na traci je očekivano do danas
+                (srazmerno radnim danima).
+              </p>
+              <monthlyGoalsModule.overview.Component storeIds={selectedIds} />
+            </div>
+          )}
 
           {trends && (
             <RevenueOrdersTrendChart
