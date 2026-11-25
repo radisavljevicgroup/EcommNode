@@ -16,7 +16,7 @@ create table public.monthly_goal_plans (
   firma_id uuid not null references public.firme(id) on delete cascade,
   store_key text not null,
   month text not null check (month ~ '^\d{4}-(0[1-9]|1[0-2])$'),
-  target_orders numeric not null,
+  target_orders numeric,
   cr_low numeric,
   cr_high numeric,
   roas numeric,
@@ -40,3 +40,7 @@ create table public.monthly_goal_days (
 );
 
 alter table public.monthly_goal_days enable row level security;
+
+-- Dodato 2026-11-25: svako polje cilja sme da ostane prazno (i cilj
+-- porudžbina). Ako je tabela već napravljena, pokreni samo ovaj red.
+alter table public.monthly_goal_plans alter column target_orders drop not null;
