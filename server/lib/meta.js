@@ -1023,4 +1023,22 @@ async function getAdSummary(connection, range = {}) {
   };
 }
 
-module.exports = { listAdAccounts, testConnection, getPerformance, getSpendTotals, getAdSummary, adStoreId };
+// ID → naziv oglasa/kampanje iz već sačuvanih dnevnih redova (bez poziva
+// Meta-i). Koristi ga Put kupca: Meta u UTM link upisuje {{ad.id}} /
+// {{campaign.id}}, a izveštaj treba da pokaže čitljiv naziv.
+function getAdNames(connections) {
+  const ads = {};
+  const campaigns = {};
+  for (const c of connections || []) {
+    const acct = store[String(c.adAccountId)];
+    for (const rows of Object.values(acct?.days || {})) {
+      for (const r of rows) {
+        if (r.ad && r.name) ads[r.ad] = r.name;
+        if (r.cid && r.campaign) campaigns[r.cid] = r.campaign;
+      }
+    }
+  }
+  return { ads, campaigns };
+}
+
+module.exports = { listAdAccounts, testConnection, getPerformance, getSpendTotals, getAdSummary, adStoreId, getAdNames };
